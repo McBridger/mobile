@@ -2,6 +2,7 @@
   "name": "rn-bridger",
   "main": "expo-router/entry",
   "version": "1.0.0",
+  "private": true,
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
@@ -15,6 +16,7 @@
     "@react-navigation/bottom-tabs": "^7.3.10",
     "@react-navigation/elements": "^2.3.8",
     "@react-navigation/native": "^7.1.6",
+    "@types/node": "^24.3.1",
     "expo": "~53.0.22",
     "expo-blur": "~14.1.5",
     "expo-constants": "~17.1.7",
@@ -28,6 +30,7 @@
     "expo-symbols": "~0.4.5",
     "expo-system-ui": "~5.0.11",
     "expo-web-browser": "~14.2.0",
+    "immer": "^10.1.3",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "react-native": "0.79.6",
@@ -37,7 +40,8 @@
     "react-native-safe-area-context": "5.4.0",
     "react-native-screens": "~4.11.1",
     "react-native-web": "~0.20.0",
-    "react-native-webview": "13.13.5"
+    "react-native-webview": "13.13.5",
+    "zustand": "^5.0.8"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
@@ -47,5 +51,12 @@
     "type-fest": "^4.41.0",
     "typescript": "~5.8.3"
   },
-  "private": true
+   "codegenConfig": {
+    "name": "BridgerSpecs",
+    "type": "all",
+    "jsSrcsDir": "specs",
+    "android": {
+      "javaPackageName": "com.rn.bridger"
+    }
+  }
 }

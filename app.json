@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "rnbridger",
+    "scheme": "bridger",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -23,9 +23,9 @@
         "android.permission.BLUETOOTH_SCAN",
         "android.permission.BLUETOOTH_CONNECT",
         "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.POST_NOTIFICATIONS"
       ],
-      "package": "com.anonymous.rnbridger"
+      "package": "com.rn.bridger"
     },
     "web": {
       "bundler": "metro",

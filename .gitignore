@@ -37,3 +37,11 @@ yarn-error.*
 *.tsbuildinfo
 
 app-example
+
+JAVA.*
+legacy
+
+.vscode/mcp.json
+.idea
+.cline*
+.kilo*

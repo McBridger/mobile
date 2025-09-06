@@ -1,4 +1,4 @@
-package com.anonymous.rnbridger
+package com.rn.bridger
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build

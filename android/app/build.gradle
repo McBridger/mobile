@@ -87,9 +87,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.anonymous.rnbridger'
+    namespace 'com.rn.bridger'
     defaultConfig {
-        applicationId 'com.anonymous.rnbridger'
+        applicationId 'com.rn.bridger'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
@@ -174,4 +174,6 @@ dependencies {
     } else {
         implementation jscFlavor
     }
+
+    implementation('no.nordicsemi.android.support.v18:scanner:1.6.0')
 }
