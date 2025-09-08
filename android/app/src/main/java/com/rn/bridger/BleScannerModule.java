@@ -13,12 +13,15 @@ import androidx.annotation.Nullable;
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReactApplicationContext;
+import com.facebook.react.bridge.ReadableArray;
+import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.bridge.WritableMap;
 
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import android.os.ParcelUuid;
 import no.nordicsemi.android.support.v18.scanner.BluetoothLeScannerCompat;
 import no.nordicsemi.android.support.v18.scanner.ScanCallback;
 import no.nordicsemi.android.support.v18.scanner.ScanFilter;
@@ -147,6 +150,7 @@ public class BleScannerModule extends NativeBleScannerSpec {
                     deviceMap.putString("name", result.getDevice().getName());
                     deviceMap.putString("address", result.getDevice().getAddress());
                     deviceMap.putInt("rssi", result.getRssi());
+                    deviceMap.putArray("services", getServiceUuids(result));
                     emitOnDeviceFound(deviceMap);
                 }
 
@@ -160,6 +164,21 @@ public class BleScannerModule extends NativeBleScannerSpec {
                     // Provide a generic message for these native-level failures
                     errorMap.putString("message", "Native scan failed with code: " + errorCode);
                     emitOnScanFailed(errorMap);
+                }
+
+                private ReadableArray getServiceUuids(ScanResult result) {
+                    WritableArray serviceUuidsArray = Arguments.createArray();
+                    var record = result.getScanRecord();
+                    if (record == null) return serviceUuidsArray;
+
+                    List<ParcelUuid> parcelUuids = record.getServiceUuids();
+                    if (parcelUuids == null) return serviceUuidsArray;
+
+                    for (ParcelUuid uuid : parcelUuids) {
+                        serviceUuidsArray.pushString(uuid.getUuid().toString());
+                    }
+
+                    return serviceUuidsArray;
                 }
             };
         }

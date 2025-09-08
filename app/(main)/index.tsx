@@ -1,42 +1,17 @@
 import { useBleScanner } from "@/hooks/useBleScanner";
-import { useBluetoothPermissions } from "@/hooks/useBluetoothPermissions";
-import { Button, FlatList, Platform, StyleSheet, Text, View } from "react-native";
-import { RESULTS } from 'react-native-permissions';
+import { useAppConfig } from "@/hooks/useConfig";
+import { Button, FlatList, StyleSheet, Text, View } from "react-native";
 
 export default function Index() {
-  const { status, isLoading, request, allPermissionsGranted, showPermissionRationale } = useBluetoothPermissions();
-  const { isScanning, foundDevices, scanError, startScan, stopScan, clearDevices } = useBleScanner();
-
-  if (isLoading) {
-    return (
-      <View style={styles.container}>
-        <Text>Checking Bluetooth permissions...</Text>
-      </View>
-    );
-  }
-
-  if (!allPermissionsGranted) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.title}>Bluetooth Permissions Status</Text>
-        {Platform.OS === 'android' ? (
-          <>
-            {status.android && Object.entries(status.android).map(([perm, stat]) => (
-              <View key={perm} style={styles.permissionItem}>
-                <Text>{perm}: <Text style={{ color: stat === RESULTS.GRANTED ? 'green' : 'red' }}>{stat}</Text></Text>
-                {stat === RESULTS.DENIED || stat === RESULTS.BLOCKED ? (
-                  <Button title="Show Rationale / Open Settings" onPress={() => showPermissionRationale()} />
-                ) : null}
-              </View>
-            ))}
-            <Button title="Request Permissions Again" onPress={request} />
-          </>
-        ) : (
-          <Text>Bluetooth permissions are only applicable on Android.</Text>
-        )}
-      </View>
-    );
-  }
+  const { extra } = useAppConfig();
+  const {
+    isScanning,
+    foundDevices,
+    scanError,
+    startScan,
+    stopScan,
+    clearDevices,
+  } = useBleScanner();
 
   return (
     <View style={styles.container}>
@@ -54,16 +29,21 @@ export default function Index() {
         </Text>
       )}
 
-      <Text style={styles.subtitle}>Found Devices ({foundDevices.length}):</Text>
+      <Text style={styles.subtitle}>
+        Found Devices ({foundDevices.length}):
+      </Text>
       <FlatList
         style={styles.list}
         data={foundDevices}
         keyExtractor={(item) => item.address}
         renderItem={({ item }) => (
           <View style={styles.deviceItem}>
-            <Text style={styles.deviceName}>{item.name || 'N/A'}</Text>
+            <Text style={styles.deviceName}>{item.name || "N/A"}</Text>
             <Text style={styles.deviceInfo}>Address: {item.address}</Text>
             <Text style={styles.deviceInfo}>RSSI: {item.rssi}</Text>
+            {item.services?.includes(extra.BRIDGER_SERVICE_UUID) && (
+              <Text style={styles.bridgerInfo}>[Bridger Service Found]</Text>
+            )}
           </View>
         )}
         ListEmptyComponent={<Text>No devices found yet.</Text>}
@@ -78,42 +58,42 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     padding: 20,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: "#f0f0f0",
   },
   title: {
     fontSize: 24,
     fontWeight: "bold",
     marginBottom: 20,
-    color: '#333',
+    color: "#333",
   },
   subtitle: {
     fontSize: 18,
     fontWeight: "600",
     marginTop: 20,
     marginBottom: 10,
-    color: '#555',
+    color: "#555",
   },
   buttonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    width: '100%',
+    flexDirection: "row",
+    justifyContent: "space-around",
+    width: "100%",
     marginBottom: 20,
   },
   errorText: {
-    color: 'red',
+    color: "red",
     marginTop: 10,
-    textAlign: 'center',
+    textAlign: "center",
   },
   list: {
-    width: '100%',
+    width: "100%",
     marginTop: 10,
   },
   deviceItem: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     padding: 15,
     borderRadius: 8,
     marginBottom: 10,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.2,
     shadowRadius: 1.41,
@@ -121,18 +101,24 @@ const styles = StyleSheet.create({
   },
   deviceName: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: "bold",
+    color: "#333",
   },
   deviceInfo: {
     fontSize: 14,
-    color: '#666',
+    color: "#666",
+  },
+  bridgerInfo: {
+    fontSize: 14,
+    color: "green",
+    marginTop: 5,
+    fontWeight: "bold",
   },
   permissionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    width: '100%',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    width: "100%",
     marginBottom: 10,
     paddingHorizontal: 10,
   },

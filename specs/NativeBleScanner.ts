@@ -6,6 +6,7 @@ export interface BleDevice {
   name: string | null;
   address: string;
   rssi: number;
+  services: string[];
 }
 
 export interface ScanError {
