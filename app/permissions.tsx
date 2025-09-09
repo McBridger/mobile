@@ -8,10 +8,7 @@ export default function PermissionsScreen() {
   const { status, isLoading, request, allPermissionsGranted, showPermissionRationale } = useBluetoothPermissions();
 
   useEffect(() => {
-    if (!isLoading && allPermissionsGranted) {
-      // Permissions granted, navigate to the main app
-      router.replace('/(main)');
-    }
+    if (!isLoading && allPermissionsGranted) router.replace('/');
   }, [isLoading, allPermissionsGranted]);
 
   if (isLoading) {

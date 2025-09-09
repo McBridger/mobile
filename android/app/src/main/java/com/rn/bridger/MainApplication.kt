@@ -25,7 +25,7 @@ class MainApplication : Application(), ReactApplication {
             val packages = PackageList(this).packages
             // Packages that cannot be autolinked yet can be added manually here, for example:
             packages.add(NativeLocalStoragePackage())
-            packages.add(BleScannerPackage())
+            packages.add(BleBridgerPackage())
             return packages
           }
 

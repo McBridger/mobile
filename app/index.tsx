@@ -14,7 +14,7 @@ export default function AppEntry() {
   }
 
   if (allPermissionsGranted) {
-    return <Redirect href="/(main)" />;
+    return <Redirect href="/devices" />;
   } else {
     return <Redirect href="/permissions" />;
   }

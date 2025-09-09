@@ -1,8 +1,10 @@
 import { useBleScanner } from "@/hooks/useBleScanner";
 import { useAppConfig } from "@/hooks/useConfig";
-import { Button, FlatList, StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
+import { Button, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 
-export default function Index() {
+export default function Devices() {
+  const router = useRouter();
   const { extra } = useAppConfig();
   const {
     isScanning,
@@ -12,6 +14,12 @@ export default function Index() {
     stopScan,
     clearDevices,
   } = useBleScanner();
+
+  const handleDevicePress = (device: any) => {
+    if (device.services?.includes(extra.BRIDGER_SERVICE_UUID)) {
+      router.push({ pathname: "/connection", params: { address: device.address } });
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -37,14 +45,20 @@ export default function Index() {
         data={foundDevices}
         keyExtractor={(item) => item.address}
         renderItem={({ item }) => (
-          <View style={styles.deviceItem}>
+          <Pressable
+            onPress={() => handleDevicePress(item)}
+            style={({ pressed }) => [
+              styles.deviceItem,
+              pressed && styles.deviceItemPressed,
+            ]}
+          >
             <Text style={styles.deviceName}>{item.name || "N/A"}</Text>
             <Text style={styles.deviceInfo}>Address: {item.address}</Text>
             <Text style={styles.deviceInfo}>RSSI: {item.rssi}</Text>
             {item.services?.includes(extra.BRIDGER_SERVICE_UUID) && (
               <Text style={styles.bridgerInfo}>[Bridger Service Found]</Text>
             )}
-          </View>
+          </Pressable>
         )}
         ListEmptyComponent={<Text>No devices found yet.</Text>}
       />
@@ -121,5 +135,8 @@ const styles = StyleSheet.create({
     width: "100%",
     marginBottom: 10,
     paddingHorizontal: 10,
+  },
+  deviceItemPressed: {
+    opacity: 0.7,
   },
 });
