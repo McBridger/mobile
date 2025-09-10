@@ -1,6 +1,9 @@
+import { BridgerHeadlessTask } from '@/utils/headless';
 import { Redirect } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { AppRegistry, StyleSheet, Text, View } from 'react-native';
 import { useBluetoothPermissions } from '../hooks/useBluetoothPermissions';
+
+AppRegistry.registerHeadlessTask(BridgerHeadlessTask.name, () => BridgerHeadlessTask);
 
 export default function AppEntry() {
   const { isLoading, allPermissionsGranted } = useBluetoothPermissions();

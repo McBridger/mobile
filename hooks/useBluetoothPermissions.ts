@@ -7,12 +7,15 @@ import {
   PERMISSIONS,
   PermissionStatus,
   requestMultiple,
+  requestNotifications,
   RESULTS,
 } from "react-native-permissions";
 
+type ExtendedAndroidPermission = AndroidPermission | "NOTIFICATIONS";
+
 type Config = Partial<{
   [key in Platform["OS"]]: Partial<{
-    [key in AndroidPermission]: PermissionStatus | null;
+    [key in ExtendedAndroidPermission]: PermissionStatus | null;
   }>;
 }>;
 
@@ -21,6 +24,7 @@ const config: Config = {
     [PERMISSIONS.ANDROID.BLUETOOTH_SCAN]: null,
     [PERMISSIONS.ANDROID.BLUETOOTH_CONNECT]: null,
     [PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION]: null,
+    ["NOTIFICATIONS"]: null,
   },
 };
 
@@ -37,40 +41,37 @@ export function useBluetoothPermissions() {
     [status]
   );
 
-  useEffect(() => {
-    if (isGranted) return;
-    if (!target) return;
-
-    const permissions = Object.keys(target) as Permission[];
-    setIsLoading(true);
-
-    requestMultiple(permissions)
-      .then((statuses) =>
-        setStatus((prevState) => ({
-          ...prevState,
-          [Platform.OS]: { ...target, ...statuses },
-        }))
-      )
-      .finally(() => setIsLoading(false));
-  }, [isGranted, target]);
-
   const requestPermissions = useCallback(async () => {
     if (isGranted) return;
     if (!target) return;
 
+    const withNotifications = "NOTIFICATIONS" in target;
     const permissions = Object.keys(target) as Permission[];
+
+    if (withNotifications) {
+      const notificationStatus = await requestNotifications();
+      setStatus((prevState) => ({
+        ...prevState,
+        [Platform.OS]: { ...target, ["NOTIFICATIONS"]: notificationStatus },
+      }));
+    }
+
+    const statuses = await requestMultiple(permissions);
+    setStatus((prevState) => ({
+      ...prevState,
+      [Platform.OS]: { ...prevState[Platform.OS], ...statuses },
+    }));
+  }, [isGranted, target]);
+
+  useEffect(() => {
+    if (isGranted) return;
+    if (!target) return;
 
     setIsLoading(true);
 
-    requestMultiple(permissions)
-      .then((statuses) =>
-        setStatus((prevState) => ({
-          ...prevState,
-          [Platform.OS]: { ...target, ...statuses },
-        }))
-      )
-      .finally(() => setIsLoading(false));
-  }, [isGranted, target]);
+    requestPermissions()
+    .finally(() => setIsLoading(false));
+  }, [isGranted, requestPermissions, target]);
 
   const showPermissionRationale = useCallback(() => {
     Alert.alert(
