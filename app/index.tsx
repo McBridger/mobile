@@ -1,12 +1,17 @@
-import { BridgerHeadlessTask } from '@/utils/headless';
-import { Redirect } from 'expo-router';
-import { AppRegistry, StyleSheet, Text, View } from 'react-native';
-import { useBluetoothPermissions } from '../hooks/useBluetoothPermissions';
+import { useBleConnector } from "@/hooks/useBleConnector";
+import { BridgerHeadlessTask } from "@/utils/headless";
+import { Redirect } from "expo-router";
+import { AppRegistry, StyleSheet, Text, View } from "react-native";
+import { useBluetoothPermissions } from "../hooks/useBluetoothPermissions";
 
-AppRegistry.registerHeadlessTask(BridgerHeadlessTask.name, () => BridgerHeadlessTask);
+AppRegistry.registerHeadlessTask(
+  BridgerHeadlessTask.name,
+  () => BridgerHeadlessTask
+);
 
 export default function AppEntry() {
   const { isLoading, allPermissionsGranted } = useBluetoothPermissions();
+  const { isConnected } = useBleConnector();
 
   if (isLoading) {
     return (
@@ -16,18 +21,17 @@ export default function AppEntry() {
     );
   }
 
-  if (allPermissionsGranted) {
-    return <Redirect href="/devices" />;
-  } else {
-    return <Redirect href="/permissions" />;
-  }
+  if (!allPermissionsGranted) return <Redirect href="/permissions" />;
+  if (isConnected) return <Redirect href="/connection" />;
+
+  return <Redirect href="/devices" />;
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#fff",
   },
 });

@@ -49,29 +49,32 @@ export function useBleConnector({ onReceived }: Props = {}) {
     });
   }, []);
 
-  // --- Effect for Subscriptions ---
-  // Sets up and tears down the native event listeners.
+  const handleInitial = useCallback(async () => {
+    const isConnected = await BleConnector.isConnected();
+    setIsConnected(isConnected);
+    if (isConnected) return;
 
-  useEffect(() => {
-    BleConnector.isConnected().then(setIsConnected);
-  }, []);
-
-  useEffect(() => {
     const {
       BRIDGER_SERVICE_UUID,
       WRITE_CHARACTERISTIC_UUID,
       NOTIFY_CHARACTERISTIC_UUID,
     } = extra;
 
-    // TODO add isConnected method to the native module
-    BleConnector.setup(
+    await BleConnector.setup(
       BRIDGER_SERVICE_UUID,
       WRITE_CHARACTERISTIC_UUID,
       NOTIFY_CHARACTERISTIC_UUID
-    ).catch((error) => {
-      console.error("[BLE Hook] setup() promise rejected.", error);
-    });
+    );
   }, [extra]);
+
+  // --- Effect for Subscriptions ---
+  // Sets up and tears down the native event listeners.
+
+  useEffect(() => {
+    handleInitial().catch((error) => {
+      console.error("[BLE Hook] handleInitial() promise rejected.", error);
+    });
+  }, [handleInitial]);
 
   useEffect(() => {
     const subscriptions = [

@@ -32,7 +32,7 @@ export default function Connection() {
     disconnect()
       .then(() => {
         console.log("Disconnected successfully");
-        router.back(); // Navigate back to the previous screen (e.g., index.tsx)
+        router.push('/devices');
       })
       .catch((error) => {
         console.error("Failed to disconnect:", error);

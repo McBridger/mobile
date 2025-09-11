@@ -13,8 +13,16 @@ import com.facebook.react.bridge.WritableMap;
 public class BleConnectorModule extends NativeBleConnectorSpec {
 
   public static final String NAME = "BleConnector";
+  public static final String TAG = "BleConnectorModule";
 
   private final BleSingleton bleSingleton;
+
+  @NonNull
+  @Override
+  public String getName() {
+    return NAME;
+  }
+
   private final BleSingleton.BleConnectionListener connectionListener = new BleSingleton.BleConnectionListener() {
     public void onDeviceConnected() {
       emitOnConnected();
@@ -32,16 +40,17 @@ public class BleConnectorModule extends NativeBleConnectorSpec {
     }
   };
 
-  @NonNull
-  @Override
-  public String getName() {
-    return NAME;
-  }
+  private final BleSingleton.BleDataListener dataListener = new BleSingleton.BleDataListener() {
+    public void onDataReceived(String data) {
+      emitOnReceived(data);
+    }
+  };
 
   public BleConnectorModule(ReactApplicationContext context) {
     super(context);
     this.bleSingleton = BleSingleton.getInstance(context.getApplicationContext());
     bleSingleton.addConnectionListener(connectionListener);
+    bleSingleton.addDataListener(dataListener);
   }
 
 
@@ -100,6 +109,7 @@ public class BleConnectorModule extends NativeBleConnectorSpec {
   @Override
   public void disconnect(Promise promise) {
     bleSingleton.removeConnectionListener(connectionListener);
+    bleSingleton.removeDataListener(dataListener);
     bleSingleton.disconnect();
 
     Intent serviceIntent = new Intent(getReactApplicationContext(), BridgerForegroundService.class);

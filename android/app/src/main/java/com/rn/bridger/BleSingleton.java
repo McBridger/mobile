@@ -64,13 +64,7 @@ public class BleSingleton {
         return instance;
     }
 
-    // --- SETUP AND LISTENERS (MODIFIED API) ---
-
-    /**
-     * Adds a listener for connection events.
-     * Can be called by multiple components (e.g., Service, RN Module).
-     */
-    // --- LISTENER API (No changes to the public signature) ---
+    // --- LISTENER API  ---
 
     public void addConnectionListener(BleConnectionListener listener) {
         if (listener == null) return;
@@ -97,9 +91,7 @@ public class BleSingleton {
         if (listener == null) return;
         // Prevent adding duplicates
         for (WeakReference<BleDataListener> ref : dataListeners) {
-            if (listener.equals(ref.get())) {
-                return;
-            }
+            if (listener.equals(ref.get())) return;
         }
         // Add the listener wrapped in a WeakReference
         this.dataListeners.add(new WeakReference<>(listener));
