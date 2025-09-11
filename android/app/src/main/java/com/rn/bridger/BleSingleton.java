@@ -292,6 +292,9 @@ public class BleSingleton {
                 });
 
             beginAtomicRequestQueue()
+                .add(requestMtu(512)
+                    .fail((device, status) -> log(Log.ERROR, "Could not request MTU: " + status))
+                )
                 .add(enableNotifications(notifyCharacteristic)
                     .fail((device, status) -> log(Log.ERROR, "Could not enable notifications: " + status))
                 )
