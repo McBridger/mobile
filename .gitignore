@@ -46,3 +46,6 @@ legacy
 .cline*
 .kilo*
 .env
+
+android/.settings
+android/app/.settings

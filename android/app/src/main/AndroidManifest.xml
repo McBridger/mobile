@@ -1,9 +1,8 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.rn.bridger"> <!-- Ensure this matches your actual package -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <!-- Required for Foreground Service -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
 
@@ -22,8 +21,6 @@
     <!-- Required for BLE scanning on Android 6.0 (API 23) and higher -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <!-- Or ACCESS_COARSE_LOCATION if fine location is not strictly needed -->
-    <!-- <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" /> -->
 
     <application
         android:name=".MainApplication"
@@ -48,6 +45,8 @@
             android:theme="@style/Theme.App.SplashScreen" 
             android:exported="true"
             android:screenOrientation="portrait">
+            <meta-data android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -57,6 +56,20 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="rn.bridger" />
+            </intent-filter>
+        </activity>
+
+        <!-- Register ClipboardSenderActivity -->
+        <activity
+            android:name=".ClipboardSenderActivity"
+            android:exported="true"
+            android:noHistory="true"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:launchMode="singleInstance">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
 
@@ -72,10 +85,8 @@
         <service
             android:name=".BridgerHeadlessTask"
             android:enabled="true"
-            android:exported="false" 
+            android:exported="false"
         />
-
-        <!-- REMOVED: ClipboardWriterActivity is no longer needed -->
 
     </application>
 </manifest>
