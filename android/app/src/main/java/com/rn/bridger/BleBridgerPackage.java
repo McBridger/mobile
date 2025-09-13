@@ -18,6 +18,7 @@ public class BleBridgerPackage extends BaseReactPackage {
     return switch (name) {
       case BleConnectorModule.NAME -> new BleConnectorModule(reactContext);
       case BleScannerModule.NAME -> new BleScannerModule(reactContext);
+      case BubbleModule.NAME -> new BubbleModule(reactContext);
       default -> null;
     };
   }
@@ -52,6 +53,18 @@ public class BleBridgerPackage extends BaseReactPackage {
               true // isTurboModule
           ));
           
+      // Add info for the BubbleModule
+      moduleInfos.put(
+          BubbleModule.NAME,
+          new ReactModuleInfo(
+              BubbleModule.NAME,
+              "NativeBubble", // The name of the module in JS
+              false, // canOverrideExistingModule
+              false, // needsEagerInit
+              false, // isCxxModule
+              true // isTurboModule
+          ));
+
       return moduleInfos;
     };
   }

@@ -1,5 +1,6 @@
 import { useBleConnector } from "@/hooks/useBleConnector";
 import { BridgerHeadlessTask } from "@/utils/headless";
+import BubbleScreen from "@/utils/screens";
 import { Redirect } from "expo-router";
 import { AppRegistry, StyleSheet, Text, View } from "react-native";
 import { useBluetoothPermissions } from "../hooks/useBluetoothPermissions";
@@ -8,6 +9,7 @@ AppRegistry.registerHeadlessTask(
   BridgerHeadlessTask.name,
   () => BridgerHeadlessTask
 );
+AppRegistry.registerComponent(BubbleScreen.name, () => BubbleScreen);
 
 export default function AppEntry() {
   const { isLoading, allPermissionsGranted } = useBluetoothPermissions();

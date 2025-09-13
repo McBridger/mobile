@@ -1,5 +1,6 @@
 import { useBleScanner } from "@/hooks/useBleScanner";
 import { useAppConfig } from "@/hooks/useConfig";
+import NativeBubble from "@/specs/NativeBubble";
 import { useRouter } from "expo-router";
 import { Button, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -16,10 +17,14 @@ export default function Devices() {
   } = useBleScanner();
 
   const handleDevicePress = (device: any) => {
-    if (device.services?.includes(extra.BRIDGER_SERVICE_UUID)) {
-      router.push({ pathname: "/connection", params: { address: device.address } });
-      stopScan();
-    }
+    NativeBubble.showBubble();
+    return;
+
+
+    // if (device.services?.includes(extra.BRIDGER_SERVICE_UUID)) {
+    //   router.push({ pathname: "/connection", params: { address: device.address } });
+    //   stopScan();
+    // }
   };
 
   return (

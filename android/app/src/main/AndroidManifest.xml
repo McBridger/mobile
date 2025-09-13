@@ -73,6 +73,25 @@
             </intent-filter>
         </activity>
 
+        <!-- Declare BubbleActionReceiver -->
+        <receiver
+            android:name=".BubbleActionReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.rn.bridger.BUBBLE_CLICK" />
+                <action android:name="com.rn.bridger.BUBBLE_LONG_CLICK" />
+            </intent-filter>
+        </receiver>
+
+        <activity
+            android:name=".BubbleActivity"
+            android:theme="@style/Theme.AppCompat.DayNight.NoActionBar"
+            android:allowEmbedded="true"
+            android:resizeableActivity="true"
+            android:documentLaunchMode="always"
+            android:exported="true"
+        />
+
         <service
             android:name=".ClipboardTileService"
             android:enabled="true"
