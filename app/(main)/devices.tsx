@@ -17,7 +17,7 @@ export default function Devices() {
 
   const handleDevicePress = (device: any) => {
     if (device.services?.includes(extra.BRIDGER_SERVICE_UUID)) {
-      router.push({ pathname: "/connection", params: { address: device.address } });
+      router.replace({ pathname: "/connection", params: { address: device.address } });
       stopScan();
     }
   };

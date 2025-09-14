@@ -1,4 +1,6 @@
-import { useBleConnector } from "@/hooks/useBleConnector";
+import { useBleConnector, useConnectMutation } from "@/hooks/useBleConnector";
+import { IS_CONNECTED_QUERY } from "@/specs/NativeBleConnector";
+import { useQuery } from "@tanstack/react-query";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import { Button, FlatList, StyleSheet, Text, View } from "react-native";
@@ -9,8 +11,46 @@ export default function Connection() {
   const router = useRouter();
   const params = useLocalSearchParams<{ address: string }>();
   const [items, setItems] = useState<Item[]>([]);
+  const { data: isConnected } = useQuery(IS_CONNECTED_QUERY);
 
-  const { send, isConnected, connect, disconnect } = useBleConnector({
+  const {
+    mutate: disconnect,
+    isPending: isDisconnectionPending,
+    isSuccess: isDisconnected,
+  } = useConnectMutation();
+  const { mutate: connect } = useConnectMutation();
+
+  // const { extra } = useAppConfig();
+  // const { mutate: connect } = useMutation({
+  //   mutationFn: async (address: string | null) => {
+  //     if (!address) return await BleConnector.disconnect();
+
+  //     const {
+  //       BRIDGER_SERVICE_UUID,
+  //       WRITE_CHARACTERISTIC_UUID,
+  //       NOTIFY_CHARACTERISTIC_UUID,
+  //     } = extra;
+
+  //     await BleConnector.setup(
+  //       BRIDGER_SERVICE_UUID,
+  //       WRITE_CHARACTERISTIC_UUID,
+  //       NOTIFY_CHARACTERISTIC_UUID
+  //     );
+  //     // 2. Затем подключение
+  //     await BleConnector.connect(address);
+  //   },
+  //   onSuccess: (_, address) => {
+  //     console.log(
+  //       `[useConnectMutation] ${address ? "Connected" : "Disconnected"}.`
+  //     );
+  //     if (!address) router.replace({ pathname: "/devices" });
+  //   },
+  //   onError: (error) => {
+  //     console.log(`[useConnectMutation] Error: ${error}`);
+  //   },
+  // });
+
+  const { send } = useBleConnector({
     onReceived: (data) =>
       setItems((prev) =>
         prev.concat({
@@ -25,20 +65,29 @@ export default function Connection() {
   const address = useMemo(() => params.address, [params.address]);
 
   useEffect(() => {
-    if (!isConnected && address) connect(address);
-  }, [address, connect, isConnected]);
+    console.log("[Connection]", { isConnected, address });
+    if (!isConnected && !isDisconnectionPending && !isDisconnected && address)
+      connect(address);
+  }, [address, connect, isConnected, isDisconnected, isDisconnectionPending]);
 
-  const handleDisconnect = () => {
-    disconnect()
-      .then(() => {
-        console.log("Disconnected successfully");
-        router.push('/devices');
-      })
-      .catch((error) => {
-        console.error("Failed to disconnect:", error);
-        // Optionally, show an alert to the user
-      });
-  };
+  useEffect(() => {
+    console.log("[Disconnection] isPending", isDisconnectionPending);
+    console.log("[Disconnection] isSuccess", isDisconnected);
+
+    if (isDisconnected) router.replace({ pathname: "/devices" });
+  }, [isDisconnectionPending, isDisconnected, router]);
+
+  // const handleDisconnect = () => {
+  //   connect(null)
+  //     .then(() => {
+  //       console.log("Disconnected successfully");
+  //       router.replace({ pathname: "/devices" });
+  //     })
+  //     .catch((error) => {
+  //       console.error("Failed to disconnect:", error);
+  //       // Optionally, show an alert to the user
+  //     });
+  // };
 
   const renderItem = ({
     item,
@@ -61,7 +110,7 @@ export default function Connection() {
           title: `${isConnected ? "Connected" : "Connecting"}`,
           headerRight: () => (
             <Button
-              onPress={handleDisconnect}
+              onPress={() => disconnect(null)}
               title="Disconnect"
               color="#FF3B30"
             />

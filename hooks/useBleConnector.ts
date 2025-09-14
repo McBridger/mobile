@@ -1,4 +1,5 @@
 import BleConnector from "@/specs/NativeBleConnector";
+import { useMutation } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 import { useAppConfig } from "./useConfig";
 
@@ -78,8 +79,8 @@ export function useBleConnector({ onReceived }: Props = {}) {
 
   useEffect(() => {
     const subscriptions = [
-      BleConnector.onConnected(handleConnected),
-      BleConnector.onDisconnected(handleDisconnected),
+      // BleConnector.onConnected(handleConnected),
+      // BleConnector.onDisconnected(handleDisconnected),
       BleConnector.onReceived(handleReceived),
     ];
 
@@ -95,3 +96,79 @@ export function useBleConnector({ onReceived }: Props = {}) {
     disconnect,
   };
 }
+
+type ConnectMutationProps = {
+  onSuccess?: () => void;
+}
+export const useConnectMutation = ({onSuccess}: ConnectMutationProps = {}) => {
+  const { extra } = useAppConfig();
+
+  return useMutation({
+    mutationFn: async (address: string | null) => {
+      if (!address) {
+        return new Promise<void>(async (resolve, reject) => {
+          // 1. Сначала устанавливаем слушателя
+          const sub = BleConnector.onDisconnected(() => {
+            // Когда событие произойдет, отписываемся и резолвим промис
+            sub.remove();
+            resolve();
+          });
+
+          try {
+            // 2. Затем инициируем отключение
+            await BleConnector.disconnect();
+            // Если disconnect() завершился, но событие по какой-то причине
+            // не пришло (например, уже были отключены), можно добавить таймаут
+            // или другую логику для избежания вечного ожидания.
+          } catch (error) {
+            // Если при отключении произошла ошибка, нужно отписаться и реджектнуть промис
+            sub.remove();
+            reject(error);
+          }
+        });
+
+        // await BleConnector.disconnect();
+
+        // return new Promise<void>((resolve) => {
+        //   return BleConnector.onDisconnected(resolve)
+        // })
+
+        // let sub: EventSubscription;
+
+        // return new Promise<void>((resolve) => {
+        //   sub = BleConnector.onDisconnected(resolve);
+        // }).then(() => sub.remove())
+
+        // return new Promise<void>((resolve) => {
+        //   const sub = BleConnector.onDisconnected(() => {
+        //     sub.remove();
+        //     resolve();
+        //   })
+        // })
+      }
+
+      const {
+        BRIDGER_SERVICE_UUID,
+        WRITE_CHARACTERISTIC_UUID,
+        NOTIFY_CHARACTERISTIC_UUID,
+      } = extra;
+
+      await BleConnector.setup(
+        BRIDGER_SERVICE_UUID,
+        WRITE_CHARACTERISTIC_UUID,
+        NOTIFY_CHARACTERISTIC_UUID
+      );
+      // 2. Затем подключение
+      await BleConnector.connect(address);
+    },
+    onSuccess: (value, address) => {
+      console.log(
+        `[useConnectMutation] ${address ? "Connected" : "Disconnected"}.`
+      );
+      if (onSuccess) onSuccess();
+    },
+    onError: (error) => {
+      console.log(`[useConnectMutation] Error: ${error}`);
+    },
+  });
+};

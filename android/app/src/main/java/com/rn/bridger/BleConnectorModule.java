@@ -17,12 +17,6 @@ public class BleConnectorModule extends NativeBleConnectorSpec {
 
   private final BleSingleton bleSingleton;
 
-  @NonNull
-  @Override
-  public String getName() {
-    return NAME;
-  }
-
   private final BleSingleton.BleConnectionListener connectionListener = new BleSingleton.BleConnectionListener() {
     public void onDeviceConnected() {
       emitOnConnected();
@@ -51,6 +45,12 @@ public class BleConnectorModule extends NativeBleConnectorSpec {
     this.bleSingleton = BleSingleton.getInstance(context.getApplicationContext());
     bleSingleton.addConnectionListener(connectionListener);
     bleSingleton.addDataListener(dataListener);
+  }
+
+  @NonNull
+  @Override
+  public String getName() {
+    return NAME;
   }
 
 
@@ -108,9 +108,9 @@ public class BleConnectorModule extends NativeBleConnectorSpec {
 
   @Override
   public void disconnect(Promise promise) {
-    bleSingleton.removeConnectionListener(connectionListener);
-    bleSingleton.removeDataListener(dataListener);
     bleSingleton.disconnect();
+    // bleSingleton.removeDataListener(dataListener);
+    // bleSingleton.removeConnectionListener(connectionListener);
 
     Intent serviceIntent = new Intent(getReactApplicationContext(), BridgerForegroundService.class);
     getReactApplicationContext().stopService(serviceIntent);

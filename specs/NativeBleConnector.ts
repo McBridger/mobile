@@ -22,4 +22,12 @@ export interface Spec extends TurboModule {
   readonly onConnectionFailed: EventEmitter<ConnectionFail>;
 }
 
-export default TurboModuleRegistry.getEnforcing<Spec>("BleConnector");
+const Module = TurboModuleRegistry.getEnforcing<Spec>("BleConnector");
+export default Module;
+
+export const IS_CONNECTED_QUERY_KEY = ["ble", "isConnected"];
+export const IS_CONNECTED_QUERY = {
+  queryKey: IS_CONNECTED_QUERY_KEY,
+  queryFn: Module.isConnected
+}
+
