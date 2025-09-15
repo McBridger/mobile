@@ -1,43 +1,54 @@
-import { useBleConnector } from "@/hooks/useBleConnector";
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import { useAppConfig } from "@/hooks/useConfig";
+import { useConnector } from "@/store/connection";
+import {
+  Stack,
+  useFocusEffect,
+  useLocalSearchParams,
+  useRouter,
+} from "expo-router";
+import React, { useCallback, useEffect, useMemo } from "react";
 import { Button, FlatList, StyleSheet, Text, View } from "react-native";
-
-type Item = { id: string; type: string; content: string; timestamp: string };
+import { useShallow } from "zustand/react/shallow";
 
 export default function Connection() {
   const router = useRouter();
+  const { extra } = useAppConfig();
   const params = useLocalSearchParams<{ address: string }>();
-  const [items, setItems] = useState<Item[]>([]);
+  const [status, items, connect, disconnect] = useConnector(
+    useShallow((state) => [
+      state.status,
+      state.items,
+      state.connect,
+      state.disconnect,
+    ])
+  );
 
-  const { send, isConnected, connect, disconnect } = useBleConnector({
-    onReceived: (data) =>
-      setItems((prev) =>
-        prev.concat({
-          id: `${prev.length}`,
-          type: "received",
-          content: data,
-          timestamp: new Date().toLocaleString(),
-        })
-      ),
-  });
+  const isConnected = useMemo(() => status === "connected", [status]);
 
   const address = useMemo(() => params.address, [params.address]);
 
+  useFocusEffect(
+    useCallback(() => {
+      if (!isConnected && address) connect(address, extra);
+    }, [address, connect, extra, isConnected])
+  );
+
   useEffect(() => {
-    if (!isConnected && address) connect(address);
-  }, [address, connect, isConnected]);
+    const unsub = useConnector.subscribe(
+      (state) => state.status,
+      (status, prevStatus) => {
+        if (prevStatus === "disconnecting" && status === "disconnected")
+          router.push("/devices");
+      }
+    );
+
+    return () => {
+      unsub();
+    };
+  }, [router]);
 
   const handleDisconnect = () => {
-    disconnect()
-      .then(() => {
-        console.log("Disconnected successfully");
-        router.push('/devices');
-      })
-      .catch((error) => {
-        console.error("Failed to disconnect:", error);
-        // Optionally, show an alert to the user
-      });
+    disconnect();
   };
 
   const renderItem = ({
