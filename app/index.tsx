@@ -1,4 +1,4 @@
-import { useBleConnector } from "@/hooks/useBleConnector";
+import { useConnector } from "@/store/connection";
 import { BridgerHeadlessTask } from "@/utils/headless";
 import { Redirect } from "expo-router";
 import { AppRegistry, StyleSheet, Text, View } from "react-native";
@@ -11,7 +11,7 @@ AppRegistry.registerHeadlessTask(
 
 export default function AppEntry() {
   const { isLoading, allPermissionsGranted } = useBluetoothPermissions();
-  const { isConnected } = useBleConnector();
+  const isConnected = useConnector((state) => state.status === 'connected');
 
   if (isLoading) {
     return (

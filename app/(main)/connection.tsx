@@ -29,7 +29,10 @@ export default function Connection() {
 
   useFocusEffect(
     useCallback(() => {
-      if (!isConnected && address) connect(address, extra);
+      if (isConnected) return;
+      if (!address) return;
+        
+        connect(address, extra);
     }, [address, connect, extra, isConnected])
   );
 
@@ -46,10 +49,6 @@ export default function Connection() {
       unsub();
     };
   }, [router]);
-
-  const handleDisconnect = () => {
-    disconnect();
-  };
 
   const renderItem = ({
     item,
@@ -72,7 +71,7 @@ export default function Connection() {
           title: `${isConnected ? "Connected" : "Connecting"}`,
           headerRight: () => (
             <Button
-              onPress={handleDisconnect}
+              onPress={disconnect}
               title="Disconnect"
               color="#FF3B30"
             />

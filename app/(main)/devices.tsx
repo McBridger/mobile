@@ -1,23 +1,37 @@
-import { useBleScanner } from "@/hooks/useBleScanner";
 import { useAppConfig } from "@/hooks/useConfig";
+import { useScanner } from "@/store/scanner";
 import { useRouter } from "expo-router";
-import { Button, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { useMemo } from "react";
+import {
+  Button,
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { useShallow } from "zustand/react/shallow";
 
 export default function Devices() {
   const router = useRouter();
   const { extra } = useAppConfig();
-  const {
-    isScanning,
-    foundDevices,
-    scanError,
-    startScan,
-    stopScan,
-    clearDevices,
-  } = useBleScanner();
+  const isScanning = useScanner((state) => state.isScanning);
+  const deviceMap = useScanner((state) => state.devices);
+  const [startScan, stopScan, clearDevices] = useScanner(
+    useShallow((state) => [state.start, state.stop, state.clear])
+  );
+  
+  const foundDevices = useMemo(
+    () => Array.from(deviceMap.values()),
+    [deviceMap]
+  );
 
   const handleDevicePress = (device: any) => {
     if (device.services?.includes(extra.BRIDGER_SERVICE_UUID)) {
-      router.push({ pathname: "/connection", params: { address: device.address } });
+      router.push({
+        pathname: "/connection",
+        params: { address: device.address },
+      });
       stopScan();
     }
   };
@@ -32,11 +46,6 @@ export default function Devices() {
       </View>
 
       {isScanning && <Text>Scanning for devices...</Text>}
-      {scanError && (
-        <Text style={styles.errorText}>
-          Scan Error: {scanError.message} (Code: {scanError.code})
-        </Text>
-      )}
 
       <Text style={styles.subtitle}>
         Found Devices ({foundDevices.length}):
