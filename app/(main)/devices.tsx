@@ -1,5 +1,5 @@
 import { useAppConfig } from "@/hooks/useConfig";
-import { useScanner } from "@/store/scanner";
+import { useScanner } from "@/store/scanner.store";
 import { useRouter } from "expo-router";
 import { useMemo } from "react";
 import {

@@ -1,4 +1,4 @@
-import { useConnector } from "@/store/connection";
+import { useConnector } from "@/store/connection.store";
 import { BridgerHeadlessTask } from "@/utils/headless";
 import { Redirect } from "expo-router";
 import { AppRegistry, StyleSheet, Text, View } from "react-native";

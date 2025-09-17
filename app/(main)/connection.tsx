@@ -1,5 +1,5 @@
 import { useAppConfig } from "@/hooks/useConfig";
-import { useConnector } from "@/store/connection";
+import { Item, useConnector } from "@/store/connection.store";
 import {
   Stack,
   useFocusEffect,
@@ -14,16 +14,17 @@ export default function Connection() {
   const router = useRouter();
   const { extra } = useAppConfig();
   const params = useLocalSearchParams<{ address: string }>();
-  const [status, items, connect, disconnect] = useConnector(
+  const [connect, disconnect] = useConnector(
     useShallow((state) => [
-      state.status,
-      state.items,
       state.connect,
       state.disconnect,
     ])
   );
-
+  const status = useConnector((state) => state.status);
   const isConnected = useMemo(() => status === "connected", [status]);
+
+  const _items = useConnector((state) => state.items);
+  const items = useMemo(() => Array.from(_items.values()) as Item[], [_items]);
 
   const address = useMemo(() => params.address, [params.address]);
 

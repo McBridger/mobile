@@ -10,6 +10,8 @@ import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.WritableMap;
 
+import java.util.UUID;
+
 public class BleConnectorModule extends NativeBleConnectorSpec {
 
   public static final String NAME = "BleConnector";
@@ -35,8 +37,11 @@ public class BleConnectorModule extends NativeBleConnectorSpec {
   };
 
   private final BleSingleton.BleDataListener dataListener = new BleSingleton.BleDataListener() {
-    public void onDataReceived(String data) {
-      emitOnReceived(data);
+    public void onDataReceived(String value, String uuid) {
+      WritableMap map = Arguments.createMap();
+      map.putString("value", value);
+      map.putString("id", uuid);
+      emitOnReceived(map);
     }
   };
 

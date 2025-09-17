@@ -90,11 +90,12 @@ public class BridgerForegroundService extends Service implements
     // --- BleDataListener Implementation ---
 
     @Override
-    public void onDataReceived(String data) {
+    public void onDataReceived(String value, String uuid) {
         Log.d(TAG, "Data received in service, starting Headless JS task.");
         Intent serviceIntent = new Intent(getApplicationContext(), BridgerHeadlessTask.class);
         Bundle bundle = new Bundle();
-        bundle.putString("bleData", data);
+        bundle.putString("value", value);
+        bundle.putString("id", uuid);
         serviceIntent.putExtras(bundle);
         getApplicationContext().startService(serviceIntent);
     }

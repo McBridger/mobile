@@ -49,7 +49,7 @@ public class BleSingleton {
 
     // Define a callback interface for incoming data (for the Service)
     public interface BleDataListener {
-        void onDataReceived(String data);
+        void onDataReceived(String value, String uuid);
     }
 
     private BleSingleton(Context context) {
@@ -280,12 +280,13 @@ public class BleSingleton {
                         return;
                     }
 
+                    String uuid = UUID.randomUUID().toString(); // Generate UUID here
                     Log.d(TAG, "Data received in Singleton (as string): " + value);
                     saveLastReceivedMessage(value);
                     for (WeakReference<BleDataListener> ref : dataListeners) {
                         Optional.ofNullable(ref.get())
                             .ifPresentOrElse(
-                                l -> l.onDataReceived(value),
+                                l -> l.onDataReceived(value, uuid), // Pass UUID to listener
                                 () -> connectionListeners.remove(ref)
                             );
                     }

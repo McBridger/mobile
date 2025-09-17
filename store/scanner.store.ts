@@ -1,4 +1,4 @@
-import BleScanner, { BleDevice } from "@/specs/NativeBleScanner";
+import BleScanner, { BleDevice, ScanError } from "@/specs/NativeBleScanner";
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 import { setError } from ".";
@@ -48,18 +48,18 @@ export const useScanner = create<Scanner>()(
   }))
 );
 
-BleScanner.onDeviceFound((device) => {
+export const handleDeviceFound = (device: BleDevice) => {
   useScanner.setState((prev) => ({
     ...prev,
     devices: new Map(prev.devices).set(device.address, device),
   }));
-});
+};
 
-BleScanner.onScanFailed((error) => {
+export const handleScanFailed = (error: ScanError) => {
   setError(new Error(`Scan Failed: ${error.message} (Code: ${error.code})`));
-});
+};
 
-BleScanner.onScanStopped(() => {
+export const handleScanStopped = () => {
   log("Scan Stopped.");
   useScanner.setState({ isScanning: false });
-});
+};

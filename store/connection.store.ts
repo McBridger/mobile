@@ -1,26 +1,28 @@
 import { AppConfig } from "@/app.config";
-import { BleConnector } from "@/specs/NativeBleConnector";
+import { BleConnector, Received } from "@/specs/NativeBleConnector";
+import { LogEntry } from "@/utils/recorder";
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 import { setError } from ".";
 
 type BleStatus = "disconnected" | "connecting" | "connected" | "disconnecting";
-type Item = { id: string; type: string; content: string; timestamp: string };
+export type Item = { id: string; type: string; content: string; timestamp: string };
 
 interface BleState {
   status: BleStatus;
   address: string | null;
-  items: Item[];
+  items: Map<string, Item>;
 
   connect: (address: string, extra: AppConfig["extra"]) => void;
   disconnect: () => void;
+  addRecorded: (entries: LogEntry[]) => void;
 }
 
 export const useConnector = create<BleState>()(
   subscribeWithSelector((set, get) => ({
     status: "disconnected",
     address: null,
-    items: [],
+    items: new Map(),
 
     connect: (address: string, extra: AppConfig["extra"]) => {
       if (get().status !== "disconnected") return;
@@ -40,6 +42,26 @@ export const useConnector = create<BleState>()(
         setError(err);
       });
     },
+    addRecorded: (entries) => {
+      set((prevState) => {
+        const newItems = new Map(prevState.items);
+
+        entries.forEach((entry) => {
+          if (newItems.has(entry.id)) return;
+          newItems.set(entry.id, {
+            timestamp: new Date(entry.timestamp).toLocaleTimeString(),
+            id: entry.id,
+            type: "received",
+            content: entry.value,
+          });
+        })
+
+        return {
+            ...prevState,
+            items: newItems,
+          }
+      })
+    }
   }))
 );
 
@@ -63,33 +85,39 @@ async function connect(address: string, extra: AppConfig["extra"]) {
   await BleConnector.connect(address);
 }
 
-BleConnector.onConnected(() => {
+export const handleConnected = () => {
   useConnector.setState((prevState) => ({ ...prevState, status: "connected" }));
-});
+};
 
-BleConnector.onDisconnected(() => {
+export const handleDisconnected = () => {
   useConnector.setState({ status: "disconnected", address: null });
-});
+};
 
-BleConnector.onConnectionFailed(({ device, reason }) => {
+export const handleConnectionFailed = ({ device, reason }: { device: string; reason: string }) => {
   useConnector.setState({
     status: "disconnected",
     address: null,
   });
   setError(new Error(`Failed to connect to ${device}: ${reason}`));
-});
+};
 
-BleConnector.onReceived((data) => {
-  useConnector.setState((prev) => ({
-    ...prev,
-    items: prev.items.concat({
-      id: `${prev.items.length}`,
+export const handleReceived = (data: Received) => {
+  useConnector.setState((prev) => {
+    const newItems = new Map(prev.items);
+
+    newItems.set(data.id, {
+      id: data.id,
       type: "received",
-      content: data,
-      timestamp: new Date().toLocaleString(),
-    }),
-  }));
-});
+      content: data.value,
+      timestamp: new Date().toLocaleString()
+    })
+
+    return {
+      ...prev,
+      items: newItems
+    }
+  });
+};
 
 useConnector.subscribe((state, prevState) => {
   console.debug("[BleStore] State changed:", JSON.stringify(state, null, 2));

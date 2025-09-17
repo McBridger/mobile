@@ -1,16 +1,18 @@
-import * as Clipboard from 'expo-clipboard'; // 1. Import the library
+import { type Received } from "@/specs/NativeBleConnector";
+import * as Clipboard from "expo-clipboard";
+import { bleRecorder } from "./recorder";
 
-// Define and register the Headless JS Task
-export const BridgerHeadlessTask = async (taskData: { bleData?: string }) => {
-  console.log('Headless Task received data:', taskData.bleData);
+export const BridgerHeadlessTask = async (received: Received) => {
+  console.log("Headless Task received data:", received.value);
+  if (!received?.value) return;
 
-  if (taskData.bleData) {
-    try {
-      // 2. Write the received data to the clipboard
-      await Clipboard.setStringAsync(taskData.bleData);
-      console.log('Headless Task: Copied to clipboard successfully!');
-    } catch (error) {
-      console.error('Headless Task: Failed to copy to clipboard', error);
-    }
+  try {
+    // 2. Write the received data to the clipboard
+    await Clipboard.setStringAsync(received.value);
+    console.log("Headless Task: Copied to clipboard successfully!");
+
+    await bleRecorder.record(received);
+  } catch (error) {
+    console.error("Headless Task: Failed to copy to clipboard", error);
   }
 };

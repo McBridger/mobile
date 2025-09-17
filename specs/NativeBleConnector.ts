@@ -7,6 +7,11 @@ export interface ConnectionFail {
   reason: string;
 }
 
+export interface Received {
+  value: string;
+  id: string;
+}
+
 export interface Spec extends TurboModule {
   // Methods
   setup(service: string, write: string, notify: string): Promise<void>;
@@ -18,7 +23,7 @@ export interface Spec extends TurboModule {
   // Events
   readonly onConnected: EventEmitter<void>;
   readonly onDisconnected: EventEmitter<void>;
-  readonly onReceived: EventEmitter<string>;
+  readonly onReceived: EventEmitter<Received>;
   readonly onConnectionFailed: EventEmitter<ConnectionFail>;
 }
 
