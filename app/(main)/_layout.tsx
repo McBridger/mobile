@@ -1,5 +1,6 @@
+import { useAppConfig } from "@/hooks/useConfig";
 import { BleConnector } from "@/specs/NativeBleConnector";
-import BleScanner from '@/specs/NativeBleScanner';
+import BleScanner from "@/specs/NativeBleScanner";
 import { Redirect, Stack, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect } from "react";
 import { AppState, AppStateStatus, EventSubscription } from "react-native";
@@ -9,10 +10,15 @@ import {
   handleDisconnected,
   handleReceived,
 } from "../../store/connection.store";
-import { handleDeviceFound, handleScanFailed, handleScanStopped } from '../../store/scanner.store';
+import {
+  handleDeviceFound,
+  handleScanFailed,
+  handleScanStopped,
+} from "../../store/scanner.store";
 
 export default function MainLayout() {
   const params = useLocalSearchParams();
+  const { extra } = useAppConfig();
 
   const subscribe = useCallback(() => {
     return [
@@ -22,11 +28,11 @@ export default function MainLayout() {
       BleConnector.onConnectionFailed(handleConnectionFailed),
       BleConnector.onReceived(handleReceived),
       /* Scanner Events */
-      BleScanner.onDeviceFound(handleDeviceFound),
+      BleScanner.onDeviceFound(handleDeviceFound.bind(null, extra)),
       BleScanner.onScanFailed(handleScanFailed),
       BleScanner.onScanStopped(handleScanStopped),
     ];
-  }, []);
+  }, [extra]);
 
   const unsubscribe = useCallback((subscriptions: EventSubscription[]) => {
     subscriptions.forEach((unsub) => unsub.remove());

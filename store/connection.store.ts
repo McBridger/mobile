@@ -28,7 +28,7 @@ export const useConnector = create<BleState>()(
       if (get().status !== "disconnected") return;
 
       connect(address, extra).catch((err) => {
-        useConnector.setState({ status: "disconnected" });
+        set({ status: "disconnecting" });
         setError(err);
       });
     },
@@ -38,7 +38,7 @@ export const useConnector = create<BleState>()(
       set({ status: "disconnecting" });
 
       BleConnector.disconnect().catch((err) => {
-        useConnector.setState({ status: "disconnected" });
+        set({ status: "disconnecting" });
         setError(err);
       });
     },
