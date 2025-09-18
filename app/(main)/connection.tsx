@@ -1,5 +1,6 @@
 import { useAppConfig } from "@/hooks/useConfig";
 import { Item, useConnector } from "@/store/connection.store";
+import { bleRecorder } from "@/utils/recorder";
 import {
   Stack,
   useFocusEffect,
@@ -13,28 +14,31 @@ import { useShallow } from "zustand/react/shallow";
 export default function Connection() {
   const router = useRouter();
   const { extra } = useAppConfig();
+
   const params = useLocalSearchParams<{ address: string }>();
-  const [connect, disconnect] = useConnector(
-    useShallow((state) => [
-      state.connect,
-      state.disconnect,
-    ])
-  );
+  const address = useMemo(() => params.address, [params.address]);
+
   const status = useConnector((state) => state.status);
   const isConnected = useMemo(() => status === "connected", [status]);
 
   const _items = useConnector((state) => state.items);
-  const items = useMemo(() => Array.from(_items.values()) as Item[], [_items]);
+  const items = useMemo(
+    () => Array.from(_items.values()).sort((a, b) => b.time - a.time) as Item[],
+    [_items]
+  );
 
-  const address = useMemo(() => params.address, [params.address]);
+  const [connect, disconnect, addRecorded] = useConnector(
+    useShallow((state) => [state.connect, state.disconnect, state.addRecorded])
+  );
 
   useFocusEffect(
     useCallback(() => {
       if (isConnected) return;
       if (!address) return;
-        
-        connect(address, extra);
-    }, [address, connect, extra, isConnected])
+
+      connect(address, extra);
+      bleRecorder.processEntries().then((entries) => addRecorded(entries));
+    }, [addRecorded, address, connect, extra, isConnected])
   );
 
   useEffect(() => {
@@ -51,17 +55,15 @@ export default function Connection() {
     };
   }, [router]);
 
-  const renderItem = ({
-    item,
-  }: {
-    item: { id: string; type: string; content: string; timestamp: string };
-  }) => (
+  const renderItem = ({ item }: { item: Item }) => (
     <View style={styles.clipboardItem}>
       <Text style={styles.itemType}>
         {item.type === "sent" ? "Sent:" : "Received:"}
       </Text>
       <Text style={styles.itemContent}>{item.content}</Text>
-      <Text style={styles.itemTimestamp}>{item.timestamp}</Text>
+      <Text style={styles.itemTimestamp}>
+        {new Date(item.time).toLocaleTimeString()}
+      </Text>
     </View>
   );
 
@@ -71,17 +73,13 @@ export default function Connection() {
         options={{
           title: `${isConnected ? "Connected" : "Connecting"}`,
           headerRight: () => (
-            <Button
-              onPress={disconnect}
-              title="Disconnect"
-              color="#FF3B30"
-            />
+            <Button onPress={disconnect} title="Disconnect" color="#FF3B30" />
           ),
         }}
       />
       <Text style={styles.title}>Connection Details</Text>
       <FlatList
-        data={items.reverse()}
+        data={items}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
         style={styles.list}

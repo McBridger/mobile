@@ -6,7 +6,7 @@ import { subscribeWithSelector } from "zustand/middleware";
 import { setError } from ".";
 
 type BleStatus = "disconnected" | "connecting" | "connected" | "disconnecting";
-export type Item = { id: string; type: string; content: string; timestamp: string };
+export type Item = { id: string; type: string; content: string; time: number };
 
 interface BleState {
   status: BleStatus;
@@ -48,8 +48,9 @@ export const useConnector = create<BleState>()(
 
         entries.forEach((entry) => {
           if (newItems.has(entry.id)) return;
+
           newItems.set(entry.id, {
-            timestamp: new Date(entry.timestamp).toLocaleTimeString(),
+            time: entry.time,
             id: entry.id,
             type: "received",
             content: entry.value,
@@ -109,7 +110,7 @@ export const handleReceived = (data: Received) => {
       id: data.id,
       type: "received",
       content: data.value,
-      timestamp: new Date().toLocaleString()
+      time: Date.now()
     })
 
     return {

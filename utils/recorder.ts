@@ -5,7 +5,7 @@ import { z } from "zod";
 const LOG_DIR_URI = FileSystem.documentDirectory + "ble_recorder/";
 
 export const LogEntry = z.object({
-  timestamp: z.string(),
+  time: z.number(),
   value: z.string(),
   id: z.uuidv4(),
 });
@@ -28,7 +28,7 @@ class BleRecorder {
       const filePath = this.logDirUri + fileName;
 
       const entry: LogEntry = {
-        timestamp: new Date(Date.now()).toISOString(),
+        time: Date.now(),
         value,
         id,
       };
