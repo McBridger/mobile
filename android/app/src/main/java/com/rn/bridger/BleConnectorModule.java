@@ -2,6 +2,7 @@ package com.rn.bridger;
 
 import android.content.Intent;
 import android.os.Build;
+import android.os.Bundle;
 
 import androidx.annotation.NonNull;
 
@@ -37,10 +38,8 @@ public class BleConnectorModule extends NativeBleConnectorSpec {
   };
 
   private final BleSingleton.BleDataListener dataListener = new BleSingleton.BleDataListener() {
-    public void onDataReceived(String value, String uuid) {
-      WritableMap map = Arguments.createMap();
-      map.putString("value", value);
-      map.putString("id", uuid);
+    public void onDataReceived(Bundle data) {
+      WritableMap map = Arguments.fromBundle(data);
       emitOnReceived(map);
     }
   };

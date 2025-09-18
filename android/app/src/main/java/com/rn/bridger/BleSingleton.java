@@ -8,6 +8,7 @@ import android.bluetooth.BluetoothGattService;
 import android.bluetooth.BluetoothManager;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.os.Bundle;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
@@ -49,7 +50,7 @@ public class BleSingleton {
 
     // Define a callback interface for incoming data (for the Service)
     public interface BleDataListener {
-        void onDataReceived(String value, String uuid);
+        void onDataReceived(Bundle data);
     }
 
     private BleSingleton(Context context) {
@@ -283,10 +284,15 @@ public class BleSingleton {
                     String uuid = UUID.randomUUID().toString(); // Generate UUID here
                     Log.d(TAG, "Data received in Singleton (as string): " + value);
                     saveLastReceivedMessage(value);
+
+                    Bundle bundle = new Bundle();
+                    bundle.putString("value", value);
+                    bundle.putString("id", uuid);
+
                     for (WeakReference<BleDataListener> ref : dataListeners) {
                         Optional.ofNullable(ref.get())
                             .ifPresentOrElse(
-                                l -> l.onDataReceived(value, uuid), // Pass UUID to listener
+                                l -> l.onDataReceived(bundle),
                                 () -> connectionListeners.remove(ref)
                             );
                     }
