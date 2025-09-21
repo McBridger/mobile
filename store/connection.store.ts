@@ -26,9 +26,10 @@ export const useConnector = create<BleState>()(
 
     connect: (address: string, extra: AppConfig["extra"]) => {
       if (get().status !== "disconnected") return;
+      set({ status: "connecting", address });
 
-      connect(address, extra).catch((err) => {
-        set({ status: "disconnecting" });
+      initConnection(address, extra).catch((err) => {
+        set({ status: "disconnected" });
         setError(err);
       });
     },
@@ -66,7 +67,7 @@ export const useConnector = create<BleState>()(
   }))
 );
 
-async function connect(address: string, extra: AppConfig["extra"]) {
+async function initConnection(address: string, extra: AppConfig["extra"]) {
   const isConnected = await BleConnector.isConnected();
   if (isConnected)
     return useConnector.setState({ status: "connected", address });

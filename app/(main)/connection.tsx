@@ -2,13 +2,12 @@ import { useAppConfig } from "@/hooks/useConfig";
 import { Item, useConnector } from "@/store/connection.store";
 import { bleRecorder } from "@/utils/recorder";
 import {
-  Stack,
   useFocusEffect,
   useLocalSearchParams,
-  useRouter,
+  useRouter
 } from "expo-router";
 import React, { useCallback, useEffect, useMemo } from "react";
-import { Button, FlatList, StyleSheet, Text, View } from "react-native";
+import { FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 
 export default function Connection() {
@@ -69,14 +68,6 @@ export default function Connection() {
 
   return (
     <View style={styles.container}>
-      <Stack.Screen
-        options={{
-          title: `${isConnected ? "Connected" : "Connecting"}`,
-          headerRight: () => (
-            <Button onPress={disconnect} title="Disconnect" color="#FF3B30" />
-          ),
-        }}
-      />
       <Text style={styles.title}>Connection Details</Text>
       <FlatList
         data={items}
@@ -84,6 +75,12 @@ export default function Connection() {
         keyExtractor={(item) => item.id}
         style={styles.list}
       />
+      <TouchableOpacity
+        style={styles.disconnectButton}
+        onPress={disconnect}
+      >
+        <Text style={styles.disconnectButtonText}>Disconnect</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -128,5 +125,23 @@ const styles = StyleSheet.create({
   },
   list: {
     flex: 1,
+  },
+  disconnectButton: {
+    position: "absolute",
+    bottom: 30,
+    right: 30,
+    backgroundColor: "#FF3B30",
+    padding: 15,
+    borderRadius: 30,
+    elevation: 5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  disconnectButtonText: {
+    color: "white",
+    fontWeight: "bold",
+    fontSize: 16,
   },
 });

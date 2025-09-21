@@ -3,7 +3,8 @@ import { BleConnector } from "@/specs/NativeBleConnector";
 import BleScanner from "@/specs/NativeBleScanner";
 import { Redirect, Stack, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect } from "react";
-import { AppState, AppStateStatus, EventSubscription } from "react-native";
+import { AppState, AppStateStatus, EventSubscription, View } from "react-native";
+import Header from "../../components/Header";
 import {
   handleConnected,
   handleConnectionFailed,
@@ -65,9 +66,24 @@ export default function MainLayout() {
   }
 
   return (
-    <Stack>
-      <Stack.Screen name="devices" options={{ headerShown: false }} />
-      <Stack.Screen name="connection" options={{ title: "Connection" }} />
-    </Stack>
+    <View style={{ flex: 1 }}>
+      <Header />
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen
+          name="devices"
+          options={{
+            title: "Devices",
+            animation: "slide_from_left",
+          }}
+        />
+        <Stack.Screen
+          name="connection"
+          options={{
+            title: "Connection",
+            animation: "slide_from_right",
+          }}
+        />
+      </Stack>
+    </View>
   );
 }
