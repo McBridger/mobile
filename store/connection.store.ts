@@ -8,28 +8,35 @@ import { setError } from ".";
 type BleStatus = "disconnected" | "connecting" | "connected" | "disconnecting";
 export type Item = { id: string; type: string; content: string; time: number };
 
+const defaultState = {
+  status: "disconnected" as BleStatus,
+  address: null,
+  name: null,
+};
+
+
 interface BleState {
   status: BleStatus;
   address: string | null;
+  name: string | null;
   items: Map<string, Item>;
 
-  connect: (address: string, extra: AppConfig["extra"]) => void;
+  connect: (address: string, name: string, extra: AppConfig["extra"]) => void;
   disconnect: () => void;
   addRecorded: (entries: LogEntry[]) => void;
 }
 
 export const useConnector = create<BleState>()(
   subscribeWithSelector((set, get) => ({
-    status: "disconnected",
-    address: null,
-    items: new Map(),
+    ...defaultState,
+    items: new Map<string, Item>(),
 
-    connect: (address: string, extra: AppConfig["extra"]) => {
+    connect: (address: string, name: string, extra: AppConfig["extra"]) => {
       if (get().status !== "disconnected") return;
-      set({ status: "connecting", address });
+      set({ status: "connecting", address, name });
 
-      initConnection(address, extra).catch((err) => {
-        set({ status: "disconnected" });
+      initConnection(address, name, extra).catch((err) => {
+        set(defaultState);
         setError(err);
       });
     },
@@ -39,7 +46,7 @@ export const useConnector = create<BleState>()(
       set({ status: "disconnecting" });
 
       BleConnector.disconnect().catch((err) => {
-        set({ status: "disconnecting" });
+        set(defaultState);
         setError(err);
       });
     },
@@ -67,10 +74,10 @@ export const useConnector = create<BleState>()(
   }))
 );
 
-async function initConnection(address: string, extra: AppConfig["extra"]) {
+async function initConnection(address: string, name: string, extra: AppConfig["extra"]) {
   const isConnected = await BleConnector.isConnected();
   if (isConnected)
-    return useConnector.setState({ status: "connected", address });
+    return useConnector.setState({ status: "connected", address, name });
 
   const {
     BRIDGER_SERVICE_UUID,
@@ -92,15 +99,13 @@ export const handleConnected = () => {
 };
 
 export const handleDisconnected = () => {
-  useConnector.setState({ status: "disconnected", address: null });
+  useConnector.setState(defaultState);
 };
 
-export const handleConnectionFailed = ({ device, reason }: { device: string; reason: string }) => {
-  useConnector.setState({
-    status: "disconnected",
-    address: null,
-  });
-  setError(new Error(`Failed to connect to ${device}: ${reason}`));
+export const handleConnectionFailed = ({ device, name, reason }: { device: string; name?: string; reason: string }) => {
+  useConnector.setState(defaultState);
+  const deviceIdentifier = name || device;
+  setError(new Error(`Failed to connect to ${deviceIdentifier}: ${reason}`));
 };
 
 export const handleReceived = (data: Received) => {

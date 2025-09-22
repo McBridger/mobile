@@ -53,7 +53,7 @@ export default function Devices() {
     if (device.services?.includes(extra.BRIDGER_SERVICE_UUID)) {
       router.push({
         pathname: "/connection",
-        params: { address: device.address },
+        params: { address: device.address, name: device.name },
       });
       stopScan();
     }

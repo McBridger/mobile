@@ -8,6 +8,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 const Header = () => {
   const status = useConnector((state) => state.status);
+  const name = useConnector((state) => state.name);
   const router = useRouter();
   const segments = useSegments();
   const currentRouteName = segments[segments.length - 1];
@@ -64,7 +65,7 @@ const Header = () => {
       <View style={styles.headerContainer}>
         {leftButton}
         <Text style={[styles.headerTitle, { color: getTextColor() }]}>
-          {capitalizeFirstLetter(status)}
+          {status === "connected" && name ? name : capitalizeFirstLetter(status)}
         </Text>
         {rightButton}
       </View>

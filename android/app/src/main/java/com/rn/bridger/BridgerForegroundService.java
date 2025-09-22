@@ -39,17 +39,6 @@ public class BridgerForegroundService extends Service implements
         singleton.addConnectionListener(this);
     }
 
-    private void createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel serviceChannel = new NotificationChannel(
-                CHANNEL_ID,
-                "Bridger Foreground Service Channel",
-                NotificationManager.IMPORTANCE_DEFAULT
-            );
-            notificationManager.createNotificationChannel(serviceChannel);
-        }
-    }
-
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         // Create the initial notification
@@ -66,6 +55,64 @@ public class BridgerForegroundService extends Service implements
         if (singleton.isConnected()) onDeviceConnected();
 
         return START_STICKY;
+    }
+
+    @Override
+    public void onDataReceived(Bundle data) {
+        Log.d(TAG, "Data received in service, starting Headless JS task.");
+        Intent serviceIntent = new Intent(getApplicationContext(), BridgerHeadlessTask.class);
+        serviceIntent.putExtras(data);
+        getApplicationContext().startService(serviceIntent);
+    }
+
+    @Override
+    public void onDeviceConnected() {
+        Log.d(TAG, "Listener notified: Device Connected.");
+        updateNotification("Bridger Connected", "Receiving data from your device.");
+    }
+
+    @Override
+    public void onDeviceDisconnected() {
+        Log.w(TAG, "Listener notified: Device Disconnected. Stopping service.");
+        updateNotification("Bridger Disconnected", "Connection lost. Service is stopping.");
+        stopSelf();
+    }
+
+    // --- BleDataListener Implementation ---
+
+    @Override
+    public void onDeviceFailedToConnect(String deviceAddress, String deviceName, String reason) {
+        Log.e(TAG, "Listener notified: Failed to connect. Stopping service. Reason: " + reason);
+        String displayMessage = deviceName != null ? deviceName : deviceAddress;
+        updateNotification("Bridger Connection Failed", "Could not connect to " + displayMessage + ". Service is stopping.");
+        stopSelf();
+    }
+
+    // --- BleConnectionListener Implementation ---
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        Log.d(TAG, "Service is being destroyed. Cleaning up.");
+        // It's crucial to clean up listeners to prevent memory leaks
+        BleSingleton singleton = BleSingleton.getInstance(getApplicationContext());
+
+        singleton.removeDataListener(this);
+        singleton.removeConnectionListener(this);
+
+        singleton.disconnect();
+        stopForeground(true);
+    }
+
+    private void createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel serviceChannel = new NotificationChannel(
+                CHANNEL_ID,
+                "Bridger Foreground Service Channel",
+                NotificationManager.IMPORTANCE_DEFAULT
+            );
+            notificationManager.createNotificationChannel(serviceChannel);
+        }
     }
 
     /**
@@ -85,51 +132,5 @@ public class BridgerForegroundService extends Service implements
     private void updateNotification(String title, String text) {
         Notification notification = buildNotification(title, text);
         notificationManager.notify(SERVICE_NOTIFICATION_ID, notification);
-    }
-
-    // --- BleDataListener Implementation ---
-
-    @Override
-    public void onDataReceived(Bundle data) {
-        Log.d(TAG, "Data received in service, starting Headless JS task.");
-        Intent serviceIntent = new Intent(getApplicationContext(), BridgerHeadlessTask.class);
-        serviceIntent.putExtras(data);
-        getApplicationContext().startService(serviceIntent);
-    }
-
-    // --- BleConnectionListener Implementation ---
-
-    @Override
-    public void onDeviceConnected() {
-        Log.d(TAG, "Listener notified: Device Connected.");
-        updateNotification("Bridger Connected", "Receiving data from your device.");
-    }
-
-    @Override
-    public void onDeviceDisconnected() {
-        Log.w(TAG, "Listener notified: Device Disconnected. Stopping service.");
-        updateNotification("Bridger Disconnected", "Connection lost. Service is stopping.");
-        stopSelf();
-    }
-
-    @Override
-    public void onDeviceFailedToConnect(String deviceAddress, String reason) {
-        Log.e(TAG, "Listener notified: Failed to connect. Stopping service. Reason: " + reason);
-        updateNotification("Bridger Connection Failed", "Could not connect. Service is stopping.");
-        stopSelf();
-    }
-
-    @Override
-    public void onDestroy() {
-        super.onDestroy();
-        Log.d(TAG, "Service is being destroyed. Cleaning up.");
-        // It's crucial to clean up listeners to prevent memory leaks
-        BleSingleton singleton = BleSingleton.getInstance(getApplicationContext());
-
-        singleton.removeDataListener(this);
-        singleton.removeConnectionListener(this);
-
-        singleton.disconnect();
-        stopForeground(true);
     }
 }

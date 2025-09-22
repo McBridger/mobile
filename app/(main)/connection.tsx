@@ -14,8 +14,9 @@ export default function Connection() {
   const router = useRouter();
   const { extra } = useAppConfig();
 
-  const params = useLocalSearchParams<{ address: string }>();
+  const params = useLocalSearchParams<{ address: string; name: string }>();
   const address = useMemo(() => params.address, [params.address]);
+  const name = useMemo(() => params.name, [params.name]);
 
   const status = useConnector((state) => state.status);
   const isConnected = useMemo(() => status === "connected", [status]);
@@ -35,9 +36,9 @@ export default function Connection() {
       if (isConnected) return;
       if (!address) return;
 
-      connect(address, extra);
+      connect(address, name, extra);
       bleRecorder.processEntries().then((entries) => addRecorded(entries));
-    }, [addRecorded, address, connect, extra, isConnected])
+    }, [addRecorded, address, connect, extra, isConnected, name])
   );
 
   useEffect(() => {

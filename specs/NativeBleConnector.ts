@@ -4,6 +4,7 @@ import type { EventEmitter } from "react-native/Libraries/Types/CodegenTypes";
 
 export interface ConnectionFail {
   device: string;
+  name?: string; // Added optional name property
   reason: string;
 }
 

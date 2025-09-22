@@ -45,7 +45,7 @@ public class BleSingleton {
     public interface BleConnectionListener {
         void onDeviceConnected();
         void onDeviceDisconnected();
-        void onDeviceFailedToConnect(String deviceAddress, String reason);
+        void onDeviceFailedToConnect(String deviceAddress, String deviceName, String reason);
     }
 
     // Define a callback interface for incoming data (for the Service)
@@ -208,7 +208,7 @@ public class BleSingleton {
             for (WeakReference<BleConnectionListener> ref : connectionListeners) {
                 Optional.ofNullable(ref.get())
                     .ifPresentOrElse(
-                        l -> l.onDeviceFailedToConnect(device.getAddress(), "Native reason code: " + reason),
+                        l -> l.onDeviceFailedToConnect(device.getAddress(), device.getName(), "Native reason code: " + reason),
                         () -> connectionListeners.remove(ref)
                     );
             }

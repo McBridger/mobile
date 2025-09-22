@@ -29,9 +29,10 @@ public class BleConnectorModule extends NativeBleConnectorSpec {
       emitOnDisconnected();
     }
 
-    public void onDeviceFailedToConnect(String deviceAddress, String reason) {
+    public void onDeviceFailedToConnect(String deviceAddress, String deviceName, String reason) {
       WritableMap map = Arguments.createMap();
-      map.putString("address", deviceAddress);
+      map.putString("device", deviceAddress); // Renamed from "address" to "device" to match TS interface
+      map.putString("name", deviceName);
       map.putString("reason", reason);
       emitOnConnectionFailed(map);
     }
