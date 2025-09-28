@@ -1,6 +1,4 @@
-import { useAppConfig } from "@/hooks/useConfig";
-import { BleDevice } from "@/specs/NativeBleScanner";
-import { useScanner } from "@/store/scanner.store";
+import { BleDevice, useScanner } from "@/store/scanner.store";
 import { useRouter } from "expo-router";
 import { useMemo } from "react";
 import {
@@ -17,21 +15,20 @@ type ListDataItem = BleDevice | { id: string; type: "separator" };
 
 export default function Devices() {
   const router = useRouter();
-  const { extra } = useAppConfig();
   const isScanning = useScanner((state) => state.isScanning);
-  const { devices, bleDevices } = useScanner(
+  const { devices, bridgers } = useScanner(
     useShallow((state) => ({
       devices: state.devices,
-      bleDevices: state.bleDevices,
+      bridgers: state.bridgerDevices,
     }))
   );
   const [startScan, stopScan, clearDevices] = useScanner(
     useShallow((state) => [state.start, state.stop, state.clear])
   );
 
-  const bleDevicesArray = useMemo(
-    () => Array.from(bleDevices.values()),
-    [bleDevices]
+  const bridgersArray = useMemo(
+    () => Array.from(bridgers.values()),
+    [bridgers]
   );
   const otherDevicesArray = useMemo(
     () => Array.from(devices.values()),
@@ -40,23 +37,23 @@ export default function Devices() {
 
   const sections = useMemo(() => {
     const sectionsData = [];
-    if (bleDevicesArray.length > 0) {
-      sectionsData.push({ title: "BLE Devices", data: bleDevicesArray });
+    if (bridgersArray.length > 0) {
+      sectionsData.push({ title: "BLE Devices", data: bridgersArray });
     }
     if (otherDevicesArray.length > 0) {
       sectionsData.push({ title: "Other Devices", data: otherDevicesArray });
     }
     return sectionsData;
-  }, [bleDevicesArray, otherDevicesArray]);
+  }, [bridgersArray, otherDevicesArray]);
 
   const handleDevicePress = (device: BleDevice) => {
-    if (device.services?.includes(extra.BRIDGER_SERVICE_UUID)) {
-      router.push({
-        pathname: "/connection",
-        params: { address: device.address, name: device.name },
-      });
-      stopScan();
-    }
+    if (!device.isBridger) return;
+
+    router.push({
+      pathname: "/connection",
+      params: { address: device.address, name: device.name },
+    });
+    stopScan();
   };
 
   const renderItem = ({ item }: { item: ListDataItem }) => {
@@ -80,7 +77,7 @@ export default function Devices() {
         <Text style={styles.deviceName}>{device.name || "N/A"}</Text>
         <Text style={styles.deviceInfo}>Address: {device.address}</Text>
         <Text style={styles.deviceInfo}>RSSI: {device.rssi}</Text>
-        {device.services?.includes(extra.BRIDGER_SERVICE_UUID) && (
+        {device.isBridger && (
           <Text style={styles.bridgerInfo}>[Bridger Service Found]</Text>
         )}
       </Pressable>
@@ -91,11 +88,7 @@ export default function Devices() {
     <View style={styles.container}>
       <Text style={styles.title}>BLE Scanner</Text>
       <View style={styles.buttonContainer}>
-        <Button
-          title="Start Scan"
-          onPress={startScan}
-          disabled={isScanning}
-        />
+        <Button title="Start Scan" onPress={startScan} disabled={isScanning} />
         <Button title="Stop Scan" onPress={stopScan} disabled={!isScanning} />
         <Button title="Clear Devices" onPress={clearDevices} />
       </View>

@@ -65,9 +65,9 @@ public class BleConnectorModule extends NativeBleConnectorSpec {
   }
 
   @Override
-  public void setup(String serviceUuid, String writeUuid, String notifyUuid, Promise promise) {
+  public void setup(String serviceUuid, String characteristicUuid, Promise promise) {
     try {
-      bleSingleton.setup(serviceUuid, writeUuid, notifyUuid);
+      bleSingleton.setup(serviceUuid, characteristicUuid);
       promise.resolve(null);
     } catch (BleSingleton.ConnectionActiveException e) {
       promise.reject("CONNECTION_ACTIVE", e.getMessage(), e);

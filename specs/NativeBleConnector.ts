@@ -15,7 +15,7 @@ export interface Received {
 
 export interface Spec extends TurboModule {
   // Methods
-  setup(service: string, write: string, notify: string): Promise<void>;
+  setup(service: string, characteristic: string): Promise<void>;
   connect(address: string): Promise<void>;
   disconnect(): Promise<void>;
   send(data: string): Promise<void>;

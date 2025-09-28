@@ -81,14 +81,12 @@ async function initConnection(address: string, name: string, extra: AppConfig["e
 
   const {
     BRIDGER_SERVICE_UUID,
-    WRITE_CHARACTERISTIC_UUID,
-    NOTIFY_CHARACTERISTIC_UUID,
+    CHARACTERISTIC_UUID,
   } = extra;
 
   await BleConnector.setup(
     BRIDGER_SERVICE_UUID,
-    WRITE_CHARACTERISTIC_UUID,
-    NOTIFY_CHARACTERISTIC_UUID
+    CHARACTERISTIC_UUID,
   );
 
   await BleConnector.connect(address);
