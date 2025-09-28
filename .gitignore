@@ -47,7 +47,4 @@ legacy
 .kilo*
 .env
 
-android/.settings
-android/app/.settings
-android/key.properties
-android/app/bridger.keystore
+android

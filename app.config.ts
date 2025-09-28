@@ -7,6 +7,7 @@ const Extra = z.object({
   BRIDGER_SERVICE_UUID: z.uuidv4(),
   CHARACTERISTIC_UUID: z.uuidv4(),
   ADVERTISE_UUID: z.string(),
+  NODE_ENV: z.enum(["development", "production"]),
 });
 
 export default ({ config }: ConfigContext): AppConfig => {
@@ -14,12 +15,13 @@ export default ({ config }: ConfigContext): AppConfig => {
     BRIDGER_SERVICE_UUID: process.env.BRIDGER_SERVICE_UUID,
     CHARACTERISTIC_UUID: process.env.CHARACTERISTIC_UUID,
     ADVERTISE_UUID: process.env.ADVERTISE_UUID,
+    NODE_ENV: process.env.NODE_ENV,
   });
 
   return {
     ...config,
-    name: "rn-bridger",
-    slug: "rn-bridger",
+    name: extra.NODE_ENV === "development" ? "BridgerDev" : "Bridger",
+    slug: "bridger",
 
     extra,
   };

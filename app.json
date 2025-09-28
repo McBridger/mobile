@@ -9,7 +9,7 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "bundleIdentifier": "com.rn.bridger"
     },
     "android": {
       "adaptiveIcon": {
@@ -20,14 +20,11 @@
       "permissions": [
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE",
-
         "android.permission.BLUETOOTH",
         "android.permission.BLUETOOTH_ADMIN",
         "android.permission.BLUETOOTH_SCAN",
         "android.permission.BLUETOOTH_CONNECT",
-
         "android.permission.POST_NOTIFICATIONS",
-
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION"
       ],
@@ -56,7 +53,8 @@
             "minSdkVersion": 25
           }
         }
-      ]
+      ],
+      "./native_modules/bridger/withBridger.js"
     ],
     "experiments": {
       "typedRoutes": true
