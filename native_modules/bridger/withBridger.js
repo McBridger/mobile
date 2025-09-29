@@ -88,13 +88,13 @@ const withBridgerBle = (config) => {
     let contents = config.modResults.contents;
 
     const addPackageRegex =
-      /(?<spaces> *)(?<anchor>return packages)(?<semi>;?)/;
+      /(?<spaces> *)(?<anchor>\/\/ add\(MyReactNativePackage\(\)\))/;
     const props = addPackageRegex.exec(contents);
     const original = props[0];
     const spaces = props?.groups?.spaces;
     const semi = props?.groups?.semi || "";
 
-    const packageToAdd = "packages.add(BleBridgerPackage())";
+    const packageToAdd = "add(BleBridgerPackage())";
     contents = contents.replace(
       `${original}`,
       `${spaces}${packageToAdd}${semi}\n${original}`

@@ -36,6 +36,8 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      "expo-font",
+      "expo-web-browser",
       "expo-router",
       [
         "expo-splash-screen",
@@ -50,7 +52,8 @@
         "expo-build-properties",
         {
           "android": {
-            "minSdkVersion": 25
+            "minSdkVersion": 25,
+            "buildArchs": ["arm64-v8a"]
           }
         }
       ],
@@ -58,6 +61,11 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "16091e02-24e0-4969-86b7-35e08e7c9c4c"
+      }
     }
   }
 }

@@ -48,3 +48,4 @@ legacy
 .env
 
 android
+!native_modules/bridger/android
