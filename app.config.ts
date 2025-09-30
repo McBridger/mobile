@@ -22,8 +22,8 @@ export default ({ config }: ConfigContext): AppConfig => {
 
   return {
     ...config,
-    name: extra.APP_VARIANT === "production" ? "Bridger" : "BridgerDev",
-    slug: "bridger",
+    name: extra.APP_VARIANT === "production" ? "McBridger" : "McBridgerDev",
+    slug: 'mc-bridger',
 
     extra,
   };

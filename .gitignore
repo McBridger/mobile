@@ -38,14 +38,8 @@ yarn-error.*
 
 app-example
 
-JAVA.*
-legacy
+# generated native folders
+/ios
+/android
 
-.vscode/mcp.json
-.idea
-.cline*
-.kilo*
 .env
-
-android
-!native_modules/bridger/android

@@ -3,23 +3,5 @@
     "source.fixAll": "explicit",
     "source.organizeImports": "explicit",
     "source.sortMembers": "explicit"
-  },
-
-  //
-  "java.jdt.ls.java.home": "~/.sdkman/candidates/java/current",
-  "java.import.gradle.java.home": "~/.sdkman/candidates/java/current",
-  "java.project.sourcePaths": ["android"],
-  "java.configuration.updateBuildConfiguration": "automatic",
-  "files.associations": {
-    "*.gradle": "groovy",
-    "**/gradlew": "shellscript",
-    "*.kts": "kotlin",
-    "*.kt": "kotlin"
-  },
-  "files.exclude": {
-    "**/.gradle": true,
-    "**/.idea": true,
-    "**/android/app/build": true,
-    "**/android/build": true
   }
 }
