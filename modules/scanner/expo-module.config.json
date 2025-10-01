@@ -1,0 +1,9 @@
+{
+  "platforms": ["android"],
+  "apple": {
+    "modules": ["ScannerModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.scannermodule.ScannerModule"]
+  }
+}
