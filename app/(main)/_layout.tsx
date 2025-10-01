@@ -1,65 +1,44 @@
-// import { useAppConfig } from "@/hooks/useConfig";
-// import { BleConnector } from "@/specs/NativeBleConnector";
-// import BleScanner from "@/specs/NativeBleScanner";
+import { useConnector } from "@/modules/connector";
 import {
+  Redirect,
   Stack,
+  useLocalSearchParams,
 } from "expo-router";
-import { View } from "react-native";
+import { useEffect } from "react";
+import { AppState, AppStateStatus, View } from "react-native";
+import { useShallow } from "zustand/shallow";
 import Header from "../../components/Header";
-// import {
-//   handleConnected,
-//   handleConnectionFailed,
-//   handleDisconnected,
-//   handleReceived,
-// } from "../../store/connection.store";
 
 export default function MainLayout() {
-  // const params = useLocalSearchParams();
-  // const { extra } = useAppConfig();
+  const params = useLocalSearchParams();
+  const [subscribe, unsubscribe] = useConnector(
+    useShallow((state) => [state.subscribe, state.unsubscribe])
+  );
 
-  // const subscribe = useCallback(() => {
-  //   return [
-  //     /* Connector Events */
-  //     BleConnector.onConnected(handleConnected),
-  //     BleConnector.onDisconnected(handleDisconnected),
-  //     BleConnector.onConnectionFailed(handleConnectionFailed),
-  //     BleConnector.onReceived(handleReceived),
-  //     /* Scanner Events */
-  //     BleScanner.onDeviceFound(handleDeviceFound.bind(null, extra)),
-  //     BleScanner.onScanFailed(handleScanFailed),
-  //     BleScanner.onScanStopped(handleScanStopped),
-  //   ];
-  // }, [extra]);
+  useEffect(() => {
+    if (AppState.currentState === "active") subscribe();
 
-  // const unsubscribe = useCallback((subscriptions: EventSubscription[]) => {
-  //   subscriptions.forEach((unsub) => unsub.remove());
-  // }, []);
+    const appStateSubscription = AppState.addEventListener(
+      "change",
+      (nextAppState: AppStateStatus) => {
+        if (nextAppState === "active") subscribe();
+        else unsubscribe();
+      }
+    );
 
-  // useEffect(() => {
-  //   let subscriptions: EventSubscription[] = [];
-  //   if (AppState.currentState === "active") subscriptions = subscribe();
+    return () => {
+      appStateSubscription.remove();
+      unsubscribe();
+    };
+  }, [subscribe, unsubscribe]);
 
-  //   const appStateSubscription = AppState.addEventListener(
-  //     "change",
-  //     (nextAppState: AppStateStatus) => {
-  //       if (nextAppState === "active") subscriptions = subscribe();
-  //       else unsubscribe(subscriptions);
-  //     }
-  //   );
-
-  //   return () => {
-  //     appStateSubscription.remove();
-  //     unsubscribe(subscriptions);
-  //   };
-  // }, [subscribe, unsubscribe]);
-
-  // if (params.address) {
-  //   return (
-  //     <Redirect
-  //       href={{ pathname: "/connection", params: { address: params.address } }}
-  //     />
-  //   );
-  // }
+  if (params.address) {
+    return (
+      <Redirect
+        href={{ pathname: "/connection", params: { address: params.address } }}
+      />
+    );
+  }
 
   return (
     <View style={{ flex: 1 }}>

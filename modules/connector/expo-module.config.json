@@ -1,0 +1,9 @@
+{
+  "platforms": ["android"],
+  "apple": {
+    "modules": ["ConnectorModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.connector.ConnectorModule"]
+  }
+}

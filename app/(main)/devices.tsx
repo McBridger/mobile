@@ -1,6 +1,6 @@
 import { useAppConfig } from "@/hooks/useConfig";
 import { BleDevice, useScanner } from "@/modules/scanner";
-// import { useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { useMemo } from "react";
 import {
   Button,
@@ -16,7 +16,7 @@ type ListDataItem = BleDevice | { id: string; type: "separator" };
 
 export default function Devices() {
   const { extra } = useAppConfig();
-  // const router = useRouter();
+  const router = useRouter();
   const isScanning = useScanner((state) => state.isScanning);
   const { devices, bridgers } = useScanner(
     useShallow((state) => ({
@@ -51,10 +51,10 @@ export default function Devices() {
   const handleDevicePress = (device: BleDevice) => {
     if (!device.isBridger) return;
 
-    // router.push({
-    //   pathname: "/connection",
-    //   params: { address: device.address, name: device.name },
-    // });
+    router.push({
+      pathname: "/connection",
+      params: { address: device.address, name: device.name },
+    });
     stopScan();
   };
 

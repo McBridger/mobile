@@ -1,5 +1,4 @@
-// import { useConnector } from "@/store/connection.store";
-// import { BridgerHeadlessTask } from "@/utils/headless";
+import { useConnector } from "@/modules/connector";
 import { Redirect } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
 import { useBluetoothPermissions } from "../hooks/useBluetoothPermissions";
@@ -11,7 +10,7 @@ import { useBluetoothPermissions } from "../hooks/useBluetoothPermissions";
 
 export default function AppEntry() {
   const { isLoading, allPermissionsGranted } = useBluetoothPermissions();
-  // const isConnected = useConnector((state) => state.status === 'connected');
+  const isConnected = useConnector((state) => state.status === 'connected');
 
   if (isLoading) {
     return (
@@ -22,7 +21,7 @@ export default function AppEntry() {
   }
 
   if (!allPermissionsGranted) return <Redirect href="/permissions" />;
-  // if (isConnected) return <Redirect href="/connection" />;
+  if (isConnected) return <Redirect href="/connection" />;
 
   return <Redirect href="/devices" />;
 }
