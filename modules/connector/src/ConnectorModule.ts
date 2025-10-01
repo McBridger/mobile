@@ -8,6 +8,11 @@ declare class ConnectorModule extends NativeModule<ConnectorModuleEvents> {
   connect(address: string): Promise<void>;
   disconnect(): Promise<void>;
   send(data: string): Promise<void>;
+
+  startBridgerService(): Promise<void>;
+  stopBridgerService(): Promise<void>;
+  getHistory(): Promise<string[]>;
+  clearHistory(): Promise<void>;
 }
 
 // This call loads the native module object from the JSI.

@@ -39,11 +39,7 @@ interface ConnectorState {
 }
 
 interface ConnectorActions {
-  connect: (
-    address: string,
-    name: string,
-    extra: AppConfig["extra"]
-  ) => void;
+  connect: (address: string, name: string, extra: AppConfig["extra"]) => void;
   disconnect: () => void;
   send: (data: string) => void;
   clearConnectionError: () => void;
@@ -113,22 +109,19 @@ export const useConnector = create<InternalConnectorStore>()(
           log("Connection in progress, ignoring connect request.");
           return;
         }
+
         set({ status: "connecting", address, name, items: new Map() });
 
         try {
           const isConnected = await ConnectorModule.isConnected();
-          if (isConnected) {
-            set({ status: "connected", address, name });
-            return;
-          }
-
-          const { BRIDGER_SERVICE_UUID, CHARACTERISTIC_UUID } = extra;
+          if (isConnected) return set({ status: "connected", address, name });
 
           await ConnectorModule.setup(
-            BRIDGER_SERVICE_UUID,
-            CHARACTERISTIC_UUID
+            extra.BRIDGER_SERVICE_UUID,
+            extra.CHARACTERISTIC_UUID
           );
 
+          await ConnectorModule.startBridgerService();
           await ConnectorModule.connect(address);
         } catch (err: any) {
           handlers.onConnectionFailed({
@@ -143,15 +136,17 @@ export const useConnector = create<InternalConnectorStore>()(
         if (get().status !== "connected") return;
         set({ status: "disconnecting" });
 
-        ConnectorModule.disconnect().catch((err) => {
-          error("Promise disconnect() was rejected.", err);
+        ConnectorModule.stopBridgerService().then(() =>
+          ConnectorModule.disconnect().catch((err) => {
+            error("Promise disconnect() was rejected.", err);
 
-          handlers.onConnectionFailed({
-            device: get().address ?? "unknown",
-            name: get().name ?? "unknown",
-            reason: err.message || "Disconnect promise rejected",
-          });
-        });
+            handlers.onConnectionFailed({
+              device: get().address ?? "unknown",
+              name: get().name ?? "unknown",
+              reason: err.message || "Disconnect promise rejected",
+            });
+          })
+        );
       },
 
       send: (data: string) => {
@@ -178,3 +173,26 @@ useConnector.subscribe((state, prevState) => {
 });
 
 export default ConnectorModule;
+
+export const BridgerService = {
+  getHistory: async (): Promise<string[]> => {
+    try {
+      const history = await ConnectorModule.getHistory();
+      log(`Retrieved ${history.length} items from history.`);
+      return history;
+    } catch (err: any) {
+      error("Failed to get history:", err.message);
+      throw err;
+    }
+  },
+
+  clearHistory: async (): Promise<void> => {
+    try {
+      await ConnectorModule.clearHistory();
+      log("History cleared.");
+    } catch (err: any) {
+      error("Failed to clear history:", err.message);
+      throw err;
+    }
+  },
+};

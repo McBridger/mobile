@@ -6,6 +6,8 @@ import android.os.Bundle
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
+import java.io.File
+
 // Предполагается, что классы BleSingleton и BridgerForegroundService существуют
 // и доступны в вашем проекте. Убедитесь, что импорты корректны.
 import expo.modules.connector.BleSingleton
@@ -98,6 +100,39 @@ class ConnectorModule : Module() {
       } catch (e: BleSingleton.NotConnectedException) {
         // Игнорируем ошибку, как в оригинальном коде.
       }
+    }
+
+    AsyncFunction("startBridgerService") {
+       val context = appContext.reactContext?.applicationContext ?: return@AsyncFunction null
+       val intent = Intent(context, BridgerForegroundService::class.java)
+       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+           context.startForegroundService(intent)
+       } else {
+           context.startService(intent)
+       }
+
+       return@AsyncFunction null
+    }
+
+    AsyncFunction("stopBridgerService") {
+       val context = appContext.reactContext?.applicationContext ?: return@AsyncFunction null
+       val intent = Intent(context, BridgerForegroundService::class.java)
+       context.stopService(intent)
+       return@AsyncFunction null 
+    }
+
+    AsyncFunction("getHistory") {
+       val context = appContext.reactContext?.applicationContext ?: return@AsyncFunction emptyList<String>()
+       val file = File(context.filesDir, "bridger_history.txt")
+       if (!file.exists()) return@AsyncFunction emptyList<String>()
+       return@AsyncFunction file.readLines()
+    }
+
+    AsyncFunction("clearHistory") {
+       val context = appContext.reactContext?.applicationContext ?: return@AsyncFunction null
+       val file = File(context.filesDir, "bridger_history.txt")
+       if (file.exists()) file.delete()
+       return@AsyncFunction null 
     }
   }
 }
