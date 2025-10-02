@@ -6,5 +6,18 @@
             android:exported="false"
             android:foregroundServiceType="connectedDevice"
         />
+
+        <activity android:name=".ClipboardSenderActivity" android:exported="true" android:noHistory="true" android:excludeFromRecents="true" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:launchMode="singleInstance">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+            </intent-filter>
+        </activity>
+
+        <service android:name=".ClipboardTileService" android:enabled="true" android:exported="true" android:icon="@drawable/ic_send_clipboard" android:label="Send Clipboard" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE"/>
+            </intent-filter>
+        </service>
     </application>
 </manifest>
