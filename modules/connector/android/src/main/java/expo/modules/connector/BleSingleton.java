@@ -7,8 +7,6 @@ import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothGattService;
 import android.bluetooth.BluetoothManager;
 import android.content.Context;
-import android.content.SharedPreferences;
-import android.os.Bundle;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
@@ -21,7 +19,7 @@ import no.nordicsemi.android.ble.observer.ConnectionObserver;
 import android.os.Build;
 import expo.modules.connector.BridgerMessage.MessageType;
 
-import java.lang.ref.WeakReference; // <-- The key import
+import java.lang.ref.WeakReference;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -36,7 +34,7 @@ public class BleSingleton {
     }
     // Define a callback interface for incoming data (for the Service)
     public interface BleDataListener {
-        void onDataReceived(Bundle data);
+        void onDataReceived(BridgerMessage msg);
     }
 
     public static class NotConfiguredException extends Exception { NotConfiguredException(String message) { super(message); } }
@@ -71,20 +69,14 @@ public class BleSingleton {
         protected void initialize() {
             setNotificationCallback(characteristic)
                 .with((device, data) -> {
-                    BridgerMessage receivedMessage = BridgerMessage.parse(data);
+                    BridgerMessage receivedMessage = BridgerMessage.fromData(data, device);
                     if (receivedMessage == null) return;
-
-                    saveLastReceivedMessage(receivedMessage.payload); // Save only the payload
-
-                    Bundle bundle = new Bundle();
-                    bundle.putString("value", receivedMessage.payload);
-                    bundle.putString("id", UUID.randomUUID().toString()); // Generate UUID here
 
                     for (WeakReference<BleDataListener> ref : dataListeners) {
                         Optional.ofNullable(ref.get())
                             .ifPresentOrElse(
-                                l -> l.onDataReceived(bundle),
-                                () -> dataListeners.remove(ref) // Corrected: remove from dataListeners
+                                l -> l.onDataReceived(receivedMessage),
+                                () -> dataListeners.remove(ref)
                             );
                     }
                 });
@@ -127,13 +119,16 @@ public class BleSingleton {
         }
     }
     private static final String TAG = "BleSingleton";
-    private static final String PREFS_NAME = "BLE_APP_PREFS";
-    private static final String LAST_MESSAGE_KEY = "LAST_RECEIVED_MESSAGE";
     private static volatile BleSingleton instance;
 
-    public static synchronized BleSingleton getInstance(Context context) {
-        if (instance == null) instance = new BleSingleton(context);
-
+    public static BleSingleton getInstance(Context context) {
+        if (instance == null) {
+            synchronized (BleSingleton.class) {
+                if (instance == null) {
+                    instance = new BleSingleton(context.getApplicationContext());
+                }
+            }
+        }
         return instance;
     }
 
@@ -173,11 +168,7 @@ public class BleSingleton {
                     );
             }
 
-            String message = new BridgerMessage.Builder()
-                .setType(MessageType.DEVICE_NAME)
-                .setPayload(Build.MODEL)
-                .build()
-                .toJson();
+            String message = new BridgerMessage(MessageType.DEVICE_NAME, Build.MODEL).toJson();
 
             bleManager.performWrite(Data.from(message));
             Log.d(TAG, "Sent device name: " + Build.MODEL);
@@ -329,36 +320,18 @@ public class BleSingleton {
 
     /**
      * Sends data to the connected device.
-     * @param data The string data to send.
+     * @param msg The string data to send.
      * @throws NotConnectedException if no device is currently connected.
      */
-    public void send(String data) throws NotConnectedException {
+    public void send(BridgerMessage msg) throws NotConnectedException {
         if (!isConnected())
             throw new NotConnectedException("Cannot send data, no device is connected.");
 
-        String message = new BridgerMessage.Builder()
-            .setType(MessageType.CLIPBOARD)
-            .setPayload(data)
-            .build()
-            .toJson();
-
-        bleManager.performWrite(Data.from(message));
-        Log.d(TAG, "Sent clipboard message: " + data);
+        bleManager.performWrite(msg.toData());
+        Log.d(TAG, "Sent clipboard message: " + msg.getValue());
     }
+
     public boolean isConnected() {
         return bleManager.isConnected();
-    }
-
-    public String getLastReceivedMessage() {
-        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        return prefs.getString(LAST_MESSAGE_KEY, null);
-    }
-
-    private void saveLastReceivedMessage(String message) {
-        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        SharedPreferences.Editor editor = prefs.edit();
-        editor.putString(LAST_MESSAGE_KEY, message);
-        editor.apply();
-        Log.d(TAG, "Saved to SharedPreferences: " + message);
     }
 }

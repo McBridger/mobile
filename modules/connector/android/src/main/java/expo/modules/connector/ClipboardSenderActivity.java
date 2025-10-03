@@ -52,9 +52,14 @@ public class ClipboardSenderActivity extends Activity {
         }
 
         BleSingleton bleSingleton = BleSingleton.getInstance(this);
+        BridgerHistory history = BridgerHistory.getInstance(this);
 
         try {
-            bleSingleton.send(dataToSend);
+            BridgerMessage msg = BridgerMessage.toSend(dataToSend);
+
+            bleSingleton.send(msg);
+            history.add(msg);
+
             Log.i(TAG, "Clipboard data sent successfully: " + dataToSend);
             showToast("Clipboard data sent.");
         } catch (BleSingleton.NotConnectedException e) {

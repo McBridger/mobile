@@ -1,6 +1,5 @@
 package expo.modules.connector
 
-import expo.modules.connector.R
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -10,19 +9,16 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import android.os.Bundle
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import java.io.File
-import java.nio.charset.Charset
 
 class BridgerForegroundService : Service(),
     BleSingleton.BleDataListener,
     BleSingleton.BleConnectionListener {
 
     private lateinit var notificationManager: NotificationManager
-    private val HISTORY_FILE_NAME = "bridger_history.txt"
+    private lateinit var history: BridgerHistory
 
     companion object {
         private const val TAG = "BridgerForegroundService"
@@ -42,6 +38,8 @@ class BridgerForegroundService : Service(),
         val singleton = BleSingleton.getInstance(applicationContext)
         singleton.addDataListener(this)
         singleton.addConnectionListener(this)
+
+        this.history = BridgerHistory.getInstance(applicationContext)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -59,34 +57,18 @@ class BridgerForegroundService : Service(),
         return START_STICKY
     }
 
-    override fun onDataReceived(data: Bundle) {
-        val value = data.getString("value")
-        if (value == null) {
-            Log.w(TAG, "Received data is null, ignoring.")
-            return
-        }
-
+    override fun onDataReceived(data: BridgerMessage) {
+        val value = data.value
         Log.d(TAG, "Data received in service: $value")
 
-        // 1. Write to clipboard
         try {
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             val clip = ClipData.newPlainText("Bridger Data", value)
             clipboard.setPrimaryClip(clip)
+            this.history.add(data)
             Log.d(TAG, "Copied to clipboard successfully!")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to copy to clipboard", e)
-        }
-
-        // 2. Write to history file
-        try {
-            val file = File(applicationContext.filesDir, HISTORY_FILE_NAME)
-            // Append timestamp and value, separated by a newline
-            val lineToAppend = "${System.currentTimeMillis()},$value\n"
-            file.appendText(lineToAppend, Charset.defaultCharset())
-            Log.d(TAG, "Appended to history file successfully!")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to write to history file", e)
         }
     }
 
@@ -115,7 +97,7 @@ class BridgerForegroundService : Service(),
         singleton.disconnect() 
         singleton.removeDataListener(this)
         singleton.removeConnectionListener(this)
-        stopForeground(true)
+        stopForeground(STOP_FOREGROUND_REMOVE)
     }
 
     private fun createNotificationChannel() {
