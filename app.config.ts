@@ -1,11 +1,12 @@
 import { ConfigContext, ExpoConfig } from "expo/config";
+import { capitalize } from "lodash";
 import { z } from "zod";
 
 const Extra = z.object({
   BRIDGER_SERVICE_UUID: z.uuidv4(),
   CHARACTERISTIC_UUID: z.uuidv4(),
   ADVERTISE_UUID: z.string(),
-  APP_VARIANT: z.enum(["development", "preview", "production"]).optional(),
+  APP_VARIANT: z.enum(["dev", "preview", "prod"]).optional(),
   eas: z.object({
     projectId: z.uuidv4(),
   }),
@@ -20,11 +21,17 @@ export default ({ config }: ConfigContext): AppConfig => {
     APP_VARIANT: process.env.APP_VARIANT,
   });
 
+  const appNameSuffix = extra.APP_VARIANT === "prod" ? "" : extra.APP_VARIANT;
+  const packageNameSuffix = extra.APP_VARIANT === "prod" ? "" : `.${extra.APP_VARIANT}`;
+
   return {
     ...config,
-    name: extra.APP_VARIANT === "production" ? "McBridger" : "McBridgerDev",
-    slug: 'mc-bridger',
-
+    name: `McBridger${capitalize(appNameSuffix)}`,
+    slug: 'bridger',
+    android: {
+      ...config.android,
+      package: `com.mcbridger${packageNameSuffix}`,
+    },
     extra,
   };
 };

@@ -22,8 +22,8 @@ class BridgerForegroundService : Service(),
 
     companion object {
         private const val TAG = "BridgerForegroundService"
-        private const val SERVICE_NOTIFICATION_ID = 12345
-        private const val CHANNEL_ID = "BridgerForegroundServiceChannel"
+        private var SERVICE_NOTIFICATION_ID = 12345
+        private var CHANNEL_ID = "BridgerForegroundServiceChannel"
     }
 
     override fun onBind(intent: Intent?): IBinder? {
@@ -32,6 +32,8 @@ class BridgerForegroundService : Service(),
 
     override fun onCreate() {
         super.onCreate()
+        SERVICE_NOTIFICATION_ID += applicationContext.packageName.hashCode()
+        CHANNEL_ID += applicationContext.packageName
         notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         createNotificationChannel()
 

@@ -4,11 +4,11 @@
     "appVersionSource": "remote"
   },
   "build": {
-    "development": {
+    "dev": {
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "APP_VARIANT": "development"
+        "APP_VARIANT": "dev"
       }
     },
     "preview": {
@@ -17,10 +17,10 @@
         "APP_VARIANT": "preview"
       }
     },
-    "production": {
+    "prod": {
       "autoIncrement": true,
       "env": {
-        "APP_VARIANT": "production"
+        "APP_VARIANT": "prod"
       }
     }
   },

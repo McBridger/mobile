@@ -1,7 +1,7 @@
 import { useConnector } from "@/modules/connector";
-import { capitalizeFirstLetter } from "@/utils";
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useSegments } from "expo-router";
+import { capitalize } from "lodash";
 import React, { useCallback } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -65,7 +65,7 @@ const Header = () => {
       <View style={styles.headerContainer}>
         {leftButton}
         <Text style={[styles.headerTitle, { color: getTextColor() }]}>
-          {status === "connected" && name ? name : capitalizeFirstLetter(status)}
+          {status === "connected" && name ? name : capitalize(status)}
         </Text>
         {rightButton}
       </View>

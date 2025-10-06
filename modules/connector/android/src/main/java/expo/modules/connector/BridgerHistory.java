@@ -49,7 +49,8 @@ public class BridgerHistory {
         Context context = contextRef.get();
         if (context == null) throw new IllegalStateException("Context is null, cannot create history file.");
 
-        historyFile = new File(context.getFilesDir(), "bridger_history.json");
+        String packageName = context.getPackageName();
+        historyFile = new File(context.getFilesDir(), "bridger_history_" + packageName + ".json");
         return historyFile;
     }
 
