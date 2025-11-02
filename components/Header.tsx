@@ -1,5 +1,5 @@
 import { useConnector } from "@/modules/connector";
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useSegments } from "expo-router";
 import { capitalize } from "lodash";
 import React, { useCallback } from "react";
@@ -16,12 +16,12 @@ const Header = () => {
   const getBackgroundColor = useCallback(() => {
     switch (status) {
       case "connected":
-        return "lightblue";
+        return "#d2d6d3";
       case "connecting":
       case "disconnecting":
         return "#00008B"; // Using a standard deep blue hex code
       default:
-        return "lightgray";
+        return "#d2d6d3";
     }
   }, [status]);
 
@@ -61,7 +61,9 @@ const Header = () => {
     ) : null;
 
   return (
-    <SafeAreaView style={{ backgroundColor: getBackgroundColor() }}>
+    <SafeAreaView
+      style={{ backgroundColor: getBackgroundColor() }}
+    >
       <View style={styles.headerContainer}>
         {leftButton}
         <Text style={[styles.headerTitle, { color: getTextColor() }]}>
@@ -80,6 +82,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 15,
+    borderRadius: 20,
   },
   headerTitle: {
     fontSize: 18,
