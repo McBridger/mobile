@@ -1,0 +1,148 @@
+name: Android Build and Release
+
+on:
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Manual release version (e.g., 1.2.3)'
+        required: true
+
+jobs:
+  build-and-release:
+    if: github.event.pull_request.merged == true || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
+    timeout-minutes: 25
+
+    steps:
+      - name: Wait for 5 seconds for cancellation
+        run: sleep 5
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+
+      - name: Configure Git User
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      # =================================================================
+      # == 1. Versioning Block
+      # =================================================================
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Determine Version
+        id: versioning
+        uses: paulhatch/semantic-version@v5.3.0
+        with:
+          tag_prefix: "v"
+          major_pattern: "breaking:"
+          minor_pattern: "feat:"
+          search_commit_body: true
+
+      - name: Set Release Version Environment Variable
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "RELEASE_VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
+          else
+            echo "RELEASE_VERSION=${{ steps.versioning.outputs.version }}" >> $GITHUB_ENV
+          fi
+          echo "Version for this run: ${{ env.RELEASE_VERSION }}"
+
+      - name: Update Version in package.json and app.json
+        if: steps.versioning.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        run: |
+          echo "Updating package.json and app.json to version ${{ env.RELEASE_VERSION }}"
+          bun -e "
+            const fs = require('fs');
+            const newVersion = process.env.RELEASE_VERSION;
+
+            // Update package.json
+            const pkg = require('./package.json');
+            pkg.version = newVersion;
+            fs.writeFileSync('./package.json', JSON.stringify(pkg, null, 2) + '\n');
+
+            // Update app.json
+            const appConfig = require('./app.json');
+            appConfig.expo.version = newVersion;
+            fs.writeFileSync('./app.json', JSON.stringify(appConfig, null, 2) + '\n');
+          "
+          
+          git add package.json app.json
+          git commit -m "chore: Bump version to ${{ env.RELEASE_VERSION }} [skip ci]"
+
+      - name: Create and Push Git Tag
+        if: steps.versioning.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        run: |
+          TAG_NAME="v${{ env.RELEASE_VERSION }}"
+          if git rev-parse "$TAG_NAME" >/dev/null 2>&1;
+          then
+            echo "Tag $TAG_NAME already exists. Skipping tag creation."
+          else
+            echo "Tagging new version $TAG_NAME"
+            git tag "$TAG_NAME"
+            git push --tags
+          fi
+          if [[ "${{ steps.versioning.outputs.changed }}" == "true" && "${{ github.event_name }}" != "workflow_dispatch" ]]; then
+            git push
+          fi
+
+      # =================================================================
+      # == 2. Build, Sign & Release Block
+      # =================================================================
+      - name: Set up JDK 17
+        if: steps.versioning.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Android SDK
+        if: steps.versioning.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        uses: android-actions/setup-android@v3
+        with:
+          packages: |
+            platforms;android-34
+            build-tools;34.0.0
+          cmdline-tools-version: 8512546 # Latest stable version as of now
+
+      - name: Create .env file
+        if: steps.versioning.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        run: |
+          echo "${{ secrets.SHARED_BLE_CONFIG }}" > .env
+
+      - name: Install Bun dependencies
+        if: steps.versioning.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        run: bun install
+
+      - name: Generate Android project
+        if: steps.versioning.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        run: bunx expo prebuild --platform android --no-install
+
+      - name: Build Release APK
+        if: steps.versioning.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: bun run android:build:prod -- --output ${{ vars.PRODUCT_NAME }}-${{ env.RELEASE_VERSION }}.apk --non-interactive
+
+      - name: Create Release and Upload APK
+        if: steps.versioning.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ${{ vars.PRODUCT_NAME }}-${{ env.RELEASE_VERSION }}.apk
+          tag_name: v${{ env.RELEASE_VERSION }}

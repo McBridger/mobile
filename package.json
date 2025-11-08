@@ -4,14 +4,19 @@
   "version": "1.0.0",
   "scripts": {
     "start": "expo start",
-    "reset-project": "node ./scripts/reset-project.js",
+
+    "android": "expo run:android",
     "android:prebuild": "APP_VARIANT=dev expo prebuild --clean --platform android",
     "android:dev": "APP_VARIANT=dev expo prebuild --clean --platform android && expo run:android",
+
     "android:build": "dotenvx run -- eas build --local --platform android --profile preview",
+    "android:build:prod": "dotenvx run -- eas build --local --platform android --profile prod",
+    "android:build:debug": "cd android && ./gradlew assembleDebug",
+
     "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "android": "expo run:android"
+    "creds": "dotenvx run -- eas credentials"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
