@@ -49,26 +49,6 @@ jobs:
       - name: Generate Android project
         run: bunx expo prebuild --platform android --no-install
 
-      - name: 🕵️ Check for non-deterministic file generation (The Real One)
-        run: |
-          echo "--- The initial 'android' directory has been generated."
-          echo "--- Moving it to 'android_run1' for comparison."
-          mv android android_run1
-
-          echo "--- Running 'prebuild' for the SECOND time..."
-          # Запускаем prebuild ещё раз, чтобы создать свежую копию
-          bunx expo prebuild --platform android --no-install
-          mv android android_run2
-          
-          echo "--- Comparing the two generated directories (run1 vs run2)..."
-          # diff -qr рекурсивно и тихо сравнит две папки и покажет только различия
-          # Если различий нет, вывод будет пустым.
-          diff -qr android_run1 android_run2 || true
-          
-          echo "--- Diagnostic complete. Restoring 'android' directory for the next steps."
-          # Возвращаем одну из папок на место, чтобы сборка продолжилась
-          mv android_run2 android
-
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v5
         with:
