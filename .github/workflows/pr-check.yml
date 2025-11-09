@@ -3,8 +3,10 @@ name: Android PR Check
 on:
   pull_request:
     branches: [ main ]
-    paths:
-      - '**' # Watch all files in this repository
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.gitignore'
 
 jobs:
   build-and-lint:
@@ -42,6 +44,16 @@ jobs:
 
       - name: Generate Android project
         run: bunx expo prebuild --platform android --no-install
+
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/build.gradle', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
 
       - name: Build Debug APK
         run: bun run android:build:debug
