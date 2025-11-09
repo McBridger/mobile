@@ -51,7 +51,10 @@
         {
           "android": {
             "minSdkVersion": 25,
-            "buildArchs": ["arm64-v8a"]
+            "buildArchs": ["arm64-v8a"],
+            "extraGradleProperties": {
+              "org.gradle.caching": "true"
+            }
           }
         }
       ]
