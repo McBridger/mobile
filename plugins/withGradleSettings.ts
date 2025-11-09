@@ -1,29 +1,46 @@
 import { ConfigPlugin, withSettingsGradle } from "@expo/config-plugins";
 
 type Primitive = string | number | boolean;
-type BlockProps = Record<string, Primitive>;
+type GroovyValue = Primitive | GroovyBlock;
+interface GroovyBlock {
+  [key: string]: GroovyValue;
+}
+
 type SettingsProps = {
   // @ts-expect-error
-  plugins?: string[]; // New property for plugin IDs to be added inside the plugins { } block
-  [key: string]: BlockProps | Primitive;
+  plugins?: string[];
+  [key: string]: GroovyValue;
 };
 
 /**
- * Generates a Groovy block string (e.g., buildScan { ... }).
+ * Generates a Groovy block string (e.g., buildScan { ... }) with support for nested blocks.
  * @param blockName The name of the block.
  * @param props The properties within the block.
+ * @param indentLevel The current indentation level.
  * @returns A formatted string representing the Groovy block.
  */
-function generateBlock(blockName: string, props: BlockProps): string {
+function generateBlock(
+  blockName: string,
+  props: GroovyBlock,
+  indentLevel = 0
+): string {
+  const indent = "  ".repeat(indentLevel);
+  const innerIndent = "  ".repeat(indentLevel + 1);
   let blockContent = `
-${blockName} {
+${indent}${blockName} {
 `;
+
   for (const [key, value] of Object.entries(props)) {
-    const formattedValue = typeof value === "string" ? `"${value}"` : value;
-    blockContent += `  ${key} = ${formattedValue}
+    if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+      blockContent += generateBlock(key, value as GroovyBlock, indentLevel + 1);
+    } else {
+      const formattedValue = typeof value === "string" ? `"${value}"` : value;
+      blockContent += `${innerIndent}${key} = ${formattedValue}
 `;
+    }
   }
-  blockContent += `}
+
+  blockContent += `${indent}}
 `;
   return blockContent;
 }
@@ -103,7 +120,7 @@ function applySettings(
     }
 
     if (isBlock) {
-      newContents += generateBlock(key, value as BlockProps);
+      newContents += generateBlock(key, value as GroovyBlock);
     } else {
       newContents += generateProperty(key, value as Primitive);
     }

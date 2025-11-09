@@ -36,16 +36,18 @@ export default ({ config }: ConfigContext): AppConfig => {
     plugins: [
       // @ts-expect-error
       ...config.plugins,
-      // [
-      //   "./plugins/withGradleSettings.ts",
-      //   {
-      //     plugins: ["com.gradle.build-scan"],
-      //     buildScan: {
-      //       termsOfServiceUrl: "https://gradle.com/terms-of-service",
-      //       termsOfServiceAgree: "yes"
-      //     }
-      //   }
-      // ],
+      [
+        "./plugins/withGradleSettings.ts",
+        {
+          plugins: ["com.gradle.develocity"],
+          develocity: {
+            buildScan: {
+              termsOfServiceUrl: "https://gradle.com/terms-of-service",
+              termsOfServiceAgree: "yes"
+            }
+          }
+        }
+      ],
       [
         "./plugins/withGradleProperties.ts",
         {
