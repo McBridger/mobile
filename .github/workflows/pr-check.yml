@@ -55,4 +55,7 @@ jobs:
           cache-read-only: false
 
       - name: Build Debug APK
-        run: bun run android:build:debug
+        run: |
+          cd android && ./gradlew assembleDebug --scan \
+            -Dscan.termsOfUseUrl=https://gradle.com/terms-of-service \
+            -Dscan.termsOfUseAgree=yes
