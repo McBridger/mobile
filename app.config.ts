@@ -1,3 +1,4 @@
+import 'tsx/cjs';
 import { ConfigContext, ExpoConfig } from "expo/config";
 import { capitalize } from "lodash";
 import { z } from "zod";
@@ -32,6 +33,26 @@ export default ({ config }: ConfigContext): AppConfig => {
       ...config.android,
       package: `com.mc.bridger${packageNameSuffix}`,
     },
+    plugins: [
+      // @ts-expect-error
+      ...config.plugins,
+      [
+        "./plugins/withGradleSettings.ts",
+        {
+          plugins: ["com.gradle.build-scan"],
+          buildScan: {
+            termsOfServiceUrl: "https://gradle.com/terms-of-service",
+            termsOfServiceAgree: "yes"
+          }
+        }
+      ],
+      [
+        "./plugins/withGradleProperties.ts",
+        {
+          "org.gradle.caching": "true"
+        }
+      ]
+    ],
     extra,
   };
 };
