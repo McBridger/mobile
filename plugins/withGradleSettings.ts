@@ -13,60 +13,42 @@ type SettingsProps = {
 };
 
 /**
- * Generates a Groovy block string (e.g., buildScan { ... }) with support for nested blocks.
- * @param blockName The name of the block.
- * @param props The properties within the block.
+ * Recursively generates a Groovy configuration string from a JavaScript object.
+ * @param props The object representing the Groovy configuration.
  * @param indentLevel The current indentation level.
- * @returns A formatted string representing the Groovy block.
+ * @returns A formatted string representing the Groovy configuration.
  */
-function generateBlock(
-  blockName: string,
-  props: GroovyBlock,
-  indentLevel = 0
-): string {
+function generateGroovyContent(props: GroovyBlock, indentLevel: number): string {
   const indent = "  ".repeat(indentLevel);
-  const innerIndent = "  ".repeat(indentLevel + 1);
-  let blockContent = `
-${indent}${blockName} {
-`;
+  let content = "";
 
   for (const [key, value] of Object.entries(props)) {
     if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-      blockContent += generateBlock(key, value as GroovyBlock, indentLevel + 1);
+      // It's a nested block
+      content += `${indent}${key} {\n`;
+      content += generateGroovyContent(
+        value as GroovyBlock,
+        indentLevel + 1
+      );
+      content += `${indent}}\n`;
     } else {
+      // It's a property
       const formattedValue = typeof value === "string" ? `"${value}"` : value;
-      blockContent += `${innerIndent}${key} = ${formattedValue}
-`;
+      content += `${indent}${key} = ${formattedValue}\n`;
     }
   }
-
-  blockContent += `${indent}}
-`;
-  return blockContent;
-}
-
-/**
- * Generates a Groovy property assignment string (e.g., org.gradle.caching = true).
- * @param key The property key.
- * @param value The primitive value.
- * @returns A formatted string representing the Groovy property.
- */
-function generateProperty(key: string, value: Primitive): string {
-  const formattedValue = typeof value === "string" ? `"${value}"` : value;
-  return `
-${key} = ${formattedValue}
-`;
+  return content;
 }
 
 /**
  * Adds plugin IDs to the existing plugins { } block in settings.gradle.
  * @param settingsGradle The current contents of the settings.gradle file.
- * @param pluginIds An array of plugin IDs to add.
+ * @param newPlugins An array of plugins to add.
  * @returns The modified contents of the settings.gradle file.
  */
 function addPluginsToSettingsGradle(
   settingsGradle: string,
-  pluginIds: string[]
+  newPlugins: string[]
 ): string {
   const pluginsBlockRegex = /plugins\s*\{\s*(?<value>[\s\S]*?)\s*\}/m;
   const match = settingsGradle.match(pluginsBlockRegex);
@@ -81,7 +63,7 @@ function addPluginsToSettingsGradle(
   const plugins = new Set(
     match.groups.value.split("\n").map((line) => line.trim())
   );
-  for (const pluginId of pluginIds) plugins.add(`id("${pluginId}")`);
+  for (const plugin of newPlugins) plugins.add(plugin);
 
   // Reconstruct the settings.gradle content
   return settingsGradle.replace(
@@ -102,12 +84,13 @@ function applySettings(
 ): string {
   let newContents = settingsGradle;
 
-  // Handle plugins block first
+  // Handle plugins block first as a special case
   if (plugins && Array.isArray(plugins)) {
     newContents = addPluginsToSettingsGradle(newContents, plugins);
   }
 
-  // Handle other blocks and properties
+  // Filter out properties that already exist in the file
+  const propsToAdd: GroovyBlock = {};
   for (const [key, value] of Object.entries(props)) {
     const isBlock =
       typeof value === "object" && value !== null && !Array.isArray(value);
@@ -115,15 +98,14 @@ function applySettings(
       ? newContents.includes(`${key} {`)
       : newContents.includes(`${key} =`);
 
-    if (keyExists) {
-      continue;
+    if (!keyExists) {
+      propsToAdd[key] = value;
     }
+  }
 
-    if (isBlock) {
-      newContents += generateBlock(key, value as GroovyBlock);
-    } else {
-      newContents += generateProperty(key, value as Primitive);
-    }
+  // Append the new, non-existent properties
+  if (Object.keys(propsToAdd).length > 0) {
+    newContents += "\n" + generateGroovyContent(propsToAdd, 0);
   }
 
   return newContents;
