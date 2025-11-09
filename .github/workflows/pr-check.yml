@@ -50,7 +50,7 @@ jobs:
         run: bunx expo prebuild --platform android --no-install
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v5
         with:
           cache-read-only: false
 
