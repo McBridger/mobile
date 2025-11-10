@@ -36,19 +36,19 @@ export default ({ config }: ConfigContext): AppConfig => {
     plugins: [
       // @ts-expect-error
       ...config.plugins,
-      [
-        "./plugins/withGradleSettings.ts",
-        {
-          plugins: ['id("com.develocity.enterprise") version "4.2.2"'],
-          develocity: {
-            buildScan: {
-              termsOfService: {
-                agree: "yes"
-              }
-            }
-          }
-        }
-      ],
+      // [
+      //   "./plugins/withGradleSettings.ts",
+      //   {
+      //     plugins: ['id("com.develocity.enterprise") version "4.2.2"'],
+      //     develocity: {
+      //       buildScan: {
+      //         termsOfService: {
+      //           agree: "yes"
+      //         }
+      //       }
+      //     }
+      //   }
+      // ],
       [
         "./plugins/withGradleProperties.ts",
         {
