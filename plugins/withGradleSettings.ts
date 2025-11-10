@@ -8,8 +8,6 @@ interface GroovyBlock {
 
 type SettingsProps = {
   // @ts-expect-error
-  pluginManagement?: string;
-  // @ts-expect-error
   plugins?: string[];
   [key: string]: GroovyValue;
 };
@@ -74,24 +72,6 @@ function addPluginsToSettingsGradle(
   );
 }
 
-function handlePluginManagement(settingsGradle: string, value: string): string {
-  const pluginManagementBlockRegex = /pluginManagement\s*\{\s*(?<value>[\s\S]*?)\s*\}/m;
-  const match = settingsGradle.match(pluginManagementBlockRegex);
-
-  if (!match?.groups?.value) {
-    console.warn(
-      "Plugin management block not found in settings.gradle. Cannot add plugin management."
-    );
-    return settingsGradle;
-  }
-
-  return settingsGradle.replace(
-    pluginManagementBlockRegex,
-    "pluginManagement {" + "\n" + value + "\n\n" + "  " + match.groups.value + "\n" + "}"
-  );
-
-}
-
 /**
  * Applies settings to the settings.gradle file.
  * @param settingsGradle The current contents of the settings.gradle file.
@@ -100,17 +80,13 @@ function handlePluginManagement(settingsGradle: string, value: string): string {
  */
 function applySettings(
   settingsGradle: string,
-  { plugins, pluginManagement, ...props }: SettingsProps
+  { plugins, ...props }: SettingsProps
 ): string {
   let newContents = settingsGradle;
 
   // Handle plugins block first as a special case
   if (plugins && Array.isArray(plugins)) {
     newContents = addPluginsToSettingsGradle(newContents, plugins);
-  }
-
-  if (pluginManagement) {
-    newContents = handlePluginManagement(newContents, pluginManagement);
   }
 
   // Filter out properties that already exist in the file
