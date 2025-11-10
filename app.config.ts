@@ -42,8 +42,9 @@ export default ({ config }: ConfigContext): AppConfig => {
           plugins: ['id("com.gradle.develocity") version "4.2.2"'],
           develocity: {
             buildScan: {
-              termsOfServiceUrl: "https://gradle.com/terms-of-service",
-              termsOfServiceAgree: "yes"
+              termsOfService: {
+                agree: "yes"
+              }
             }
           }
         }
