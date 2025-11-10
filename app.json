@@ -2,7 +2,7 @@
   "expo": {
     "name": "McBridger",
     "slug": "mc-bridger",
-    "version": "1.0.0",
+    "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "bridger",
@@ -51,7 +51,9 @@
         {
           "android": {
             "minSdkVersion": 25,
-            "buildArchs": ["arm64-v8a"]
+            "buildArchs": [
+              "arm64-v8a"
+            ]
           }
         }
       ]
