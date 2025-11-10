@@ -1,9 +1,10 @@
+import 'tsx/cjs';
 import { ConfigContext, ExpoConfig } from "expo/config";
 import { capitalize } from "lodash";
 import { z } from "zod";
 
 const Extra = z.object({
-  BRIDGER_SERVICE_UUID: z.uuidv4(),
+  SERVICE_UUID: z.uuidv4(),
   CHARACTERISTIC_UUID: z.uuidv4(),
   ADVERTISE_UUID: z.string(),
   APP_VARIANT: z.enum(["dev", "preview", "prod"]).optional(),
@@ -15,7 +16,7 @@ const Extra = z.object({
 export default ({ config }: ConfigContext): AppConfig => {
   const extra = Extra.parse({
     ...config.extra,
-    BRIDGER_SERVICE_UUID: process.env.BRIDGER_SERVICE_UUID,
+    SERVICE_UUID: process.env.SERVICE_UUID,
     CHARACTERISTIC_UUID: process.env.CHARACTERISTIC_UUID,
     ADVERTISE_UUID: process.env.ADVERTISE_UUID,
     APP_VARIANT: process.env.APP_VARIANT,
@@ -30,8 +31,31 @@ export default ({ config }: ConfigContext): AppConfig => {
     slug: 'bridger',
     android: {
       ...config.android,
-      package: `com.mcbridger${packageNameSuffix}`,
+      package: `com.mc.bridger${packageNameSuffix}`,
     },
+    plugins: [
+      // @ts-expect-error
+      ...config.plugins,
+      // [
+      //   "./plugins/withGradleSettings.ts",
+      //   {
+      //     plugins: ['id("com.develocity.enterprise") version "4.2.2"'],
+      //     develocity: {
+      //       buildScan: {
+      //         termsOfService: {
+      //           agree: "yes"
+      //         }
+      //       }
+      //     }
+      //   }
+      // ],
+      [
+        "./plugins/withGradleProperties.ts",
+        {
+          "org.gradle.caching": "true"
+        }
+      ]
+    ],
     extra,
   };
 };
