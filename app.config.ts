@@ -39,7 +39,7 @@ export default ({ config }: ConfigContext): AppConfig => {
       [
         "./plugins/withGradleSettings.ts",
         {
-          plugins: ['id("com.gradle.develocity") version "4.2.2"'],
+          plugins: ['id("com.develocity.enterprise") version "4.2.2"'],
           develocity: {
             buildScan: {
               termsOfService: {
