@@ -4,15 +4,12 @@
   "version": "1.0.0",
   "scripts": {
     "start": "expo start",
-
     "android": "expo run:android",
     "android:prebuild": "APP_VARIANT=dev expo prebuild --clean --platform android",
     "android:dev": "APP_VARIANT=dev expo prebuild --clean --platform android && expo run:android",
-
     "android:build": "dotenvx run -- eas build --local --platform android --profile preview",
     "android:build:prod": "dotenvx run -- eas build --local --platform android --profile prod",
     "android:build:debug": "cd android && ./gradlew assembleDebug",
-
     "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
@@ -53,6 +50,7 @@
   },
   "devDependencies": {
     "@dotenvx/dotenvx": "^1.51.0",
+    "@types/bun": "^1.3.2",
     "@types/lodash": "^4.17.20",
     "@types/react": "~19.1.0",
     "eslint": "^9.25.0",
