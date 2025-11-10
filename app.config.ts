@@ -1,4 +1,4 @@
-import 'tsx/cjs';
+import "tsx/cjs";
 import { ConfigContext, ExpoConfig } from "expo/config";
 import { capitalize } from "lodash";
 import { z } from "zod";
@@ -23,12 +23,13 @@ export default ({ config }: ConfigContext): AppConfig => {
   });
 
   const appNameSuffix = extra.APP_VARIANT === "prod" ? "" : extra.APP_VARIANT;
-  const packageNameSuffix = extra.APP_VARIANT === "prod" ? "" : `.${extra.APP_VARIANT}`;
+  const packageNameSuffix =
+    extra.APP_VARIANT === "prod" ? "" : `.${extra.APP_VARIANT}`;
 
   return {
     ...config,
     name: `McBridger${capitalize(appNameSuffix)}`,
-    slug: 'bridger',
+    slug: "bridger",
     android: {
       ...config.android,
       package: `com.mc.bridger${packageNameSuffix}`,
@@ -39,22 +40,30 @@ export default ({ config }: ConfigContext): AppConfig => {
       [
         "./plugins/withGradleSettings.ts",
         {
+          pluginManagement:
+            "  repositories {" +
+            "\n" +
+            ["gradlePluginPortal()", "google()", "mavenCentral()"]
+              .map((repo) => `    ${repo}`)
+              .join("\n") +
+            "\n" +
+            "  }",
           plugins: ['id("com.develocity.enterprise") version "4.2.2"'],
           develocity: {
             buildScan: {
               termsOfService: {
-                agree: "yes"
-              }
-            }
-          }
-        }
+                agree: "yes",
+              },
+            },
+          },
+        },
       ],
       [
         "./plugins/withGradleProperties.ts",
         {
-          "org.gradle.caching": "true"
-        }
-      ]
+          "org.gradle.caching": "true",
+        },
+      ],
     ],
     extra,
   };
