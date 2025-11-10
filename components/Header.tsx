@@ -1,101 +1,70 @@
 import { useConnector } from "@/modules/connector";
-import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useSegments } from "expo-router";
 import { capitalize } from "lodash";
-import React, { useCallback } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import React, { useCallback, useMemo } from "react";
+import { useTheme, Appbar, Divider } from "react-native-paper";
+import { PATH_NAMES, PATHS, Status } from "@/constants";
 
 const Header = () => {
+  const theme = useTheme();
   const status = useConnector((state) => state.status);
   const name = useConnector((state) => state.name);
   const router = useRouter();
   const segments = useSegments();
   const currentRouteName = segments[segments.length - 1];
 
+  const { isCoonectionRouteName, isDevicesRouteName } = useMemo(() => {
+    return {
+      isCoonectionRouteName: currentRouteName === PATH_NAMES.CONNECTION,
+      isDevicesRouteName: currentRouteName === PATH_NAMES.DEVICES,
+    };
+  }, [currentRouteName]);
+
   const getBackgroundColor = useCallback(() => {
+    const defaultColor = theme.colors.background;
     switch (status) {
-      case "connected":
-        return "#d2d6d3";
-      case "connecting":
-      case "disconnecting":
-        return "#00008B"; // Using a standard deep blue hex code
+      case Status.Connected:
+        return defaultColor;
+      case Status.Connecting:
+      case Status.Disconnecting:
+        return theme.colors.outlineVariant;
       default:
-        return "#d2d6d3";
+        return defaultColor;
     }
   }, [status]);
 
-  const getTextColor = useCallback(() => {
-    if (status === "connected") return "darkblue";
-    return "white";
-  }, [status]);
-
   const handleLeftButtonPress = useCallback(() => {
-    if (currentRouteName === "connection")
-      router.push({ pathname: "/devices" });
+    if (isCoonectionRouteName) router.push({ pathname: PATHS.DEVICES });
   }, [currentRouteName, router]);
 
   const handleRightButtonPress = useCallback(() => {
-    if (currentRouteName === "devices" && status === "connected")
-      router.push({ pathname: "/connection" });
+    if (isDevicesRouteName && status === Status.Connected)
+      router.push({ pathname: PATHS.CONNECTION });
   }, [currentRouteName, status, router]);
 
-  const leftButton =
-    currentRouteName === "connection" ? (
-      <TouchableOpacity
-        onPress={handleLeftButtonPress}
-        style={styles.leftButton}
-      >
-        <Ionicons name="arrow-back" size={24} color={getTextColor()} />
-      </TouchableOpacity>
-    ) : null;
+  const leftButton = isCoonectionRouteName ? (
+    <Appbar.BackAction onPress={handleLeftButtonPress} />
+  ) : null;
 
   const rightButton =
-    currentRouteName === "devices" && status === "connected" ? (
-      <TouchableOpacity
-        onPress={handleRightButtonPress}
-        style={styles.rightButton}
-      >
-        <Ionicons name="arrow-forward" size={24} color={getTextColor()} />
-      </TouchableOpacity>
+    isDevicesRouteName && status === Status.Connected ? (
+      <Appbar.Action icon="arrow-right" onPress={handleRightButtonPress} />
     ) : null;
 
   return (
-    <SafeAreaView
-      style={{ backgroundColor: getBackgroundColor() }}
-    >
-      <View style={styles.headerContainer}>
+    <>
+      <Appbar.Header style={{ backgroundColor: getBackgroundColor() }}>
         {leftButton}
-        <Text style={[styles.headerTitle, { color: getTextColor() }]}>
-          {status === "connected" && name ? name : capitalize(status)}
-        </Text>
+        <Appbar.Content
+          title={
+            status === Status.Connected && name ? name : capitalize(status)
+          }
+        />
         {rightButton}
-      </View>
-    </SafeAreaView>
+      </Appbar.Header>
+      <Divider />
+    </>
   );
 };
-
-const styles = StyleSheet.create({
-  headerContainer: {
-    height: 50,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 15,
-    borderRadius: 20,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    flex: 1,
-    textAlign: "center",
-  },
-  leftButton: {
-    padding: 5,
-  },
-  rightButton: {
-    padding: 5,
-  },
-});
 
 export default Header;
