@@ -12,6 +12,9 @@ permissions:
   contents: read
   actions: write
 
+env:
+  APP_VARIANT: prod
+
 jobs:
   build-and-lint:
     runs-on: ubuntu-latest
@@ -33,7 +36,9 @@ jobs:
 
       - name: Create .env file
         run: |
-          echo "${{ secrets.SHARED_BLE_CONFIG }}" > .env
+          echo "SERVICE_UUID=93191b22-c437-4348-b10f-f522e69f289c" > .env
+          echo "CHARACTERISTIC_UUID=7569273b-b3e3-4672-867d-b07fc54be79f" >> .env
+          echo "ADVERTISE_UUID=bf13657b-b172-44f2-8c11-1b25a521a28a" >> .env
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@v1
@@ -45,6 +50,9 @@ jobs:
 
       - name: Run Linter
         run: bun run lint
+
+      - name: Run Expo Doctor
+        run: bunx expo-doctor
 
       - name: Generate Android project
         run: bunx expo prebuild --platform android --no-install
