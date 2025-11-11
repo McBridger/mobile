@@ -46,3 +46,4 @@ app-example
 .env
 modules/**/build
 .roo
+*.apk
