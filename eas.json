@@ -18,6 +18,9 @@
       }
     },
     "prod": {
+      "android": {
+        "buildType": "apk"
+      },
       "autoIncrement": true,
       "env": {
         "APP_VARIANT": "prod"

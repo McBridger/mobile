@@ -7,7 +7,7 @@ const Extra = z.object({
   SERVICE_UUID: z.uuidv4(),
   CHARACTERISTIC_UUID: z.uuidv4(),
   ADVERTISE_UUID: z.string(),
-  APP_VARIANT: z.enum(["dev", "preview", "prod"]).optional(),
+  APP_VARIANT: z.enum(["dev", "preview", "prod"]),
   eas: z.object({
     projectId: z.uuidv4(),
   }),
