@@ -21,6 +21,7 @@ jobs:
     outputs:
       release_version: ${{ env.RELEASE_VERSION }}
       is_changed: ${{ steps.versioning.outputs.changed }}
+      changelog: ${{ steps.versioning.outputs.changelog }}
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}
       cancel-in-progress: true
@@ -167,3 +168,4 @@ jobs:
         with:
           files: ${{ vars.PRODUCT_NAME }}-${{ env.RELEASE_VERSION }}.apk
           tag_name: v${{ env.RELEASE_VERSION }}
+          body: ${{ needs.build.outputs.changelog }}
