@@ -6,7 +6,7 @@
     "start": "expo start",
     "android": "expo run:android",
     "android:prebuild": "APP_VARIANT=dev expo prebuild --clean --platform android",
-    "android:dev": "APP_VARIANT=dev expo prebuild --clean --platform android && expo run:android",
+    "android:dev": "export APP_VARIANT=dev && expo prebuild --clean --platform android && expo run:android",
     "android:build": "dotenvx run -- eas build --local --platform android --profile preview",
     "android:build:prod": "dotenvx run -- eas build --local --platform android --profile prod",
     "android:build:debug": "cd android && ./gradlew assembleDebug",

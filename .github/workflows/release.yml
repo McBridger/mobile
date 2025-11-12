@@ -77,7 +77,10 @@ jobs:
 
       - name: Create .env file
         if: steps.versioning.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
-        run: echo "${{ secrets.SHARED_BLE_CONFIG }}" > .env
+        run: |
+          echo "SERVICE_UUID=${{ secrets.BLE_SERVICE_UUID }}" > .env
+          echo "CHARACTERISTIC_UUID=${{ secrets.BLE_CHARACTERISTIC_UUID }}" >> .env
+          echo "ADVERTISE_UUID=${{ secrets.ANDROID_BLE_ADVERTISE_UUID }}" >> .env
 
       - name: Install Bun dependencies
         if: steps.versioning.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
