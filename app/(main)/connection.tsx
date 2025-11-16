@@ -4,12 +4,18 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo } from "react";
-
+import {
+  useTheme,
+  Appbar,
+  Button,
+  Card,
+  Text,
+  Snackbar,
+} from "react-native-paper";
 
 import {
   FlatList,
   StyleSheet,
-  Text,
   TouchableHighlight,
   TouchableOpacity,
   View,
@@ -21,22 +27,11 @@ import Reanimated, {
   interpolate,
   useAnimatedStyle,
 } from "react-native-reanimated";
-
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
+import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 
 import { useShallow } from "zustand/react/shallow";
-
-const COLORS = {
-  // BACKGROUND: "linear-gradient(90deg,rgba(56, 54, 57, 1) 0%, rgba(88, 84, 84, 1) 31%, rgba(120, 114, 111, 1) 100%)",
-  BACKGROUND: "#8c8582",
-  // HEADER_BG: "#080707ff",
-  TEXT: "#ffffff",
-  SENT_BG: "#413e3f",
-  RECEIVED_BG: "#404347",
-  DELETE_BG: "#b37170",
-  DISCONNECT: "#805150",
-  BTN_TEXT: "#000000",
-};
+import { PATHS, Status } from "@/constants";
 
 const SPACINGS = {
   BORDER_RADIUS: 20,
@@ -45,6 +40,7 @@ const SPACINGS = {
 export default function Connection() {
   const router = useRouter();
   const { extra } = useAppConfig();
+  const theme = useTheme();
 
   const params = useLocalSearchParams<{ address: string; name: string }>();
   const address = useMemo(() => params.address, [params.address]);
@@ -79,6 +75,70 @@ export default function Connection() {
     ])
   );
 
+  const styles = StyleSheet.create({
+    container: {
+      flex: 1,
+      padding: 20,
+      backgroundColor: theme.colors.background,
+    },
+    cardWrapper: {
+      marginBottom: 10,
+    },
+    card: {
+      backgroundColor: theme.colors.surfaceContainer,
+    },
+    timeStamp: {
+      paddingTop: 8,
+      textAlign: "right",
+    },
+    list: {
+      flex: 1,
+    },
+    rightAction: {
+      width: 50,
+      height: "100%",
+      verticalAlign: "middle",
+      textAlign: "center",
+      backgroundColor: "#f25d03",
+    },
+    bottomBar: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      bottom: 0,
+      elevation: 4,
+      height: 60,
+      paddingHorizontal: 10,
+      justifyContent: "center",
+    },
+    buttonContainer: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      flex: 1,
+    },
+    button: {
+      flex: 1,
+      marginHorizontal: 5,
+      backgroundColor: theme.colors.primaryFixed,
+    },
+
+    rightActionContainer: {
+      backgroundColor: theme.colors.onError,
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "flex-end",
+      paddingRight: 20,
+      borderRadius: SPACINGS.BORDER_RADIUS,
+      marginBottom: 10,
+    },
+    actionIconWrapper: {
+      width: 30,
+      height: "100%",
+      justifyContent: "center",
+      alignItems: "center",
+    },
+  });
+
   useFocusEffect(
     useCallback(() => {
       if (isConnected) return;
@@ -93,8 +153,8 @@ export default function Connection() {
     const unsub = useConnector.subscribe(
       (state) => state.status,
       (status, prevStatus) => {
-        if (prevStatus === "disconnecting" && status === "disconnected")
-          router.push("/devices");
+        if (prevStatus === Status.Disconnecting && status === Status.Disconnected)
+          router.push(PATHS.DEVICES);
       }
     );
 
@@ -107,16 +167,20 @@ export default function Connection() {
   const [showUndo, setShowUndo] = React.useState(false);
 
   const UndoSnackbar = ({ onUndo }) => (
-    <View style={styles.undoSnackbar}>
-      <Text style={styles.undoText}>Запись удалена. Отменить?</Text>
-      <TouchableOpacity onPress={onUndo} style={styles.undoButton}>
-        <Text style={styles.undoButtonText}>ОТМЕНИТЬ</Text>
-      </TouchableOpacity>
-    </View>
+    <Snackbar
+      theme={{ colors: { primary: "green" } }}
+      visible={showUndo}
+      onDismiss={() => setShowUndo(false)}
+      action={{
+        label: "Undo",
+        onPress: onUndo,
+      }}
+    >
+      The entry has been deleted. Undo?
+    </Snackbar>
   );
 
   const handleSendText = async (text: string) => {
-    console.log("You long-pressed the button!", text);
     try {
       await Clipboard.setStringAsync(text);
       send(text);
@@ -191,9 +255,7 @@ export default function Connection() {
       return (
         <View style={actionContainerStyle}>
           <Reanimated.View style={[styles.actionIconWrapper, scale]}>
-            {/* <Text style={styles.actionIcon}>🗑</Text> */}
-                    <Ionicons name="trash" size={32} color="white" />
-
+            <Ionicons name="trash" size={32} color="white" />
           </Reanimated.View>
         </View>
       );
@@ -202,12 +264,10 @@ export default function Connection() {
   const renderItem = ({ item }: { item: Item; onRemove: void }) => {
     const isSent = item.type === "sent";
 
-    const wrapperStyle = [
-      styles.cllipboardWrapper,
-      getItemMarginStyles(isSent),
-      { backgroundColor: isSent ? COLORS.SENT_BG : COLORS.RECEIVED_BG },
-    ];
-
+    const wrapperStyle = [styles.cardWrapper, getItemMarginStyles(isSent)];
+    const rotationStyle = isSent
+      ? { lineHeight: 16, transform: [{ rotate: "-45deg" }] }
+      : { lineHeight: 16, transform: [{ rotate: "135deg" }] };
     return (
       <Swipeable
         renderRightActions={createRightAction(isSent)}
@@ -223,24 +283,42 @@ export default function Connection() {
           style={wrapperStyle}
           onPress={() => handleSendText(item.content)}
           onLongPress={() => handleSendText(item.content)}
-          underlayColor={isSent ? COLORS.SENT_BG : COLORS.RECEIVED_BG}
+          // underlayColor={isSent ? COLORS.SENT_BG : COLORS.RECEIVED_BG}
         >
-          <View style={styles.clipboardItem}>
-            <Text style={styles.itemType}>
-              {isSent ? "Sent:" : "Received:"}
-            </Text>
-            <Text style={styles.itemContent}>{item.content}</Text>
-            <Text style={styles.itemTimestamp}>
-              {new Date(item.time).toLocaleTimeString()}
-            </Text>
-          </View>
+          <Card style={styles.card}>
+            <Card.Content>
+              <Text
+                variant="titleMedium"
+                style={{ color: theme.colors.primary }}
+              >
+                <View style={rotationStyle}>
+                  <Icon
+                    name="send-outline"
+                    size={16}
+                    color={theme.colors.primary}
+                    style={
+                      !isSent && {
+                        transform: [{ translateY: 1 }, { translateX: 6 }],
+                      }
+                    }
+                  />
+                </View>
+
+                {isSent ? "Sent:" : "Received:"}
+              </Text>
+
+              <Text variant="bodyMedium">{item.content}</Text>
+              <Text variant="bodySmall" style={styles.timeStamp}>
+                {new Date(item.time).toLocaleTimeString()}
+              </Text>
+            </Card.Content>
+          </Card>
         </TouchableHighlight>
       </Swipeable>
     );
   };
   return (
     <View style={styles.container}>
-      {/* <Text style={styles.title}>Connection Details</Text> */}
       <GestureHandlerRootView>
         <FlatList
           data={items}
@@ -249,164 +327,27 @@ export default function Connection() {
           style={styles.list}
         />
       </GestureHandlerRootView>
-      <View style={styles.footer}>
-        <TouchableOpacity style={styles.button} onPress={clearItems}>
-          <Text style={styles.buttonText}>Remove all</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.button} onPress={disconnect}>
-          <Text style={styles.buttonText}>Disconnect</Text>
-        </TouchableOpacity>
-      </View>
-      {showUndo && <UndoSnackbar onUndo={handleUndo} />}
+      <Appbar
+        style={[styles.bottomBar, { backgroundColor: theme.colors.background }]}
+      >
+        <View style={styles.buttonContainer}>
+          <Button
+            style={styles.button}
+            mode="contained-tonal"
+            onPress={clearItems}
+          >
+            Remove all
+          </Button>
+          <Button
+            mode="contained-tonal"
+            style={styles.button}
+            onPress={disconnect}
+          >
+            Disconnect
+          </Button>
+        </View>
+      </Appbar>
+      <UndoSnackbar onUndo={handleUndo} />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 20,
-    backgroundColor: COLORS.BACKGROUND,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 20,
-    textAlign: "center",
-  },
-  cllipboardWrapper: {
-    borderRadius: SPACINGS.BORDER_RADIUS,
-    marginBottom: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1.41,
-    elevation: 2,
-    padding: 15,
-    overflow: "hidden",
-  },
-  clipboardItem: {
-    // color: COLORS.TEXT,
-    // backgroundColor: "#fff",
-    // padding: 15,
-  },
-  itemType: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color:  COLORS.TEXT,
-    marginBottom: 5,
-  },
-  itemContent: {
-    fontSize: 16,
-    color: COLORS.TEXT,
-    marginBottom: 5,
-  },
-  itemTimestamp: {
-    fontSize: 12,
-    color: COLORS.TEXT,
-    textAlign: "right",
-  },
-  list: {
-    flex: 1,
-  },
-  rightAction: {
-    width: 50,
-    height: "100%",
-    verticalAlign: "middle",
-    textAlign: "center",
-    backgroundColor: "#f25d03",
-  },
-  disconnectButton: {
-    position: "absolute",
-    width: 120,
-    bottom: 30,
-    right: 30,
-    backgroundColor: COLORS.DISCONNECT,
-    padding: 15,
-    borderRadius: 30,
-    elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-  },
-  buttonText: {
-    color: COLORS.TEXT,
-    fontWeight: "bold",
-    fontSize: 16,
-    textAlign: "center",
-  },
-
-  footer: {
-    backgroundColor: "#2d2d2d",
-    height: 70,
-    width: "100%",
-    borderRadius: 30,
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
-  button: {
-    width: "30%",
-    backgroundColor: "#f25d03",
-    padding: 15,
-    borderRadius: 30,
-    elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    margin: 8
-  },
-
-  rightActionContainer: {
-   backgroundColor: "#f25d03",
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "flex-end", // Aligns the icon to the right edge
-    paddingRight: 20, // Space from the edge for the icon
-    borderRadius: SPACINGS.BORDER_RADIUS, // Match the item border radius
-    marginBottom: 10, // Match the item margin for consistent spacing
-  },
-  actionIconWrapper: {
-    width: 30,
-    height: "100%",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  actionIcon: {
-    fontSize: 24,
-    color: "white",
-    lineHeight: 30,
-  },
-
-  // UNDO Snackbar
-  undoSnackbar: {
-    position: "absolute",
-    bottom: 80,
-    left: 20,
-    right: 20,
-    backgroundColor: COLORS.DELETE_BG,
-    borderRadius: 8,
-    padding: 15,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    zIndex: 10,
-  },
-  undoText: {
-    color: COLORS.TEXT,
-    fontSize: 16,
-  },
-  undoButton: {
-    padding: 5,
-    paddingHorizontal: 10,
-    backgroundColor: COLORS.TEXT,
-    borderRadius: 4,
-  },
-  undoButtonText: {
-    color: COLORS.DELETE_BG,
-    fontWeight: "bold",
-  },
-});
