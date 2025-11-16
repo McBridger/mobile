@@ -1,0 +1,67 @@
+name: Android PR Check
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.gitignore'
+
+permissions:
+  contents: read
+  actions: write
+
+env:
+  APP_VARIANT: prod
+
+jobs:
+  build-and-lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-34 build-tools;34.0.0'
+
+      - name: Create .env file
+        run: |
+          echo "SERVICE_UUID=93191b22-c437-4348-b10f-f522e69f289c" > .env
+          echo "CHARACTERISTIC_UUID=7569273b-b3e3-4672-867d-b07fc54be79f" >> .env
+          echo "ADVERTISE_UUID=bf13657b-b172-44f2-8c11-1b25a521a28a" >> .env
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install Bun dependencies
+        run: bun install
+
+      - name: Run Linter
+        run: bun run lint
+
+      - name: Run Expo Doctor
+        run: bunx expo-doctor
+
+      - name: Generate Android project
+        run: bunx expo prebuild --platform android --no-install
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5.0.0
+        with:
+          cache-read-only: false
+
+      - name: Build Debug APK
+        run: |
+          cd android && ./gradlew assembleDebug

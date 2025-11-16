@@ -1,0 +1,172 @@
+name: Android Build and Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Manual release version (e.g., 1.2.3)'
+        required: true
+
+# env:
+#   APP_VARIANT: prod
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      release_version: ${{ env.RELEASE_VERSION }}
+      is_changed: ${{ steps.versioning.outputs.changed }}
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Determine Version
+        id: versioning
+        uses: paulhatch/semantic-version@v5.3.0
+        with:
+          tag_prefix: "v"
+          major_pattern: "breaking:"
+          minor_pattern: "feat:"
+          search_commit_body: true
+
+      - name: Set Release Version Environment Variable
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "RELEASE_VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
+          else
+            echo "RELEASE_VERSION=${{ steps.versioning.outputs.version }}" >> $GITHUB_ENV
+          fi
+          echo "Version for this run: ${{ env.RELEASE_VERSION }}"
+
+      - name: Update Version locally for build
+        if: steps.versioning.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        run: |
+          echo "Updating package.json and app.json to version ${{ env.RELEASE_VERSION }} for the build"
+          bun .github/scripts/update-version.ts ${{ env.RELEASE_VERSION }}
+
+      - name: Set up JDK 17
+        if: steps.versioning.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Android SDK
+        if: steps.versioning.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-34 build-tools;34.0.0'
+          cmdline-tools-version: 8512546
+
+      - name: Create .env file
+        if: steps.versioning.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        run: |
+          echo "SERVICE_UUID=${{ secrets.BLE_SERVICE_UUID }}" > .env
+          echo "CHARACTERISTIC_UUID=${{ secrets.BLE_CHARACTERISTIC_UUID }}" >> .env
+          echo "ADVERTISE_UUID=${{ secrets.ANDROID_BLE_ADVERTISE_UUID }}" >> .env
+
+      - name: Install Bun dependencies
+        if: steps.versioning.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        run: bun install
+
+      - name: Set up EAS CLI
+        if: steps.versioning.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        uses: expo/expo-github-action@v8
+        with:
+          packager: bun
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Set up Gradle
+        if: steps.versioning.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        uses: gradle/actions/setup-gradle@v5.0.0
+
+      - name: Build Release APK
+        if: steps.versioning.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        run: bun run android:build:prod -- --output ${{ vars.PRODUCT_NAME }}-${{ env.RELEASE_VERSION }}.apk --non-interactive
+
+      - name: Upload APK artifact
+        if: steps.versioning.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-release
+          path: ${{ vars.PRODUCT_NAME }}-${{ env.RELEASE_VERSION }}.apk
+          retention-days: 1
+
+  release:
+    needs: build
+    if: (needs.build.outputs.is_changed == 'true' || github.event_name == 'workflow_dispatch') && success()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+
+      - name: Download Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: apk-release
+
+      - name: Get previous tag
+        id: previous_tag
+        run: |
+          PREVIOUS_TAG=$(git tag --sort=-v:refname | head -n 1)
+          echo "value=$PREVIOUS_TAG" >> $GITHUB_OUTPUT
+
+      - name: Generate Changelog
+        id: generate_changelog
+        run: |
+          CHANGELOG=$(git log ${{ steps.previous_tag.outputs.value }}..HEAD --pretty=format:'%s (%h)%n%n%b')
+          echo "changelog_body<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+          
+      - name: Bump version in project files
+        run: bun .github/scripts/update-version.ts ${{ needs.build.outputs.release_version }}
+
+      - name: Create Commit, Tag, and Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "chore: Bump version to $RELEASE_VERSION [skip ci]"
+          git tag "v$RELEASE_VERSION"
+          git push
+          git push --tags
+      
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ${{ vars.PRODUCT_NAME }}-${{ needs.build.outputs.release_version }}.apk
+          tag_name: v${{ needs.build.outputs.release_version }}
+          body: ${{ steps.generate_changelog.outputs.changelog_body }}

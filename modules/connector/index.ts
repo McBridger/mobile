@@ -121,7 +121,7 @@ export const useConnector = create<InternalConnectorStore>()(
           if (isConnected) return set({ status: "connected", address, name });
 
           await ConnectorModule.setup(
-            extra.BRIDGER_SERVICE_UUID,
+            extra.SERVICE_UUID,
             extra.CHARACTERISTIC_UUID
           );
 
