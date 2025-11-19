@@ -8,6 +8,7 @@ import { useEffect } from "react";
 import { AppState, AppStateStatus, View } from "react-native";
 import { useShallow } from "zustand/shallow";
 import Header from "../../components/Header";
+import { PATHS } from "@/constants";
 
 export default function MainLayout() {
   const params = useLocalSearchParams();
@@ -35,7 +36,7 @@ export default function MainLayout() {
   if (params.address) {
     return (
       <Redirect
-        href={{ pathname: "/connection", params: { address: params.address } }}
+        href={{ pathname: PATHS.CONNECTION, params: { address: params.address } }}
       />
     );
   }

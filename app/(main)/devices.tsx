@@ -1,105 +1,72 @@
 import { useAppConfig } from "@/hooks/useConfig";
-import { BleDevice, useScanner } from "@/modules/scanner";
+import { BleDevice } from "@/modules/scanner";
 import { useRouter } from "expo-router";
-import { useMemo } from "react";
-import {
-  Button,
-  Pressable,
-  SectionList,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-import { useShallow } from "zustand/react/shallow";
-
-type ListDataItem = BleDevice | { id: string; type: "separator" };
+import { useCallback, useMemo } from "react";
+import { SectionList, StyleSheet, View } from "react-native";
+import { useTheme, Button, Text, ActivityIndicator } from "react-native-paper";
+import { PATHS } from "@/constants";
+import DeviceCard from "@/components/DeviceCard";
+import { useBleDevices } from "@/hooks/useBleDevices";
 
 export default function Devices() {
   const { extra } = useAppConfig();
   const router = useRouter();
-  const isScanning = useScanner((state) => state.isScanning);
-  const { devices, bridgers } = useScanner(
-    useShallow((state) => ({
-      devices: state.devices,
-      bridgers: state.bridges,
-    }))
-  );
-  const [startScan, stopScan, clearDevices] = useScanner(
-    useShallow((state) => [state.start, state.stop, state.clear])
+  const theme = useTheme();
+
+  const styles = useMemo(() => getStyles(theme), [theme]);
+  const { isScanning, sections, startScan, stopScan, clearDevices } =
+    useBleDevices();
+
+  const handleDevicePress = useCallback(
+    (device: BleDevice) => {
+      if (!device.isBridger) return;
+
+      router.push({
+        pathname: PATHS.CONNECTION,
+        params: { address: device.address, name: device.name },
+      });
+      stopScan();
+    },
+    [router, stopScan]
   );
 
-  const bridgersArray = useMemo(
-    () => Array.from(bridgers.values()),
-    [bridgers]
-  );
-  const otherDevicesArray = useMemo(
-    () => Array.from(devices.values()),
-    [devices]
-  );
-
-  const sections = useMemo(() => {
-    const sectionsData = [];
-    if (bridgersArray.length > 0) {
-      sectionsData.push({ title: "BLE Devices", data: bridgersArray });
-    }
-    if (otherDevicesArray.length > 0) {
-      sectionsData.push({ title: "Other Devices", data: otherDevicesArray });
-    }
-    return sectionsData;
-  }, [bridgersArray, otherDevicesArray]);
-
-  const handleDevicePress = (device: BleDevice) => {
-    if (!device.isBridger) return;
-
-    router.push({
-      pathname: "/connection",
-      params: { address: device.address, name: device.name },
-    });
-    stopScan();
+  const renderItem = ({ item }: { item: BleDevice }) => {
+    return <DeviceCard device={item} onPress={() => handleDevicePress(item)} />;
   };
 
-  const renderItem = ({ item }: { item: ListDataItem }) => {
-    if ("type" in item && item.type === "separator") {
-      return (
-        <View style={styles.separator}>
-          <Text style={styles.separatorText}>Other Devices</Text>
-        </View>
-      );
-    }
-
-    const device = item as BleDevice;
-    return (
-      <Pressable
-        onPress={() => handleDevicePress(device)}
-        style={({ pressed }) => [
-          styles.deviceItem,
-          pressed && styles.deviceItemPressed,
-        ]}
-      >
-        <Text style={styles.deviceName}>{device.name || "N/A"}</Text>
-        <Text style={styles.deviceInfo}>Address: {device.address}</Text>
-        <Text style={styles.deviceInfo}>RSSI: {device.rssi}</Text>
-        {device.isBridger && (
-          <Text style={styles.bridgerInfo}>[Bridger Service Found]</Text>
-        )}
-      </Pressable>
-    );
-  };
+  const renderEmptyList = () => (
+    <Text style={styles.emptyListText}>
+      {"No devices found yet.\nStart scan to find available devices."}
+    </Text>
+  );
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>BLE Scanner</Text>
+      <Text variant="titleLarge" style={styles.title}>
+        BLE Scanner
+      </Text>
+
       <View style={styles.buttonContainer}>
         <Button
-          title="Start Scan"
-          onPress={() => startScan(extra.ADVERTISE_UUID)}
-          disabled={isScanning}
-        />
-        <Button title="Stop Scan" onPress={stopScan} disabled={!isScanning} />
-        <Button title="Clear Devices" onPress={clearDevices} />
+          style={styles.button}
+          mode="contained"
+          onPress={() =>
+            isScanning ? stopScan() : startScan(extra.ADVERTISE_UUID)
+          }
+        >
+          {isScanning ? "Stop Scan" : "  Start Scan"}
+        </Button>
+        <Button style={styles.button} mode="contained" onPress={clearDevices}>
+          Clear Devices
+        </Button>
       </View>
 
-      {isScanning && <Text>Scanning for devices...</Text>}
+      {isScanning && (
+        <View style={styles.scanningInfo}>
+          <ActivityIndicator animating={true} />
+          <Text style={styles.scanningText}>Scanning for devices...</Text>
+        </View>
+      )}
 
       <SectionList
         style={styles.list}
@@ -107,107 +74,61 @@ export default function Devices() {
         keyExtractor={(item) => item.address}
         renderItem={renderItem}
         renderSectionHeader={({ section: { title } }) => (
-          <Text style={styles.sectionHeader}>{title}</Text>
+          <Text variant="bodyMedium" style={styles.sectionHeader}>
+            {title}
+          </Text>
         )}
-        ListEmptyComponent={<Text>No devices found yet.</Text>}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={renderEmptyList}
       />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-    backgroundColor: "#f0f0f0",
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 20,
-    color: "#333",
-  },
-  subtitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    marginTop: 20,
-    marginBottom: 10,
-    color: "#555",
-  },
-  buttonContainer: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    width: "100%",
-    marginBottom: 20,
-  },
-  errorText: {
-    color: "red",
-    marginTop: 10,
-    textAlign: "center",
-  },
-  list: {
-    width: "100%",
-    marginTop: 10,
-  },
-  deviceItem: {
-    backgroundColor: "#fff",
-    padding: 15,
-    borderRadius: 8,
-    marginBottom: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1.41,
-    elevation: 2,
-  },
-  deviceName: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#333",
-  },
-  deviceInfo: {
-    fontSize: 14,
-    color: "#666",
-  },
-  bridgerInfo: {
-    fontSize: 14,
-    color: "green",
-    marginTop: 5,
-    fontWeight: "bold",
-  },
-  permissionItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    width: "100%",
-    marginBottom: 10,
-    paddingHorizontal: 10,
-  },
-  deviceItemPressed: {
-    opacity: 0.7,
-  },
-  separator: {
-    height: 1,
-    backgroundColor: "#ccc",
-    marginVertical: 10,
-    width: "100%",
-    alignItems: "center",
-  },
-  separatorText: {
-    backgroundColor: "#f0f0f0",
-    paddingHorizontal: 10,
-    color: "#888",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  sectionHeader: {
-    fontSize: 18,
-    fontWeight: "bold",
-    backgroundColor: "#f0f0f0",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    marginTop: 10,
-  },
-});
+const getStyles = (theme: ReturnType<typeof useTheme>) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      alignItems: "center",
+      paddingHorizontal: 20,
+      paddingTop: 20,
+      backgroundColor: theme.colors.background,
+    },
+    title: {
+      marginBottom: 20,
+      color: theme.colors.onBackground,
+    },
+    buttonContainer: {
+      flexDirection: "row",
+      justifyContent: "center",
+      width: "100%",
+      marginBottom: 20,
+    },
+    button: {
+      marginLeft: 10,
+      marginRight: 10,
+    },
+    list: {
+      width: "100%",
+    },
+    sectionHeader: {
+      paddingTop: 10,
+      marginBottom: 10,
+      color: theme.colors.onBackground,
+      fontWeight: "bold",
+    },
+    scanningInfo: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: 20,
+    },
+    emptyListText: {
+      textAlign: "center",
+      color: theme.colors.onSurfaceVariant,
+      marginTop: 20,
+    },
+    scanningText: {
+      marginLeft: 8,
+      color: theme.colors.onSurface,
+    },
+  });
