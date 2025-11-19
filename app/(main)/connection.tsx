@@ -19,7 +19,7 @@ export default function Connection() {
   const [lastDeletedItem, setLastDeletedItem] = useState<Item | null>(null);
   const [showUndo, setShowUndo] = useState(false);
 
-  const handleRemoveItem = useCallback(
+  const onSwipeToDelete = useCallback(
     (item: Item) => {
       setLastDeletedItem(item);
       setShowUndo(true);
@@ -48,7 +48,7 @@ export default function Connection() {
     <MessageItem
       item={item}
       onSend={handleSendText}
-      onSwipeToDelete={handleRemoveItem}
+      onSwipeToDelete={onSwipeToDelete}
     />
   );
 
