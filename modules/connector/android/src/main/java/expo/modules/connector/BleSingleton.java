@@ -2,37 +2,32 @@ package expo.modules.connector;
 
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
-import android.bluetooth.BluetoothGatt;
-import android.bluetooth.BluetoothGattCharacteristic;
-import android.bluetooth.BluetoothGattService;
 import android.bluetooth.BluetoothManager;
 import android.content.Context;
 import android.util.Log;
+import android.os.Build;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 
-import no.nordicsemi.android.ble.BleManager;
 import no.nordicsemi.android.ble.data.Data;
 import no.nordicsemi.android.ble.observer.ConnectionObserver;
 
-import android.os.Build;
+import java.util.UUID;
+
 import expo.modules.connector.BridgerMessage.MessageType;
 
-import java.lang.ref.WeakReference;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
-import java.util.concurrent.CopyOnWriteArrayList;
-
 public class BleSingleton {
-    // Define a callback interface for connection events
+
+    // =============================================================================================
+    // 1. CONTRACTS (Interfaces & Exceptions)
+    // =============================================================================================
+
     public interface BleConnectionListener {
         void onDeviceConnected();
         void onDeviceDisconnected();
         void onDeviceFailedToConnect(String deviceAddress, String deviceName, String reason);
     }
-    // Define a callback interface for incoming data (for the Service)
+
     public interface BleDataListener {
         void onDataReceived(BridgerMessage msg);
     }
@@ -42,82 +37,10 @@ public class BleSingleton {
     public static class BluetoothUnavailableException extends Exception { BluetoothUnavailableException(String message) { super(message); }}
     public static class NotConnectedException extends Exception { NotConnectedException(String message) { super(message); } }
 
-    private class BridgerBleManager extends BleManager {
-        @Nullable private BluetoothGattCharacteristic characteristic;
+    // =============================================================================================
+    // 2. SINGLETON & STATICS
+    // =============================================================================================
 
-        public BridgerBleManager(@NonNull Context context) {
-            super(context);
-            setConnectionObserver(connectionObserver);
-        }
-
-        public void performWrite(@NonNull Data data) {
-            if (characteristic == null) {
-                log(Log.WARN, "Characteristic is not initialized.");
-                return;
-            }
-            writeCharacteristic(characteristic, data, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
-                .fail((device, status) -> log(Log.ERROR, "Failed to send data with status: " + status))
-                .enqueue();
-        }
-
-        @Override
-        public void log(int priority, @NonNull String message) {
-            Log.println(priority, TAG, message);
-        }
-
-        @Override
-        protected void initialize() {
-            setNotificationCallback(characteristic)
-                .with((device, data) -> {
-                    BridgerMessage receivedMessage = BridgerMessage.fromData(data, device);
-                    if (receivedMessage == null) return;
-
-                    for (WeakReference<BleDataListener> ref : dataListeners) {
-                        Optional.ofNullable(ref.get())
-                            .ifPresentOrElse(
-                                l -> l.onDataReceived(receivedMessage),
-                                () -> dataListeners.remove(ref)
-                            );
-                    }
-                });
-
-            beginAtomicRequestQueue()
-                .add(requestMtu(512)
-                    .fail((device, status) -> log(Log.ERROR, "Could not request MTU: " + status))
-                )
-                .add(enableNotifications(characteristic)
-                    .fail((device, status) -> log(Log.ERROR, "Could not enable notifications: " + status))
-                )
-                .enqueue();
-        }
-
-        @Override
-        protected boolean isRequiredServiceSupported(@NonNull final BluetoothGatt gatt) {
-            // <-- DEBUG LOG 1: See if we are even getting this far
-            Log.d(TAG, "Checking for required services...");
-            final BluetoothGattService service = gatt.getService(bridgerServiceUuid);
-            if (service == null) {
-                // <-- DEBUG LOG 2: This is a common failure point!
-                Log.e(TAG, "ERROR: Service with UUID " + bridgerServiceUuid + " was not found!");
-                return false;
-            }
-
-            characteristic = service.getCharacteristic(characteristicUuid);
-
-            if (characteristic == null) {
-                Log.e(TAG, "ERROR: Characteristic with UUID " + characteristicUuid + " was not found!");
-            }
-
-            boolean success = characteristic != null;
-            Log.d(TAG, "Service check complete. Is characteristic found? " + success);
-            return success;
-        }
-
-        @Override
-        protected void onServicesInvalidated() {
-            characteristic = null;
-        }
-    }
     private static final String TAG = "BleSingleton";
     private static volatile BleSingleton instance;
 
@@ -132,131 +55,47 @@ public class BleSingleton {
         return instance;
     }
 
-    private final Context context;
+    /**
+     * Visible for testing only. Allows injecting a mock manager.
+     */
+    public static BleSingleton createInstanceForTests(Context context, BridgerBleManager manager) {
+        return new BleSingleton(context, manager);
+    }
 
+    // =============================================================================================
+    // 3. FIELDS
+    // =============================================================================================
+
+    private final Context context;
     private final BridgerBleManager bleManager;
 
-    // --- LISTENER API  ---
+    // Observables
+    private final Observable<BleConnectionListener> connectionListeners = new Observable<>();
+    private final Observable<BleDataListener> dataListeners = new Observable<>();
 
-    // --- Configuration Variables ---
+    // Configuration
     private UUID bridgerServiceUuid;
     private UUID characteristicUuid;
 
-    private final List<WeakReference<BleConnectionListener>> connectionListeners = new CopyOnWriteArrayList<>();
-
-    private final List<WeakReference<BleDataListener>> dataListeners = new CopyOnWriteArrayList<>();
-
-    private final ConnectionObserver connectionObserver = new ConnectionObserver() {
-        @Override
-        public void onDeviceFailedToConnect(@NonNull BluetoothDevice device, int reason) {
-            for (WeakReference<BleConnectionListener> ref : connectionListeners) {
-                Optional.ofNullable(ref.get())
-                    .ifPresentOrElse(
-                        l -> l.onDeviceFailedToConnect(device.getAddress(), device.getName(), "Native reason code: " + reason),
-                        () -> connectionListeners.remove(ref)
-                    );
-            }
-        }
-
-        @Override
-        public void onDeviceReady(@NonNull BluetoothDevice device) {
-            for (WeakReference<BleConnectionListener> ref : connectionListeners) {
-                Optional.ofNullable(ref.get())
-                    .ifPresentOrElse(
-                        BleConnectionListener::onDeviceConnected,
-                        () -> connectionListeners.remove(ref)
-                    );
-            }
-
-            String message = new BridgerMessage(MessageType.DEVICE_NAME, Build.MODEL).toJson();
-
-            bleManager.performWrite(Data.from(message));
-            Log.d(TAG, "Sent device name: " + Build.MODEL);
-        }
-
-        @Override
-        public void onDeviceDisconnected(@NonNull BluetoothDevice device, int reason) {
-            for (WeakReference<BleConnectionListener> ref : connectionListeners) {
-                Optional.ofNullable(ref.get())
-                    .ifPresentOrElse(
-                        BleConnectionListener::onDeviceDisconnected,
-                        () -> connectionListeners.remove(ref)
-                    );
-            }
-        }
-
-        @Override
-        public void onDeviceConnecting(@NonNull BluetoothDevice device) {
-            // <-- DEBUG LOG 3: Add logs to ALL observer methods
-            Log.i(TAG, "ConnectionObserver: onDeviceConnecting to " + device.getAddress());
-        }
-
-        @Override
-        public void onDeviceConnected(@NonNull BluetoothDevice device) {
-            Log.i(TAG, "ConnectionObserver: onDeviceConnected to " + device.getAddress());
-        }
-        
-        // ... onDeviceReady() is already implemented ...
-
-        @Override
-        public void onDeviceDisconnecting(@NonNull BluetoothDevice device) {
-            Log.i(TAG, "ConnectionObserver: onDeviceDisconnecting from " + device.getAddress());
-        }
-        
-        // ... onDeviceDisconnected() and onDeviceFailedToConnect() are already implemented ...
-    };
-
-    // --- PUBLIC BLE ACTIONS ---
+    // =============================================================================================
+    // 4. CONSTRUCTORS
+    // =============================================================================================
 
     private BleSingleton(Context context) {
+        this(context, new BridgerBleManager(context));
+    }
+
+    // Constructor for DI
+    private BleSingleton(Context context, BridgerBleManager manager) {
         this.context = context.getApplicationContext();
-        this.bleManager = new BridgerBleManager(this.context);
+        this.bleManager = manager;
+        this.bleManager.setConnectionObserver(connectionObserver);
+        this.bleManager.setMessageListener(this::onMessageReceived);
     }
 
-    public void addConnectionListener(BleConnectionListener listener) {
-        if (listener == null) return;
-        // Prevent adding duplicates
-        for (WeakReference<BleConnectionListener> ref : connectionListeners) {
-            if (listener.equals(ref.get())) return;
-        }
-        // Add the listener wrapped in a WeakReference
-        this.connectionListeners.add(new WeakReference<>(listener));
-    }
-
-    public void removeConnectionListener(BleConnectionListener listener) {
-        if (listener == null) return;
-        for (WeakReference<BleConnectionListener> ref : connectionListeners) {
-            // If the reference points to our listener, remove it
-            if (listener.equals(ref.get())) {
-                connectionListeners.remove(ref);
-                return;
-            }
-        }
-    }
-
-    public void addDataListener(BleDataListener listener) {
-        if (listener == null) return;
-        // Prevent adding duplicates
-        for (WeakReference<BleDataListener> ref : dataListeners) {
-            if (listener.equals(ref.get())) return;
-        }
-        // Add the listener wrapped in a WeakReference
-        this.dataListeners.add(new WeakReference<>(listener));
-    }
-
-
-    // --- SharedPreferences Logic ---
-
-    public void removeDataListener(BleDataListener listener) {
-        if (listener == null) return;
-        for (WeakReference<BleDataListener> ref : dataListeners) {
-            // If the reference points to our listener, remove it
-            if (listener.equals(ref.get())) {
-                dataListeners.remove(ref);
-                return;
-            }
-        }
-    }
+    // =============================================================================================
+    // 5. PUBLIC API: CONFIGURATION & CONNECTION
+    // =============================================================================================
 
     /**
      * Configures the Singleton with the necessary BLE UUIDs.
@@ -269,20 +108,18 @@ public class BleSingleton {
         try {
             this.bridgerServiceUuid = UUID.fromString(serviceUuid);
             this.characteristicUuid = UUID.fromString(characteristicUuid);
+
+            // Propagate config to manager
+            this.bleManager.setConfiguration(this.bridgerServiceUuid, this.characteristicUuid);
+
             Log.d(TAG, "BleSingleton configured with UUIDs.");
         } catch (IllegalArgumentException e) {
             Log.e(TAG, "Invalid UUID format provided during setup.", e);
         }
     }
 
-    // --- CONNECTION OBSERVER (MODIFIED to notify ALL listeners) ---
-
     /**
      * Initiates a connection to a BLE device.
-     * @param address The MAC address of the device.
-     * @throws NotConfiguredException if the setup() method has not been called.
-     * @throws BluetoothUnavailableException if Bluetooth is off or unavailable.
-     * @throws ConnectionActiveException if already connected or connecting.
      */
     public void connect(String address) throws NotConfiguredException, BluetoothUnavailableException, ConnectionActiveException {
         // 1. Check if configured
@@ -300,29 +137,24 @@ public class BleSingleton {
         if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled())
             throw new BluetoothUnavailableException("Bluetooth is not available or is disabled.");
 
-
-        // If all checks pass, proceed with the asynchronous connection attempt
+        // 4. Connect
         final BluetoothDevice device = bluetoothAdapter.getRemoteDevice(address);
         bleManager.connect(device)
-            .retry(3, 100)
-            .useAutoConnect(false)
-            .timeout(20000)
-            .enqueue();
+                .retry(3, 100)
+                .useAutoConnect(false)
+                .timeout(20000)
+                .enqueue();
     }
-
-    // --- BridgerBleManager (MODIFIED to notify ALL data listeners) ---
 
     public void disconnect() {
         if (!bleManager.isConnected()) return;
-
         bleManager.disconnect().enqueue();
     }
 
-    /**
-     * Sends data to the connected device.
-     * @param msg The string data to send.
-     * @throws NotConnectedException if no device is currently connected.
-     */
+    // =============================================================================================
+    // 6. PUBLIC API: ACTIONS & STATE
+    // =============================================================================================
+
     public void send(BridgerMessage msg) throws NotConnectedException {
         if (!isConnected())
             throw new NotConnectedException("Cannot send data, no device is connected.");
@@ -334,4 +166,69 @@ public class BleSingleton {
     public boolean isConnected() {
         return bleManager.isConnected();
     }
+
+    // =============================================================================================
+    // 7. PUBLIC API: LISTENERS
+    // =============================================================================================
+
+    public void addConnectionListener(BleConnectionListener listener) {
+        connectionListeners.add(listener);
+    }
+
+    public void removeConnectionListener(BleConnectionListener listener) {
+        connectionListeners.remove(listener);
+    }
+
+    public void addDataListener(BleDataListener listener) {
+        dataListeners.add(listener);
+    }
+
+    public void removeDataListener(BleDataListener listener) {
+        dataListeners.remove(listener);
+    }
+
+    // =============================================================================================
+    // 8. PRIVATE IMPLEMENTATION
+    // =============================================================================================
+
+    private void onMessageReceived(BridgerMessage receivedMessage) {
+        dataListeners.notify(l -> l.onDataReceived(receivedMessage));
+    }
+
+    private final ConnectionObserver connectionObserver = new ConnectionObserver() {
+        @Override
+        public void onDeviceFailedToConnect(@NonNull BluetoothDevice device, int reason) {
+            connectionListeners.notify(l -> l.onDeviceFailedToConnect(device.getAddress(), device.getName(), "Native reason code: " + reason));
+        }
+
+        @Override
+        public void onDeviceReady(@NonNull BluetoothDevice device) {
+            connectionListeners.notify(BleConnectionListener::onDeviceConnected);
+
+            String message = new BridgerMessage(MessageType.DEVICE_NAME, Build.MODEL).toJson();
+            bleManager.performWrite(Data.from(message));
+            Log.d(TAG, "Sent device name: " + Build.MODEL);
+        }
+
+        @Override
+        public void onDeviceDisconnected(@NonNull BluetoothDevice device, int reason) {
+            connectionListeners.notify(BleConnectionListener::onDeviceDisconnected);
+        }
+
+        @Override
+        public void onDeviceConnecting(@NonNull BluetoothDevice device) {
+            Log.i(TAG, "ConnectionObserver: onDeviceConnecting to " + device.getAddress());
+        }
+
+        @Override
+        public void onDeviceConnected(@NonNull BluetoothDevice device) {
+            Log.i(TAG, "ConnectionObserver: onDeviceConnected to " + device.getAddress());
+        }
+
+        @Override
+        public void onDeviceDisconnecting(@NonNull BluetoothDevice device) {
+            Log.i(TAG, "ConnectionObserver: onDeviceDisconnecting from " + device.getAddress());
+        }
+    };
 }
+
