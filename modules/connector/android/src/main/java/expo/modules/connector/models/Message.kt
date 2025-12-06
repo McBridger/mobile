@@ -44,16 +44,26 @@ data class Message(
         private const val TAG = "Message"
         private val gson = Gson()
 
-        fun fromJson(json: String): Message? {
+        fun fromJson(json: String, address: String? = null): Message? {
             return try {
-                val msg = gson.fromJson(json, Message::class.java)
-                Log.d(TAG, "Data received as JSON: Type=${msg.getType()}, Payload=${msg.value}, Address=${msg.address}, ID=${msg.id}")
-                Type.entries[msg.typeId]
-                msg
+                val parsed = gson.fromJson(json, TransferMessage::class.java)
+                Log.d(TAG, "Data parsed from JSON: Type=${parsed.type}, Payload=${parsed.payload}")
+
+                val msg = Message(
+                    type = Type.entries[parsed.type],
+                    value = parsed.payload,
+                    address = address
+                )
+
+                Log.d(TAG, "Data converted to Message: Type=${msg.getType()}, Payload=${msg.value}, Address=${msg.address}, ID=${msg.id}")
+
+                return msg
             } catch (e: Exception) {
-                Log.e(TAG, "Error parsing JSON message: ${e.message}")
+                Log.e(TAG, "fromJson: Error parsing JSON message: ${e.message}, JSON: $json")
                 null
             }
         }
     }
+
+    private data class TransferMessage(@SerializedName("t") val type: Int, @SerializedName("p") val payload: String)
 }

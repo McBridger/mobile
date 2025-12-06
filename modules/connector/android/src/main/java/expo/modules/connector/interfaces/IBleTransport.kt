@@ -18,6 +18,7 @@ interface IBleTransport {
         CONNECTING,
         CONNECTED,
         POWERED_OFF,
-        UNSUPPORTED
+        UNSUPPORTED,
+        READY
     }
 }

@@ -5,7 +5,6 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.os.Build
 import android.util.Log
-import androidx.annotation.RequiresApi
 import expo.modules.connector.interfaces.IBleTransport
 import expo.modules.connector.models.Message
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -32,82 +31,130 @@ object Broker {
     
     fun init(context: Context): Broker {
         val applicationContext = context.applicationContext
+        Log.d(TAG, "init: Called with context hash: ${context.hashCode()}, applicationContext hash: ${applicationContext.hashCode()}")
 
         if (!::appContext.isInitialized) {
             this.appContext = applicationContext
             this.history = History.getInstance(this.appContext)
+            Log.i(TAG, "init: Broker initialized successfully for the first time.")
             return this
         }
 
-        if (this.appContext != applicationContext) 
+        if (this.appContext != applicationContext) {
+            Log.e(TAG, "init: Attempt to re-initialize Broker with a different ApplicationContext! Existing hash: ${this.appContext.hashCode()}, New hash: ${applicationContext.hashCode()}")
             throw IllegalStateException("Broker has already been initialized with a different ApplicationContext. Only one ApplicationContext is supported per process.")
+        }
 
+        Log.d(TAG, "init: Broker already initialized with the same ApplicationContext. Doing nothing.")
         return this
     }
 
-    @RequiresApi(Build.VERSION_CODES.HONEYCOMB)
     fun registerBle(bleTransport: IBleTransport): Broker {
+        Log.d(TAG, "registerBle: Registering BLE transport. Transport hash: ${bleTransport.hashCode()}")
         this.bleTransport = bleTransport
 
         scope.launch {
+            Log.d(TAG, "registerBle: Collecting incomingMessages from bleTransport")
             bleTransport.incomingMessages.collect { msg -> onIncomingMessage(msg) }
+        }
+        scope.launch {
+            Log.d(TAG, "registerBle: Collecting connectionState from bleTransport")
             bleTransport.connectionState.collect { state -> onStateChange(state) }
         }
 
+        Log.i(TAG, "registerBle: BLE Transport registered.")
         return this
     }
 
     suspend fun connect(address: String) {
+        Log.d(TAG, "connect: Attempting to connect to $address")
         bleTransport.connect(address)
+        Log.d(TAG, "connect: bleTransport.connect called for $address")
     }
 
     suspend fun disconnect() {
+        Log.d(TAG, "disconnect: Attempting to disconnect")
         bleTransport.disconnect()
+        Log.d(TAG, "disconnect: bleTransport.disconnect called")
     }
 
     // Accessor for History to expose it to ConnectorModule
     fun getHistory(): History {
-        if (!::history.isInitialized) throw IllegalStateException("Broker not initialized. Call init() first.")
-
+        if (!::history.isInitialized) {
+            Log.e(TAG, "getHistory: Broker not initialized, history is null.")
+            throw IllegalStateException("Broker not initialized. Call init() first.")
+        }
+        Log.d(TAG, "getHistory: Returning history instance.")
         return history
     } 
     
     fun clipboardUpdate(content: String) {
+        Log.d(TAG, "clipboardUpdate: Creating clipboard message with content length: ${content.length}")
         val message = Message(type = Message.Type.CLIPBOARD, value = content)
         history.add(message)
+        Log.d(TAG, "clipboardUpdate: Message added to history: ${message.id}")
 
         scope.launch {
+            Log.d(TAG, "clipboardUpdate: Sending message via bleTransport: ${message.id}")
             bleTransport.send(message)
+            Log.d(TAG, "clipboardUpdate: Emitting message to _messages flow: ${message.id}")
             _messages.emit(message)
         }
     } 
-    
-    @RequiresApi(Build.VERSION_CODES.HONEYCOMB)
+
     fun onIncomingMessage(message: Message) {
+        Log.d(TAG, "onIncomingMessage: Received message Type: ${message.getType()}, Value: ${message.value}, ID: ${message.id}")
         updateSystemClipboard(message.value)
         history.add(message)
-        scope.launch { _messages.emit(message) }
+        Log.d(TAG, "onIncomingMessage: Message added to history: ${message.id}")
+        scope.launch { 
+            _messages.emit(message)
+            Log.d(TAG, "onIncomingMessage: Emitted message to _messages flow: ${message.id}")
+        }
     }
-    
-    @RequiresApi(Build.VERSION_CODES.HONEYCOMB)
+
     private fun updateSystemClipboard(text: String) {
+        Log.d(TAG, "updateSystemClipboard: Attempting to update system clipboard with text length: ${text.length}")
         try {
             val clipboard = appContext.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             val clip = ClipData.newPlainText("Bridger Data", text)
             clipboard.setPrimaryClip(clip)
-            Log.d(TAG, "System clipboard updated via Broker.")
+            Log.d(TAG, "updateSystemClipboard: System clipboard updated via Broker.")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to update system clipboard: ${e.message}")
+            Log.e(TAG, "updateSystemClipboard: Failed to update system clipboard: ${e.message}")
         }
     }
 
     private fun onStateChange(state: IBleTransport.ConnectionState) {
-        if (state == IBleTransport.ConnectionState.CONNECTED) {
-            _state.value = State.CONNECTED
-        }
+        Log.d(TAG, "onStateChange: Received new BLE connection state: $state")
 
-        if (state == IBleTransport.ConnectionState.DISCONNECTED) {
-            _state.value = State.IDLE
+        when (state) {
+            IBleTransport.ConnectionState.CONNECTED -> {
+                Log.i(TAG, "onStateChange: Broker state changed to CONNECTED")
+            }
+            IBleTransport.ConnectionState.READY -> {
+                Log.i(TAG, "onStateChange: Broker state changed to READY")
+                _state.value = State.CONNECTED
+
+                val message = Message(type = Message.Type.DEVICE_NAME, value = Build.MODEL)
+                scope.launch { bleTransport.send(message) }
+                Log.i(TAG, "Welcome message sent")
+            }
+            IBleTransport.ConnectionState.DISCONNECTED -> {
+                _state.value = State.IDLE
+                Log.i(TAG, "onStateChange: Broker state changed to IDLE (from DISCONNECTED)")
+            }
+            IBleTransport.ConnectionState.CONNECTING -> {
+                _state.value = State.CONNECTING
+                Log.i(TAG, "onStateChange: Broker state changed to CONNECTING")
+            }
+            IBleTransport.ConnectionState.POWERED_OFF -> {
+                _state.value = State.ERROR
+                Log.e(TAG, "onStateChange: Broker state changed to ERROR (Bluetooth POWERED_OFF)")
+            }
+            else -> {
+                Log.w(TAG, "onStateChange: Unhandled BLE connection state: $state")
+            }
         }
     }
 
