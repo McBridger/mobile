@@ -1,8 +1,8 @@
-export type ConnectionFailedPayload = {
-  device: string;
-  name: string;
-  reason: string;
-};
+// export type ConnectionFailedPayload = {
+//   device: string;
+//   name: string;
+//   reason: string;
+// };
 
 export type DataReceivedPayload = {
   value: string;
@@ -12,6 +12,6 @@ export type DataReceivedPayload = {
 export type ConnectorModuleEvents = {
   onConnected: () => void;
   onDisconnected: () => void;
-  onConnectionFailed: (payload: ConnectionFailedPayload) => void;
+  // onConnectionFailed: (payload: ConnectionFailedPayload) => void;
   onReceived: (payload: DataReceivedPayload) => void;
 };

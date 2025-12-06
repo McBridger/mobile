@@ -2,36 +2,17 @@ package expo.modules.connector
 
 import android.content.Intent
 import android.os.Build
-import android.os.Bundle
-import expo.modules.connector.BridgerMessage.Companion.toSend
+import expo.modules.connector.core.Broker
+import expo.modules.connector.services.ForegroundService
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 class ConnectorModule : Module() {
-  private var bleSingleton: BleSingleton? = null
-  private var bridgerHistory: BridgerHistory? = null
-
-  private val connectionListener = object : BleSingleton.BleConnectionListener {
-    override fun onDeviceConnected() {
-      sendEvent("onConnected")
-    }
-
-    override fun onDeviceDisconnected() {
-      sendEvent("onDisconnected")
-    }
-
-    override fun onDeviceFailedToConnect(deviceAddress: String, deviceName: String, reason: String) {
-      sendEvent("onConnectionFailed", mapOf(
-        "device" to deviceAddress,
-        "name" to deviceName,
-        "reason" to reason
-      ))
-    }
-  }
-
-  private val dataListener = BleSingleton.BleDataListener { data ->
-      sendEvent("onReceived", data.toBundle())
-  }
+  private val scope = CoroutineScope(Dispatchers.Default)
 
   override fun definition() = ModuleDefinition {
     Name("Connector")
@@ -40,71 +21,64 @@ class ConnectorModule : Module() {
 
     OnCreate {
       val context = appContext.reactContext?.applicationContext ?: return@OnCreate
-      bleSingleton = BleSingleton.getInstance(context)
-      bleSingleton?.addConnectionListener(connectionListener)
-      bleSingleton?.addDataListener(dataListener)
-      bridgerHistory = BridgerHistory.getInstance(context)
-    }
+      Broker.init(context)
 
-    OnDestroy {
-        bleSingleton?.removeConnectionListener(connectionListener)
-        bleSingleton?.removeDataListener(dataListener)
-    }
-
-    AsyncFunction("isConnected") {
-      return@AsyncFunction bleSingleton?.isConnected ?: false
-    }
-
-    AsyncFunction("setup") { serviceUuid: String, characteristicUuid: String ->
-      bleSingleton?.setup(serviceUuid, characteristicUuid)
-    }
-
-    AsyncFunction("connect") { address: String ->
-      bleSingleton?.connect(address)
-    }
-
-    AsyncFunction("disconnect") {
-      bleSingleton?.disconnect()
-    }
-
-    AsyncFunction("send") { data: String ->
-      try {
-        val msg = toSend(data)
-        bleSingleton?.send(msg)
-        bridgerHistory?.add(msg)
-      } catch (e: BleSingleton.NotConnectedException) {
-        // Ignoring error
+      scope.launch {
+        Broker.messages.collect { msg -> sendEvent("onReceived", msg.toBundle()) }
       }
     }
 
-    AsyncFunction("startBridgerService") {
-       val context = appContext.reactContext?.applicationContext ?: return@AsyncFunction null
-       val intent = Intent(context, BridgerForegroundService::class.java)
-       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-           context.startForegroundService(intent)
-       } else {
-           context.startService(intent)
-       }
+    OnDestroy { scope.cancel() }
 
-       return@AsyncFunction null
+    AsyncFunction("isConnected") {
+      return@AsyncFunction Broker.state.value == Broker.State.CONNECTED
     }
 
-    AsyncFunction("stopBridgerService") {
+    AsyncFunction("connect") { address: String ->
+      scope.launch {
+        Broker.connect(address)
+      }
+    }
+
+    AsyncFunction("disconnect") {
+      scope.launch {
+        Broker.disconnect()
+      }
+    }
+
+    AsyncFunction("send") { data: String ->
+      Broker.clipboardUpdate(data)
+    }
+
+    AsyncFunction("start") { serviceUuid: String, characteristicUuid: String ->
+      val context = appContext.reactContext?.applicationContext ?: return@AsyncFunction null
+      val intent = Intent(context, ForegroundService::class.java)
+      intent.putExtra("SERVICE_UUID", serviceUuid)
+      intent.putExtra("CHARACTERISTIC_UUID", characteristicUuid)
+
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+          context.startForegroundService(intent)
+      } else {
+          context.startService(intent)
+      }
+
+      return@AsyncFunction null
+    }
+
+    AsyncFunction("stop") {
        val context = appContext.reactContext?.applicationContext ?: return@AsyncFunction null
-       val intent = Intent(context, BridgerForegroundService::class.java)
+       val intent = Intent(context, ForegroundService::class.java)
        context.stopService(intent)
        return@AsyncFunction null 
     }
 
     AsyncFunction("getHistory") {
-       val context = appContext.reactContext?.applicationContext ?: return@AsyncFunction emptyList<Bundle>()
-       return@AsyncFunction bridgerHistory?.retrieve() ?: emptyList<Bundle>()
+      return@AsyncFunction Broker.getHistory().retrieve()
     }
 
     AsyncFunction("clearHistory") {
-       val context = appContext.reactContext?.applicationContext ?: return@AsyncFunction null
-       bridgerHistory?.clear()
-       return@AsyncFunction null
+      Broker.getHistory().clear()
+      return@AsyncFunction null
     }
   }
 }
