@@ -1,6 +1,5 @@
 package expo.modules.connector.services
 
-import android.R.drawable.ic_menu_upload
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -11,6 +10,7 @@ import android.os.IBinder
 import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
+import expo.modules.connector.R
 import expo.modules.connector.core.Broker
 import expo.modules.connector.transports.ble.BleTransport
 import kotlinx.coroutines.CoroutineScope
@@ -129,7 +129,7 @@ class ForegroundService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(text)
-            .setSmallIcon(ic_menu_upload) // Replace with your icon
+            .setSmallIcon(R.drawable.notification_icon)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
     }
