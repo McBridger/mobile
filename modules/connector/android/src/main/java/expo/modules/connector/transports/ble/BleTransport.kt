@@ -19,11 +19,10 @@ import java.util.UUID
 class BleTransport(
     private val context: Context,
     serviceUuid: String,
-    characteristicUuid: String
+    characteristicUuid: String,
+    private val bleManager: BleManager = BleManager(context),
+    private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO)
 ) : IBleTransport {
-
-    private val bleManager = BleManager(context)
-    private val scope = CoroutineScope(Dispatchers.IO)
 
     private val _connectionState = MutableStateFlow(IBleTransport.ConnectionState.DISCONNECTED)
     override val connectionState: StateFlow<IBleTransport.ConnectionState> = _connectionState.asStateFlow()
