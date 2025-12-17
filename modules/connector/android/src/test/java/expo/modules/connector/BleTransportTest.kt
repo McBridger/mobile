@@ -19,6 +19,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import no.nordicsemi.android.ble.observer.ConnectionObserver
+import no.nordicsemi.android.ble.data.Data
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Rule
@@ -100,13 +101,13 @@ class BleTransportTest {
 
     @Test
     fun incomingMessages_emitsParsedData() = runTest(testDispatcher) {
-        val slot = slot<(BluetoothDevice, no.nordicsemi.android.ble.data.Data) -> Unit>()
+        val slot = slot<(BluetoothDevice, Data) -> Unit>()
         
         // Capture callback assignment
         verify { mockBleManager.onDataReceived = capture(slot) }
         
         val testMessage = Message(Message.Type.CLIPBOARD, "Test Data")
-        val jsonData = no.nordicsemi.android.ble.data.Data.from(testMessage.toJson())
+        val jsonData = Data.from(testMessage.toJson())
         
         var receivedMessage: Message? = null
         val job = launch {
