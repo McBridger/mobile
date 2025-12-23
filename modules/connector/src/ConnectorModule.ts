@@ -3,7 +3,7 @@ import { NativeModule, requireNativeModule } from 'expo';
 import { ConnectorModuleEvents } from './Connector.types';
 
 declare class ConnectorModule extends NativeModule<ConnectorModuleEvents> {
-  start(serviceUuid: string, characteristicUuid: string): Promise<void>;
+  start(): Promise<void>;
   stop(): Promise<void>;
 
   isConnected(): Promise<boolean>;
@@ -13,6 +13,10 @@ declare class ConnectorModule extends NativeModule<ConnectorModuleEvents> {
 
   getHistory(): Promise<string[]>;
   clearHistory(): Promise<void>;
+
+  getAdvertiseUUID(): Promise<string>;
+  getServiceUUID(): Promise<string>;
+  getCharacteristicUUID(): Promise<string>;
 }
 
 // This call loads the native module object from the JSI.

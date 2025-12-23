@@ -5,6 +5,7 @@ import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.os.Build
+import expo.modules.connector.crypto.EncryptionService
 import expo.modules.connector.interfaces.IBleTransport
 import expo.modules.connector.models.Message
 import expo.modules.connector.transports.ble.BleManager
@@ -21,6 +22,7 @@ import kotlinx.coroutines.test.runTest
 import no.nordicsemi.android.ble.observer.ConnectionObserver
 import no.nordicsemi.android.ble.data.Data
 import org.junit.Assert.*
+import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -62,13 +64,31 @@ class BleTransportTest {
 
     @Before
     fun setUp() {
+        mockkObject(EncryptionService)
+        mockkObject(Message) // Mock companion object for static methods
+        
+        // Mock UUID derivation
+        every { EncryptionService.derive("McBridge_Service_UUID", 16) } returns UUID.fromString(VALID_SERVICE_UUID).toByteArray()
+        every { EncryptionService.derive("McBridge_Characteristic_UUID", 16) } returns UUID.fromString(VALID_CHAR_UUID).toByteArray()
+
         every { mockContext.getSystemService(Context.BLUETOOTH_SERVICE) } returns mockBluetoothManager
         every { mockBluetoothManager.adapter } returns mockBluetoothAdapter
         every { mockBluetoothAdapter.getRemoteDevice(TEST_MAC_ADDRESS) } returns mockDevice
         every { mockDevice.address } returns TEST_MAC_ADDRESS
 
-        // BleTransport calls setConfiguration and setupCallbacks in init
-        bleTransport = BleTransport(mockContext, VALID_SERVICE_UUID, VALID_CHAR_UUID, mockBleManager, testScope)
+        bleTransport = BleTransport(mockContext, mockBleManager, testScope)
+    }
+
+    private fun UUID.toByteArray(): ByteArray {
+        val bb = java.nio.ByteBuffer.wrap(ByteArray(16))
+        bb.putLong(mostSignificantBits)
+        bb.putLong(leastSignificantBits)
+        return bb.array()
+    }
+
+    @After
+    fun tearDown() {
+        unmockkAll()
     }
 
     @Test
@@ -107,14 +127,18 @@ class BleTransportTest {
         verify { mockBleManager.onDataReceived = capture(slot) }
         
         val testMessage = Message(Message.Type.CLIPBOARD, "Test Data")
-        val jsonData = Data.from(testMessage.toJson())
+        val encryptedData = byteArrayOf(1, 2, 3)
+        val mockData = Data(encryptedData)
+        
+        // Mock the decryption process
+        every { Message.fromEncryptedData(encryptedData, any()) } returns testMessage
         
         var receivedMessage: Message? = null
         val job = launch {
             receivedMessage = bleTransport.incomingMessages.first()
         }
         
-        slot.captured.invoke(mockDevice, jsonData)
+        slot.captured.invoke(mockDevice, mockData)
         
         assertNotNull(receivedMessage)
         assertEquals(testMessage.value, receivedMessage?.value)

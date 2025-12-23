@@ -77,13 +77,9 @@ class ForegroundService : Service() {
 
         Log.d(TAG, "onStartCommand: Registering BleTransport with Broker.")
         Broker.registerBle(
-            BleTransport(
-                applicationContext,
-                serviceUuid,
-                characteristicUuid
-            )
+            BleTransport(applicationContext)
         )
-        Log.i(TAG, "onStartCommand: Service fully started with UUIDs: $serviceUuid / $characteristicUuid")
+        Log.i(TAG, "onStartCommand: Service fully started.")
         return START_STICKY
     }
 

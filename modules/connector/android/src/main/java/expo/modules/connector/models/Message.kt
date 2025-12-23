@@ -4,7 +4,9 @@ import android.os.Bundle
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
+import expo.modules.connector.crypto.EncryptionService
 import java.util.UUID
+import kotlin.math.abs
  
 data class Message(
     @SerializedName("t") val typeId: Int, // JSON -> {"t": 0}
@@ -40,6 +42,17 @@ data class Message(
         putLong("timestamp", timestamp)
     }
 
+    /**
+     * Encrypts the message for secure transfer (Matches iOS)
+     */
+    fun toEncryptedData(): ByteArray? {
+        val transferMsg = TransferMessage(typeId, value, timestamp / 1000.0)
+        val data = gson.toJson(transferMsg).toByteArray(Charsets.UTF_8)
+        
+        val key = EncryptionService.derive("McBridge_Encryption_Domain", 32) ?: return null
+        return EncryptionService.encrypt(data, key)
+    }
+
     companion object {
         private const val TAG = "Message"
         private val gson = Gson()
@@ -63,7 +76,38 @@ data class Message(
                 null
             }
         }
+
+        /**
+         * Decrypts data and creates a Message (Matches iOS)
+         */
+        @Throws(Exception::class)
+        fun fromEncryptedData(data: ByteArray, address: String? = null): Message {
+            val key = EncryptionService.derive("McBridge_Encryption_Domain", 32) 
+                ?: throw Exception("Encryption not initialized")
+
+            val decrypted = EncryptionService.decrypt(data, key) 
+                ?: throw Exception("Decryption failed")
+
+            val transferMsg = gson.fromJson(String(decrypted, Charsets.UTF_8), TransferMessage::class.java)
+
+            // Replay Protection
+            val msgTs = transferMsg.timestamp ?: (System.currentTimeMillis() / 1000.0)
+            if (abs((System.currentTimeMillis() / 1000.0) - msgTs) > 60) {
+                throw Exception("Message expired")
+            }
+
+            return Message(
+                typeId = transferMsg.type,
+                value = transferMsg.payload,
+                address = address,
+                timestamp = (msgTs * 1000).toLong()
+            )
+        }
     }
 
-    private data class TransferMessage(@SerializedName("t") val type: Int, @SerializedName("p") val payload: String)
+    private data class TransferMessage( 
+        @SerializedName("t") val type: Int, 
+        @SerializedName("p") val payload: String,
+        @SerializedName("ts") val timestamp: Double? = null // Optional for backward compatibility
+    )
 }
