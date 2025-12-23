@@ -1,10 +1,6 @@
 import ConnectorModule, { useConnector } from "@/modules/connector";
-import {
-  Redirect,
-  Stack,
-  useLocalSearchParams,
-} from "expo-router";
-import { useEffect } from "react";
+import { Redirect, Stack, useLocalSearchParams } from "expo-router";
+import { use, useCallback, useEffect, useState } from "react";
 import { AppState, AppStateStatus, View } from "react-native";
 import { useShallow } from "zustand/shallow";
 import Header from "../../components/Header";
@@ -16,6 +12,7 @@ export default function MainLayout() {
   const [subscribe, unsubscribe] = useConnector(
     useShallow((state) => [state.subscribe, state.unsubscribe])
   );
+  const [init, setInit] = useState(false);
 
   useEffect(() => {
     if (AppState.currentState === "active") subscribe();
@@ -34,10 +31,40 @@ export default function MainLayout() {
     };
   }, [subscribe, unsubscribe]);
 
-    useEffect(() => {
-      ConnectorModule.start(extra.SERVICE_UUID, extra.CHARACTERISTIC_UUID);
-      console.log("ConnectorModule started.");
-    }, [extra.SERVICE_UUID, extra.CHARACTERISTIC_UUID]);
+  const initialize = useCallback(async () => {
+    await ConnectorModule.start();
+    console.log("ConnectorModule started.");
+
+    const [advertiseUUID, serviceUUID, characteristicUUID] = await Promise.all([
+      ConnectorModule.getAdvertiseUUID(),
+      ConnectorModule.getServiceUUID(),
+      ConnectorModule.getCharacteristicUUID(),
+    ]);
+    console.log(
+      "Advertise UUID:",
+      advertiseUUID,
+      "Service UUID:",
+      serviceUUID,
+      "Characteristic UUID:",
+      characteristicUUID
+    );
+
+    extra.SERVICE_UUID = serviceUUID;
+    extra.CHARACTERISTIC_UUID = characteristicUUID;
+    extra.ADVERTISE_UUID = advertiseUUID;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    initialize().then(() => {
+      console.log("ConnectorModule started.")
+      setInit(true);
+    });
+  }, [initialize]);
+
+  if (!init) {
+    return <View style={{ flex: 1 }} />;
+  }
 
   if (params.address) {
     return (

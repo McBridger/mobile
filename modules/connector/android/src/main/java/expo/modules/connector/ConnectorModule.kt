@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Build
 import android.util.Log
 import expo.modules.connector.core.Broker
+import expo.modules.connector.crypto.EncryptionService
 import expo.modules.connector.services.ForegroundService
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -11,6 +12,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import java.nio.ByteBuffer
+import java.util.UUID
 
 class ConnectorModule : Module() {
   private val scope = CoroutineScope(Dispatchers.Default)
@@ -25,6 +28,13 @@ class ConnectorModule : Module() {
     Events("onConnected", "onDisconnected", "onReceived")
 
     OnCreate {
+      Log.d(TAG, "OnCreate: Initializing EncryptionService (Hardcoded for testing).")
+      // FIXME: Temporary hardcoded phrase and salt for testing - matching macOS
+      EncryptionService.setup(
+        "Correct-Horse-Battery-Staple",
+        "7c4d5f2a9b1e8c3d0f4a6b2c8e1d3f5a7092841536b5c4d2e1f0a9b8c7d6e5f4"
+      )
+
       Log.d(TAG, "OnCreate: Initializing Broker and collecting messages.")
       val context = appContext.reactContext?.applicationContext ?: run {
         Log.e(TAG, "OnCreate: Application context is null.")
@@ -58,6 +68,21 @@ class ConnectorModule : Module() {
       scope.cancel()
     }
 
+    AsyncFunction("getAdvertiseUUID") {
+      val bytes = EncryptionService.derive("McBridge_Advertise_UUID", 16) ?: return@AsyncFunction null
+      return@AsyncFunction bytesToUuid(bytes).toString()
+    }
+
+    AsyncFunction("getServiceUUID") {
+      val bytes = EncryptionService.derive("McBridge_Service_UUID", 16) ?: return@AsyncFunction null
+      return@AsyncFunction bytesToUuid(bytes).toString()
+    }
+
+    AsyncFunction("getCharacteristicUUID") {
+      val bytes = EncryptionService.derive("McBridge_Characteristic_UUID", 16) ?: return@AsyncFunction null
+      return@AsyncFunction bytesToUuid(bytes).toString()
+    }
+
     AsyncFunction("isConnected") {
       val isConnected = Broker.state.value == Broker.State.CONNECTED
       Log.d(TAG, "isConnected: Current state is ${Broker.state.value}, returning $isConnected")
@@ -87,8 +112,11 @@ class ConnectorModule : Module() {
       Broker.clipboardUpdate(data)
     }
 
-    AsyncFunction("start") { serviceUuid: String, characteristicUuid: String ->
-      Log.d(TAG, "start: Starting ForegroundService with serviceUuid=$serviceUuid, characteristicUuid=$characteristicUuid")
+    AsyncFunction("start") {
+      val serviceUuid = bytesToUuid(EncryptionService.derive("McBridge_Service_UUID", 16)!!).toString()
+      val characteristicUuid = bytesToUuid(EncryptionService.derive("McBridge_Characteristic_UUID", 16)!!).toString()
+
+      Log.d(TAG, "start: Starting ForegroundService with auto-derived UUIDs.")
       val context = appContext.reactContext?.applicationContext ?: run {
         Log.e(TAG, "start: Application context is null.")
         return@AsyncFunction null
@@ -130,5 +158,10 @@ class ConnectorModule : Module() {
       Broker.getHistory().clear()
       return@AsyncFunction null
     }
+  }
+
+  private fun bytesToUuid(bytes: ByteArray): UUID {
+    val buffer = ByteBuffer.wrap(bytes)
+    return UUID(buffer.long, buffer.long)
   }
 }
