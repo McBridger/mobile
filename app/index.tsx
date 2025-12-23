@@ -10,7 +10,7 @@ import { useBluetoothPermissions } from "../hooks/useBluetoothPermissions";
 
 export default function AppEntry() {
   const { isLoading, allPermissionsGranted } = useBluetoothPermissions();
-  const isConnected = useConnector((state) => state.status === 'connected');
+  const isConnected = useConnector((state) => state.status === "connected");
 
   if (isLoading) {
     return (

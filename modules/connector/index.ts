@@ -3,7 +3,6 @@ import { SubscriptionManager } from "@/utils";
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 import {
-  ConnectionFailedPayload,
   ConnectorModuleEvents,
 } from "./src/Connector.types";
 import ConnectorModule from "./src/ConnectorModule";
@@ -35,14 +34,12 @@ interface ConnectorState {
   address: string | null;
   name: string | null;
   items: Map<string, Item>;
-  connectionError: ConnectionFailedPayload | null;
 }
 
 interface ConnectorActions {
   connect: (address: string, name: string, extra: AppConfig["extra"]) => void;
   disconnect: () => void;
   send: (data: string) => void;
-  clearConnectionError: () => void;
 
   subscribe: () => void;
   unsubscribe: () => void;
@@ -59,7 +56,7 @@ const initialState: ConnectorState = {
   address: null,
   name: null,
   items: new Map(),
-  connectionError: null,
+  // connectionError: null,
 };
 
 export const useConnector = create<InternalConnectorStore>()(
@@ -67,15 +64,11 @@ export const useConnector = create<InternalConnectorStore>()(
     const handlers: ConnectorModuleEvents = {
       onConnected: () => {
         log("Native event: connected.");
-        set({ status: "connected", connectionError: null });
+        set({ status: "connected" });
       },
       onDisconnected: () => {
         log("Native event: disconnected.");
         set(initialState);
-      },
-      onConnectionFailed: (payload) => {
-        error(`Connection failed: ${payload.reason}`);
-        set({ ...initialState, connectionError: payload });
       },
       onReceived: (payload) => {
         log(`Native event: data received (ID: ${payload.id}).`);
@@ -116,19 +109,9 @@ export const useConnector = create<InternalConnectorStore>()(
           const isConnected = await ConnectorModule.isConnected();
           if (isConnected) return set({ status: "connected", address, name });
 
-          await ConnectorModule.setup(
-            extra.SERVICE_UUID,
-            extra.CHARACTERISTIC_UUID
-          );
-
-          await ConnectorModule.startBridgerService();
           await ConnectorModule.connect(address);
         } catch (err: any) {
-          handlers.onConnectionFailed({
-            device: address,
-            name: name,
-            reason: err.message || "Connection promise rejected",
-          });
+          error(`Connection failed: ${err.message}`, err);
         }
       },
 
@@ -136,17 +119,9 @@ export const useConnector = create<InternalConnectorStore>()(
         if (get().status !== "connected") return;
         set({ status: "disconnecting" });
 
-        ConnectorModule.stopBridgerService().then(() =>
-          ConnectorModule.disconnect().catch((err) => {
-            error("Promise disconnect() was rejected.", err);
-
-            handlers.onConnectionFailed({
-              device: get().address ?? "unknown",
-              name: get().name ?? "unknown",
-              reason: err.message || "Disconnect promise rejected",
-            });
-          })
-        );
+        ConnectorModule.disconnect().catch((err) => {
+          error("Promise disconnect() was rejected.", err);
+        })
       },
 
       send: (data: string) => {
@@ -161,9 +136,7 @@ export const useConnector = create<InternalConnectorStore>()(
 
       unsubscribe: () => {
         get()[SubscriptionManager.KEY].cleanup();
-      },
-
-      clearConnectionError: () => set({ connectionError: null }),
+      }
     };
   })
 );
