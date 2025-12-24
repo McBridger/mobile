@@ -1,4 +1,5 @@
 import { useAppConfig } from "@/hooks/useConfig";
+import ConnectorModule from "@/modules/connector";
 import { BleDevice, useScanner } from "@/modules/scanner";
 import { useRouter } from "expo-router";
 import { useMemo } from "react";
@@ -58,6 +59,17 @@ export default function Devices() {
     stopScan();
   };
 
+  const handleDevicePress_test = () => {
+    if (!ConnectorModule.isReady()) return;
+
+    ConnectorModule.startDiscovery().then(() => {
+      router.push({
+        pathname: "/connection",
+        params: { address: '00:11:22:33:44:55', name: 'Test Device' },
+      });
+    });
+  };
+
   const renderItem = ({ item }: { item: ListDataItem }) => {
     if ("type" in item && item.type === "separator") {
       return (
@@ -92,7 +104,8 @@ export default function Devices() {
       <View style={styles.buttonContainer}>
         <Button
           title="Start Scan"
-          onPress={() => startScan(extra.ADVERTISE_UUID)}
+          // onPress={() => startScan(extra.ADVERTISE_UUID)}
+          onPress={handleDevicePress_test}
           disabled={isScanning}
         />
         <Button title="Stop Scan" onPress={stopScan} disabled={!isScanning} />

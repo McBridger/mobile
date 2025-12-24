@@ -40,15 +40,15 @@ export default function Connection() {
     ])
   );
 
-  useFocusEffect(
-    useCallback(() => {
-      if (isConnected) return;
-      if (!address) return;
+  // useFocusEffect(
+  //   useCallback(() => {
+  //     if (isConnected) return;
+  //     if (!address) return;
 
-      connect(address, name, extra);
-      // bleRecorder.processEntries().then((entries) => addRecorded(entries));
-    }, [address, connect, extra, isConnected, name])
-  );
+  //     connect(address, name, extra);
+  //     // bleRecorder.processEntries().then((entries) => addRecorded(entries));
+  //   }, [address, connect, extra, isConnected, name])
+  // );
 
   useEffect(() => {
     const unsub = useConnector.subscribe(
