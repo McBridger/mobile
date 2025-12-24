@@ -89,6 +89,18 @@ class ConnectorModule : Module() {
       return@AsyncFunction isConnected
     }
 
+    Function("isReady") {
+      return@Function EncryptionService.isReady()
+    }
+
+    AsyncFunction("startDiscovery") {
+      Broker.startDiscovery()
+    }
+
+    AsyncFunction("stopDiscovery") {
+      Broker.stopDiscovery()
+    }
+
     AsyncFunction("connect") { address: String ->
       Log.d(TAG, "connect: Attempting to connect to $address")
       scope.launch {

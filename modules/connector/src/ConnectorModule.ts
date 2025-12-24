@@ -17,6 +17,10 @@ declare class ConnectorModule extends NativeModule<ConnectorModuleEvents> {
   getAdvertiseUUID(): Promise<string>;
   getServiceUUID(): Promise<string>;
   getCharacteristicUUID(): Promise<string>;
+
+  isReady(): boolean;
+  startDiscovery(): Promise<void>;
+  stopDiscovery(): Promise<void>;
 }
 
 // This call loads the native module object from the JSI.
