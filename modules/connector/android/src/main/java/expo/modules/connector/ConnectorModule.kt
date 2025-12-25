@@ -85,21 +85,6 @@ class ConnectorModule : Module() {
       Broker.registerBle(BleTransport(context))
     }
 
-    AsyncFunction("getAdvertiseUUID") {
-      val bytes = EncryptionService.derive("McBridge_Advertise_UUID", 16) ?: return@AsyncFunction null
-      return@AsyncFunction bytesToUuid(bytes).toString()
-    }
-
-    AsyncFunction("getServiceUUID") {
-      val bytes = EncryptionService.derive("McBridge_Service_UUID", 16) ?: return@AsyncFunction null
-      return@AsyncFunction bytesToUuid(bytes).toString()
-    }
-
-    AsyncFunction("getCharacteristicUUID") {
-      val bytes = EncryptionService.derive("McBridge_Characteristic_UUID", 16) ?: return@AsyncFunction null
-      return@AsyncFunction bytesToUuid(bytes).toString()
-    }
-
     AsyncFunction("isConnected") {
       val isConnected = Broker.state.value == Broker.State.CONNECTED
       Log.d(TAG, "isConnected: Current state is ${Broker.state.value}, returning $isConnected")
@@ -152,11 +137,11 @@ class ConnectorModule : Module() {
       
       val intent = Intent(context, ForegroundService::class.java)
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-          context.startForegroundService(intent)
-          Log.d(TAG, "start: Called startForegroundService for Android O+")
+        context.startForegroundService(intent)
+        Log.d(TAG, "start: Called startForegroundService for Android O+")
       } else {
-          context.startService(intent)
-          Log.d(TAG, "start: Called startService for Android < O")
+        context.startService(intent)
+        Log.d(TAG, "start: Called startService for Android < O")
       }
 
       return@AsyncFunction null
@@ -164,14 +149,14 @@ class ConnectorModule : Module() {
 
     AsyncFunction("stop") {
       Log.d(TAG, "stop: Stopping ForegroundService")
-       val context = appContext.reactContext?.applicationContext ?: run {
-         Log.e(TAG, "stop: Application context is null.")
-         return@AsyncFunction null
-       }
-       val intent = Intent(context, ForegroundService::class.java)
-       context.stopService(intent)
-       Log.d(TAG, "stop: Called stopService")
-       return@AsyncFunction null 
+      val context = appContext.reactContext?.applicationContext ?: run {
+        Log.e(TAG, "stop: Application context is null.")
+        return@AsyncFunction null
+      }
+      val intent = Intent(context, ForegroundService::class.java)
+      context.stopService(intent)
+      Log.d(TAG, "stop: Called stopService")
+      return@AsyncFunction null 
     }
 
     AsyncFunction("getHistory") {
@@ -184,10 +169,5 @@ class ConnectorModule : Module() {
       Broker.getHistory().clear()
       return@AsyncFunction null
     }
-  }
-
-  private fun bytesToUuid(bytes: ByteArray): UUID {
-    val buffer = ByteBuffer.wrap(bytes)
-    return UUID(buffer.long, buffer.long)
   }
 }

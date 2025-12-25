@@ -82,11 +82,10 @@ object Broker {
 
         if (discoveryJob?.isActive == true) return
 
-        val advertiseUuidBytes = EncryptionService.derive("McBridge_Advertise_UUID", 16) ?: run {
+        val advertiseUuid = EncryptionService.deriveUuid("McBridge_Advertise_UUID") ?: run {
             Log.w(TAG, "tryDiscovery: Encryption not ready, cannot derive UUID.")
             return
         }
-        val advertiseUuid = bytesToUuid(advertiseUuidBytes)
 
         Log.i(TAG, "tryDiscovery: Starting Magic Sync discovery for $advertiseUuid")
         discoveryJob = scope.launch {
@@ -97,11 +96,6 @@ object Broker {
                 connect(device.address)
             }
         }
-    }
-
-    private fun bytesToUuid(bytes: ByteArray): UUID {
-        val buffer = ByteBuffer.wrap(bytes)
-        return UUID(buffer.long, buffer.long)
     }
 
     fun registerBle(bleTransport: IBleTransport): Broker {
