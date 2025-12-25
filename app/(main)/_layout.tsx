@@ -32,8 +32,23 @@ export default function MainLayout() {
   }, [subscribe, unsubscribe]);
 
   const initialize = useCallback(async () => {
-    await ConnectorModule.start();
-    console.log("ConnectorModule started.");
+    // 1. Perform auto-setup for dev/test mode if mnemonic is provided in env
+    // IMPORTANT: This must happen BEFORE start() because start() derives UUIDs
+    if (!ConnectorModule.isReady() && extra.MNEMONIC_LOCAL && extra.ENCRYPTION_SALT) {
+      console.log("Found test mnemonic in env, performing auto-setup.");
+      ConnectorModule.setup(extra.MNEMONIC_LOCAL, extra.ENCRYPTION_SALT);
+      
+      // Trigger discovery automatically in dev mode
+      ConnectorModule.startDiscovery();
+    }
+
+    // 2. Start the foreground service
+    try {
+      await ConnectorModule.start();
+      console.log("ConnectorModule started.");
+    } catch (e) {
+      console.error("Failed to start ConnectorModule:", e);
+    }
 
     const [advertiseUUID, serviceUUID, characteristicUUID] = await Promise.all([
       ConnectorModule.getAdvertiseUUID(),

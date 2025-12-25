@@ -1,26 +1,23 @@
-import { useAppConfig } from "@/hooks/useConfig";
-import { Item, useConnector } from "@/modules/connector";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo } from "react";
+import ConnectorModule, {
+  Item,
+  useConnector
+} from "@/modules/connector";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useMemo } from "react";
 import {
   FlatList,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { useShallow } from "zustand/react/shallow";
 
 export default function Connection() {
   const router = useRouter();
-  const { extra } = useAppConfig();
-
-  const params = useLocalSearchParams<{ address: string; name: string }>();
-  const address = useMemo(() => params.address, [params.address]);
-  const name = useMemo(() => params.name, [params.name]);
 
   const status = useConnector((state) => state.status);
-  const isConnected = useMemo(() => status === "connected", [status]);
+  const isConnected = status === "connected";
 
   const _items = useConnector((state) => state.items);
   const items = useMemo(
@@ -28,41 +25,15 @@ export default function Connection() {
     [_items]
   );
 
-  const [
-    connect,
-    disconnect,
-    // addRecorded
-  ] = useConnector(
-    useShallow((state) => [
-      state.connect,
-      state.disconnect,
-      // state.addRecorded
-    ])
+  const [disconnect] = useConnector(useShallow((state) => [state.disconnect]));
+
+  // Ensure Magic Sync is active when we focus this screen
+  useFocusEffect(
+    useCallback(() => {
+      console.log("[Connection] Screen focused, ensuring discovery is active.");
+      ConnectorModule.startDiscovery();
+    }, [])
   );
-
-  // useFocusEffect(
-  //   useCallback(() => {
-  //     if (isConnected) return;
-  //     if (!address) return;
-
-  //     connect(address, name, extra);
-  //     // bleRecorder.processEntries().then((entries) => addRecorded(entries));
-  //   }, [address, connect, extra, isConnected, name])
-  // );
-
-  useEffect(() => {
-    const unsub = useConnector.subscribe(
-      (state) => state.status,
-      (status, prevStatus) => {
-        if (prevStatus === "disconnecting" && status === "disconnected")
-          router.push("/devices");
-      }
-    );
-
-    return () => {
-      unsub();
-    };
-  }, [router]);
 
   const renderItem = ({ item }: { item: Item }) => (
     <View style={styles.clipboardItem}>
@@ -78,15 +49,33 @@ export default function Connection() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Connection Details</Text>
       <FlatList
         data={items}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
         style={styles.list}
+        contentContainerStyle={styles.listContent}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>
+              {isConnected
+                ? "No data synced yet. Try copying something on your Mac!"
+                : "Waiting for connection to start syncing..."}
+            </Text>
+          </View>
+        }
       />
-      <TouchableOpacity style={styles.disconnectButton} onPress={disconnect}>
-        <Text style={styles.disconnectButtonText}>Disconnect</Text>
+
+      <TouchableOpacity
+        style={[
+          styles.actionButton,
+          isConnected ? styles.disconnectButton : styles.setupButton,
+        ]}
+        onPress={() => (isConnected ? disconnect() : router.push("/setup"))}
+      >
+        <Text style={styles.actionButtonText}>
+          {isConnected ? "Disconnect" : "Setup Mnemonic"}
+        </Text>
       </TouchableOpacity>
     </View>
   );
@@ -95,58 +84,75 @@ export default function Connection() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
-    backgroundColor: "#f0f0f0",
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 20,
-    textAlign: "center",
-  },
-  clipboardItem: {
-    backgroundColor: "#fff",
-    padding: 15,
-    borderRadius: 8,
-    marginBottom: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1.41,
-    elevation: 2,
-  },
-  itemType: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#555",
-    marginBottom: 5,
-  },
-  itemContent: {
-    fontSize: 16,
-    marginBottom: 5,
-  },
-  itemTimestamp: {
-    fontSize: 12,
-    color: "#888",
-    textAlign: "right",
+    backgroundColor: "#f8f9fa",
   },
   list: {
     flex: 1,
   },
-  disconnectButton: {
+  listContent: {
+    padding: 20,
+    paddingBottom: 100,
+  },
+  clipboardItem: {
+    backgroundColor: "#fff",
+    padding: 15,
+    borderRadius: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#eee",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  itemType: {
+    fontSize: 12,
+    fontWeight: "bold",
+    color: "#007AFF",
+    marginBottom: 4,
+    textTransform: "uppercase",
+  },
+  itemContent: {
+    fontSize: 16,
+    color: "#1a1a1a",
+    marginBottom: 8,
+  },
+  itemTimestamp: {
+    fontSize: 11,
+    color: "#bbb",
+    textAlign: "right",
+  },
+  emptyContainer: {
+    padding: 40,
+    alignItems: "center",
+  },
+  emptyText: {
+    textAlign: "center",
+    color: "#999",
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  actionButton: {
     position: "absolute",
     bottom: 30,
-    right: 30,
-    backgroundColor: "#FF3B30",
-    padding: 15,
+    alignSelf: "center",
+    paddingHorizontal: 30,
+    paddingVertical: 15,
     borderRadius: 30,
     elevation: 5,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
-  disconnectButtonText: {
+  disconnectButton: {
+    backgroundColor: "#FF3B30",
+  },
+  setupButton: {
+    backgroundColor: "#007AFF",
+  },
+  actionButtonText: {
     color: "white",
     fontWeight: "bold",
     fontSize: 16,
