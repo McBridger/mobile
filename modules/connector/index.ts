@@ -1,5 +1,6 @@
 import { AppConfig } from "@/app.config";
 import { SubscriptionManager } from "@/utils";
+import uuid from "react-native-uuid";
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 import {
@@ -40,6 +41,10 @@ interface ConnectorActions {
   connect: (address: string, name: string, extra: AppConfig["extra"]) => void;
   disconnect: () => void;
   send: (data: string) => void;
+  clearConnectionError: () => void;
+  deleteItem: (data: string) => void;
+  addItem: (data: Item) => void;
+  clearItems: () => void;
 
   subscribe: () => void;
   unsubscribe: () => void;
@@ -124,11 +129,56 @@ export const useConnector = create<InternalConnectorStore>()(
         })
       },
 
-      send: (data: string) => {
-        ConnectorModule.send(data).catch((err) => {
-          error("Promise send() was rejected.", err);
+      send: (content: string) => {
+        const item: Item = {
+          id: uuid.v4(),
+          content,
+          type: "sent",
+          time: Date.now(),
+        };
+        ConnectorModule.send(content)
+          .then(() => {
+            set((prev) => {
+              const newItems = new Map(prev.items);
+              newItems.set(item.id, item);
+
+              return {
+                ...prev,
+                items: newItems,
+              };
+            });
+          })
+          .catch((err) => {
+            error("Promise send() was rejected.", err);
+          });
+      },
+       deleteItem: (itemId: string) => {
+        set((prev) => {
+          const newItems = new Map(prev.items);
+          newItems.delete(itemId);
+          return { items: newItems };
         });
       },
+      
+      clearItems: () => {
+        set(() => {
+          return { items: new Map() };
+        });
+      },
+
+      addItem: (item: Item) => {
+        set((prev) => {
+          const newItems = new Map(prev.items);
+          newItems.set(item.id, item);
+
+          return {
+            ...prev,
+            items: newItems,
+          };
+        });
+      },
+
+      deleteAllItems: () => {},
 
       subscribe: () => {
         get()[SubscriptionManager.KEY].setup();

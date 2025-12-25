@@ -1,3 +1,5 @@
+import { PATHS } from "@/constants";
+import { useAppConfig } from "@/hooks/useConfig";
 import ConnectorModule, { useConnector } from "@/modules/connector";
 import {
   Redirect,
@@ -8,7 +10,6 @@ import { useEffect } from "react";
 import { AppState, AppStateStatus, View } from "react-native";
 import { useShallow } from "zustand/shallow";
 import Header from "../../components/Header";
-import { useAppConfig } from "@/hooks/useConfig";
 
 export default function MainLayout() {
   const { extra } = useAppConfig();
@@ -42,7 +43,7 @@ export default function MainLayout() {
   if (params.address) {
     return (
       <Redirect
-        href={{ pathname: "/connection", params: { address: params.address } }}
+        href={{ pathname: PATHS.CONNECTION, params: { address: params.address } }}
       />
     );
   }
