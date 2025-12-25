@@ -11,11 +11,13 @@ declare class ConnectorModule extends NativeModule<ConnectorModuleEvents> {
   disconnect(): Promise<void>;
   send(data: string): Promise<void>;
 
-  getHistory(): Promise<string[]>;
+  getHistory(): Promise<any[]>;
   clearHistory(): Promise<void>;
 
   isReady(): boolean;
-  setup(mnemonic: string, salt: string): void;
+  getMnemonic(): string | null;
+  setup(mnemonic: string, salt: string): Promise<void>;
+  reset(): Promise<void>;
   startDiscovery(): Promise<void>;
   stopDiscovery(): Promise<void>;
 }

@@ -74,9 +74,9 @@ class ConnectorModule : Module() {
       scope.cancel()
     }
 
-    Function("setup") { mnemonic: String, salt: String ->
+    AsyncFunction("setup") { mnemonic: String, salt: String ->
       Log.d(TAG, "setup: Initializing EncryptionService with provided mnemonic.")
-      val context = appContext.reactContext?.applicationContext ?: return@Function
+      val context = appContext.reactContext?.applicationContext ?: return@AsyncFunction
       
       EncryptionService.setup(context, mnemonic, salt)
       
@@ -167,6 +167,30 @@ class ConnectorModule : Module() {
     AsyncFunction("clearHistory") {
       Log.d(TAG, "clearHistory: Clearing history")
       Broker.getHistory().clear()
+      return@AsyncFunction null
+    }
+
+    Function("getMnemonic") {
+      return@Function EncryptionService.getMnemonic()
+    }
+
+    AsyncFunction("reset") {
+      Log.d(TAG, "reset: Full system reset initiated.")
+      val context = appContext.reactContext?.applicationContext ?: return@AsyncFunction null
+      
+      // 1. Clear secure storage
+      EncryptionService.clear(context)
+      
+      // 2. Disconnect Broker
+      scope.launch {
+        Broker.disconnect()
+      }
+      
+      // 3. Stop foreground service
+      val intent = Intent(context, ForegroundService::class.java)
+      context.stopService(intent)
+      
+      Log.i(TAG, "reset: System reset complete.")
       return@AsyncFunction null
     }
   }
