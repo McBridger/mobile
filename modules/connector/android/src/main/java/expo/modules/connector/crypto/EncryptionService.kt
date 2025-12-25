@@ -29,6 +29,8 @@ object EncryptionService {
     private var mnemonic: String? = null
 
     fun isReady(): Boolean = masterKey != null
+    
+    fun getMnemonic(): String? = mnemonic
 
     /**
      * One-time setup: derives master key via PBKDF2 and persists it along with the mnemonic.
@@ -83,6 +85,18 @@ object EncryptionService {
             Log.d(TAG, "persist: Credentials saved securely.")
         } catch (e: Exception) {
             Log.e(TAG, "persist: Error saving: ${e.message}")
+        }
+    }
+
+    fun clear(context: Context) {
+        try {
+            val prefs = getSharedPrefs(context)
+            prefs.edit().clear().apply()
+            this.masterKey = null
+            this.mnemonic = null
+            Log.i(TAG, "clear: Credentials cleared from secure storage.")
+        } catch (e: Exception) {
+            Log.e(TAG, "clear: Error clearing credentials: ${e.message}")
         }
     }
 

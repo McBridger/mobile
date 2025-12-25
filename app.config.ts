@@ -6,6 +6,7 @@ import { z } from "zod";
 const Extra = z.object({
   APP_VARIANT: z.enum(["dev", "preview", "prod"]),
   ENCRYPTION_SALT: z.string(),
+  MNEMONIC_LENGTH: z.number().default(6),
   MNEMONIC_LOCAL: z.string().optional(),
   eas: z.object({
     projectId: z.uuidv4(),
@@ -18,6 +19,7 @@ export default ({ config }: ConfigContext): AppConfig => {
     APP_VARIANT: process.env.APP_VARIANT,
     ENCRYPTION_SALT: process.env.ENCRYPTION_SALT,
     MNEMONIC_LOCAL: process.env.MNEMONIC_LOCAL,
+    MNEMONIC_LENGTH: process.env.MNEMONIC_LENGTH ? parseInt(process.env.MNEMONIC_LENGTH) : undefined,
   });
 
   const appNameSuffix = extra.APP_VARIANT === "prod" ? "" : extra.APP_VARIANT;

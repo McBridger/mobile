@@ -1,9 +1,8 @@
-import ConnectorModule, {
+import {
   Item,
   useConnector
 } from "@/modules/connector";
-import { useFocusEffect, useRouter } from "expo-router";
-import React, { useCallback, useMemo } from "react";
+import React, { useMemo } from "react";
 import {
   FlatList,
   StyleSheet,
@@ -14,8 +13,6 @@ import {
 import { useShallow } from "zustand/react/shallow";
 
 export default function Connection() {
-  const router = useRouter();
-
   const status = useConnector((state) => state.status);
   const isConnected = status === "connected";
 
@@ -26,14 +23,6 @@ export default function Connection() {
   );
 
   const [disconnect] = useConnector(useShallow((state) => [state.disconnect]));
-
-  // Ensure Magic Sync is active when we focus this screen
-  useFocusEffect(
-    useCallback(() => {
-      console.log("[Connection] Screen focused, ensuring discovery is active.");
-      ConnectorModule.startDiscovery();
-    }, [])
-  );
 
   const renderItem = ({ item }: { item: Item }) => (
     <View style={styles.clipboardItem}>
@@ -66,17 +55,16 @@ export default function Connection() {
         }
       />
 
-      <TouchableOpacity
-        style={[
-          styles.actionButton,
-          isConnected ? styles.disconnectButton : styles.setupButton,
-        ]}
-        onPress={() => (isConnected ? disconnect() : router.push("/setup"))}
-      >
-        <Text style={styles.actionButtonText}>
-          {isConnected ? "Disconnect" : "Setup Mnemonic"}
-        </Text>
-      </TouchableOpacity>
+      {isConnected && (
+        <View style={styles.footer}>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.disconnectButton]}
+            onPress={disconnect}
+          >
+            <Text style={styles.actionButtonText}>Disconnect</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 }
@@ -91,7 +79,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: 20,
-    paddingBottom: 100,
+    paddingBottom: 40,
   },
   clipboardItem: {
     backgroundColor: "#fff",
@@ -133,10 +121,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
-  actionButton: {
+  footer: {
     position: "absolute",
     bottom: 30,
-    alignSelf: "center",
+    left: 0,
+    right: 0,
+    alignItems: "center",
+  },
+  actionButton: {
     paddingHorizontal: 30,
     paddingVertical: 15,
     borderRadius: 30,
@@ -148,9 +140,6 @@ const styles = StyleSheet.create({
   },
   disconnectButton: {
     backgroundColor: "#FF3B30",
-  },
-  setupButton: {
-    backgroundColor: "#007AFF",
   },
   actionButtonText: {
     color: "white",
