@@ -61,25 +61,13 @@ class ForegroundService : Service() {
     }
 
     @RequiresApi(Build.VERSION_CODES.HONEYCOMB)
-    override fun onStartCommand(intent: Intent, flags: Int, startId: Int): Int {
-        Log.d(TAG, "onStartCommand: Service received start command. Start ID: $startId, Intent: $intent")
-        val serviceUuid = intent.extras?.getString("SERVICE_UUID")
-        val characteristicUuid = intent.extras?.getString("CHARACTERISTIC_UUID")
-
-        if (serviceUuid == null || characteristicUuid == null) {
-            Log.e(TAG, "onStartCommand: Missing SERVICE_UUID or CHARACTERISTIC_UUID in intent extras. Stopping service.")
-            stopSelf()
-            return START_NOT_STICKY
-        }
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Log.d(TAG, "onStartCommand: Service received start command.")
 
         Log.d(TAG, "onStartCommand: Starting foreground with notification ID: $SERVICE_NOTIFICATION_ID")
-        startForeground(SERVICE_NOTIFICATION_ID, buildNotification("Bridger Service", "Service Started"))
+        startForeground(SERVICE_NOTIFICATION_ID, buildNotification("Bridger Active", "Initializing..."))
 
-        Log.d(TAG, "onStartCommand: Registering BleTransport with Broker.")
-        Broker.registerBle(
-            BleTransport(applicationContext)
-        )
-        Log.i(TAG, "onStartCommand: Service fully started.")
+        Log.i(TAG, "onStartCommand: Service is running in foreground.")
         return START_STICKY
     }
 

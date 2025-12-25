@@ -19,6 +19,7 @@ declare class ConnectorModule extends NativeModule<ConnectorModuleEvents> {
   getCharacteristicUUID(): Promise<string>;
 
   isReady(): boolean;
+  setup(mnemonic: string, salt: string): void;
   startDiscovery(): Promise<void>;
   stopDiscovery(): Promise<void>;
 }

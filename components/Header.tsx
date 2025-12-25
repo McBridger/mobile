@@ -16,29 +16,27 @@ const Header = () => {
   const getBackgroundColor = useCallback(() => {
     switch (status) {
       case "connected":
-        return "lightblue";
+        return "#34C759"; // iOS Success Green
       case "connecting":
+        return "#007AFF"; // iOS Blue
       case "disconnecting":
-        return "#00008B"; // Using a standard deep blue hex code
+        return "#5856D6"; // iOS Purple
       default:
-        return "lightgray";
+        return "#8E8E93"; // iOS Gray
     }
   }, [status]);
 
-  const getTextColor = useCallback(() => {
-    if (status === "connected") return "darkblue";
-    return "white";
-  }, [status]);
+  const getStatusText = useCallback(() => {
+    if (status === "connected") return name || "Connected";
+    if (status === "connecting") return "Connecting...";
+    if (status === "disconnected") return "Magic Sync Active";
+    return capitalize(status);
+  }, [status, name]);
 
   const handleLeftButtonPress = useCallback(() => {
     if (currentRouteName === "connection")
-      router.push({ pathname: "/devices" });
+      router.push("/setup");
   }, [currentRouteName, router]);
-
-  const handleRightButtonPress = useCallback(() => {
-    if (currentRouteName === "devices" && status === "connected")
-      router.push({ pathname: "/connection" });
-  }, [currentRouteName, status, router]);
 
   const leftButton =
     currentRouteName === "connection" ? (
@@ -46,28 +44,18 @@ const Header = () => {
         onPress={handleLeftButtonPress}
         style={styles.leftButton}
       >
-        <Ionicons name="arrow-back" size={24} color={getTextColor()} />
-      </TouchableOpacity>
-    ) : null;
-
-  const rightButton =
-    currentRouteName === "devices" && status === "connected" ? (
-      <TouchableOpacity
-        onPress={handleRightButtonPress}
-        style={styles.rightButton}
-      >
-        <Ionicons name="arrow-forward" size={24} color={getTextColor()} />
+        <Ionicons name="settings-outline" size={24} color="white" />
       </TouchableOpacity>
     ) : null;
 
   return (
-    <SafeAreaView style={{ backgroundColor: getBackgroundColor() }}>
+    <SafeAreaView style={{ backgroundColor: getBackgroundColor() }} edges={['top']}>
       <View style={styles.headerContainer}>
-        {leftButton}
-        <Text style={[styles.headerTitle, { color: getTextColor() }]}>
-          {status === "connected" && name ? name : capitalize(status)}
+        <View style={styles.buttonWrapper}>{leftButton}</View>
+        <Text style={styles.headerTitle}>
+          {getStatusText()}
         </Text>
-        {rightButton}
+        <View style={styles.buttonWrapper} />
       </View>
     </SafeAreaView>
   );
@@ -75,15 +63,20 @@ const Header = () => {
 
 const styles = StyleSheet.create({
   headerContainer: {
-    height: 50,
+    height: 56,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 15,
   },
+  buttonWrapper: {
+    width: 40,
+    alignItems: 'center',
+  },
   headerTitle: {
     fontSize: 18,
-    fontWeight: "bold",
+    fontWeight: "700",
+    color: "white",
     flex: 1,
     textAlign: "center",
   },
@@ -94,5 +87,6 @@ const styles = StyleSheet.create({
     padding: 5,
   },
 });
+
 
 export default Header;

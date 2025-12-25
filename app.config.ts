@@ -8,6 +8,8 @@ const Extra = z.object({
   CHARACTERISTIC_UUID: z.uuidv4(),
   ADVERTISE_UUID: z.string(),
   APP_VARIANT: z.enum(["dev", "preview", "prod"]),
+  ENCRYPTION_SALT: z.string().optional(),
+  MNEMONIC_LOCAL: z.string().optional(),
   eas: z.object({
     projectId: z.uuidv4(),
   }),
@@ -20,6 +22,8 @@ export default ({ config }: ConfigContext): AppConfig => {
     CHARACTERISTIC_UUID: process.env.CHARACTERISTIC_UUID,
     ADVERTISE_UUID: process.env.ADVERTISE_UUID,
     APP_VARIANT: process.env.APP_VARIANT,
+    ENCRYPTION_SALT: process.env.ENCRYPTION_SALT,
+    MNEMONIC_LOCAL: process.env.MNEMONIC_LOCAL,
   });
 
   const appNameSuffix = extra.APP_VARIANT === "prod" ? "" : extra.APP_VARIANT;

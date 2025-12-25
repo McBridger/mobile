@@ -46,6 +46,7 @@ dependencies {
   implementation 'no.nordicsemi.android:ble:2.10.2'
   implementation 'no.nordicsemi.android.support.v18:scanner:1.6.0'
   implementation 'com.google.code.gson:gson:2.10.1'
+  implementation 'androidx.security:security-crypto:1.1.0'
 
   testImplementation 'junit:junit:4.13.2'
   testImplementation 'io.mockk:mockk:1.13.12'

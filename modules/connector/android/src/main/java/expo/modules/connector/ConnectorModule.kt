@@ -6,6 +6,7 @@ import android.util.Log
 import expo.modules.connector.core.Broker
 import expo.modules.connector.crypto.EncryptionService
 import expo.modules.connector.services.ForegroundService
+import expo.modules.connector.transports.ble.BleTransport
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import kotlinx.coroutines.CoroutineScope
@@ -28,19 +29,24 @@ class ConnectorModule : Module() {
     Events("onConnected", "onDisconnected", "onReceived")
 
     OnCreate {
-      Log.d(TAG, "OnCreate: Initializing EncryptionService (Hardcoded for testing).")
-      // FIXME: Temporary hardcoded phrase and salt for testing - matching macOS
-      EncryptionService.setup(
-        "Correct-Horse-Battery-Staple",
-        "7c4d5f2a9b1e8c3d0f4a6b2c8e1d3f5a7092841536b5c4d2e1f0a9b8c7d6e5f4"
-      )
-
       Log.d(TAG, "OnCreate: Initializing Broker and collecting messages.")
       val context = appContext.reactContext?.applicationContext ?: run {
         Log.e(TAG, "OnCreate: Application context is null.")
         return@OnCreate
       }
+      
+      // 1. Initialize Broker
       Broker.init(context)
+
+      // 2. Attempt to load saved credentials from secure storage
+      val isReady = EncryptionService.load(context)
+      Log.d(TAG, "OnCreate: EncryptionService load result: $isReady")
+
+      // 3. If ready, register the BLE transport immediately (Magic Sync starts)
+      if (isReady) {
+        Log.i(TAG, "OnCreate: System is ready, registering BleTransport.")
+        Broker.registerBle(BleTransport(context))
+      }
 
       scope.launch {
         Broker.messages.collect { msg ->
@@ -68,6 +74,17 @@ class ConnectorModule : Module() {
       scope.cancel()
     }
 
+    Function("setup") { mnemonic: String, salt: String ->
+      Log.d(TAG, "setup: Initializing EncryptionService with provided mnemonic.")
+      val context = appContext.reactContext?.applicationContext ?: return@Function
+      
+      EncryptionService.setup(context, mnemonic, salt)
+      
+      // Immediately register the transport now that we have keys
+      Log.i(TAG, "setup: Encryption ready, registering BleTransport.")
+      Broker.registerBle(BleTransport(context))
+    }
+
     AsyncFunction("getAdvertiseUUID") {
       val bytes = EncryptionService.derive("McBridge_Advertise_UUID", 16) ?: return@AsyncFunction null
       return@AsyncFunction bytesToUuid(bytes).toString()
@@ -90,7 +107,9 @@ class ConnectorModule : Module() {
     }
 
     Function("isReady") {
-      return@Function EncryptionService.isReady()
+      val ready = EncryptionService.isReady()
+      Log.d(TAG, "isReady: Returning $ready")
+      return@Function ready
     }
 
     AsyncFunction("startDiscovery") {
@@ -125,18 +144,13 @@ class ConnectorModule : Module() {
     }
 
     AsyncFunction("start") {
-      val serviceUuid = bytesToUuid(EncryptionService.derive("McBridge_Service_UUID", 16)!!).toString()
-      val characteristicUuid = bytesToUuid(EncryptionService.derive("McBridge_Characteristic_UUID", 16)!!).toString()
-
-      Log.d(TAG, "start: Starting ForegroundService with auto-derived UUIDs.")
+      Log.d(TAG, "start: Starting ForegroundService.")
       val context = appContext.reactContext?.applicationContext ?: run {
         Log.e(TAG, "start: Application context is null.")
         return@AsyncFunction null
       }
+      
       val intent = Intent(context, ForegroundService::class.java)
-      intent.putExtra("SERVICE_UUID", serviceUuid)
-      intent.putExtra("CHARACTERISTIC_UUID", characteristicUuid)
-
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
           context.startForegroundService(intent)
           Log.d(TAG, "start: Called startForegroundService for Android O+")
