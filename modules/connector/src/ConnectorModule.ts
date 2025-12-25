@@ -14,10 +14,6 @@ declare class ConnectorModule extends NativeModule<ConnectorModuleEvents> {
   getHistory(): Promise<string[]>;
   clearHistory(): Promise<void>;
 
-  getAdvertiseUUID(): Promise<string>;
-  getServiceUUID(): Promise<string>;
-  getCharacteristicUUID(): Promise<string>;
-
   isReady(): boolean;
   setup(mnemonic: string, salt: string): void;
   startDiscovery(): Promise<void>;

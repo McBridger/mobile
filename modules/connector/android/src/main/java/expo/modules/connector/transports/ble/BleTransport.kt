@@ -33,12 +33,10 @@ class BleTransport(
     init {
         Log.d(TAG, "init: BleTransport initializing.")
         
-        val serviceUuidBytes = EncryptionService.derive("McBridge_Service_UUID", 16)
-        val charUuidBytes = EncryptionService.derive("McBridge_Characteristic_UUID", 16)
+        val serviceUuid = EncryptionService.deriveUuid("McBridge_Service_UUID")
+        val charUuid = EncryptionService.deriveUuid("McBridge_Characteristic_UUID")
         
-        if (serviceUuidBytes != null && charUuidBytes != null) {
-            val serviceUuid = bytesToUuid(serviceUuidBytes)
-            val charUuid = bytesToUuid(charUuidBytes)
+        if (serviceUuid != null && charUuid != null) {
             Log.d(TAG, "init: Configured with Service: $serviceUuid, Char: $charUuid")
             bleManager.setConfiguration(serviceUuid, charUuid)
         } else {
@@ -46,11 +44,6 @@ class BleTransport(
         }
         
         setupCallbacks()
-    }
-
-    private fun bytesToUuid(bytes: ByteArray): UUID {
-        val buffer = ByteBuffer.wrap(bytes)
-        return UUID(buffer.long, buffer.long)
     }
 
     private fun setupCallbacks() {

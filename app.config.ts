@@ -4,11 +4,8 @@ import { capitalize } from "lodash";
 import { z } from "zod";
 
 const Extra = z.object({
-  SERVICE_UUID: z.uuidv4(),
-  CHARACTERISTIC_UUID: z.uuidv4(),
-  ADVERTISE_UUID: z.string(),
   APP_VARIANT: z.enum(["dev", "preview", "prod"]),
-  ENCRYPTION_SALT: z.string().optional(),
+  ENCRYPTION_SALT: z.string(),
   MNEMONIC_LOCAL: z.string().optional(),
   eas: z.object({
     projectId: z.uuidv4(),
@@ -18,9 +15,6 @@ const Extra = z.object({
 export default ({ config }: ConfigContext): AppConfig => {
   const extra = Extra.parse({
     ...config.extra,
-    SERVICE_UUID: process.env.SERVICE_UUID,
-    CHARACTERISTIC_UUID: process.env.CHARACTERISTIC_UUID,
-    ADVERTISE_UUID: process.env.ADVERTISE_UUID,
     APP_VARIANT: process.env.APP_VARIANT,
     ENCRYPTION_SALT: process.env.ENCRYPTION_SALT,
     MNEMONIC_LOCAL: process.env.MNEMONIC_LOCAL,

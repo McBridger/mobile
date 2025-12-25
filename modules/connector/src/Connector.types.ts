@@ -1,9 +1,3 @@
-// export type ConnectionFailedPayload = {
-//   device: string;
-//   name: string;
-//   reason: string;
-// };
-
 export type DataReceivedPayload = {
   value: string;
   id: string;

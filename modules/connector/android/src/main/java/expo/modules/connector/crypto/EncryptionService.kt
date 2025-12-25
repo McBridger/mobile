@@ -7,6 +7,7 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import java.nio.ByteBuffer
 import java.security.spec.KeySpec
+import java.util.UUID
 import javax.crypto.Cipher
 import javax.crypto.Mac
 import javax.crypto.SecretKeyFactory
@@ -103,6 +104,12 @@ object EncryptionService {
         val ikm = masterKey ?: return null
         val prk = hkdfExtract(ikm)
         return hkdfExpand(prk, info.toByteArray(Charsets.UTF_8), byteCount)
+    }
+
+    fun deriveUuid(info: String): UUID? {
+        val bytes = derive(info, 16) ?: return null
+        val buffer = ByteBuffer.wrap(bytes)
+        return UUID(buffer.long, buffer.long)
     }
 
     fun encrypt(data: ByteArray, keyBytes: ByteArray): ByteArray? {
