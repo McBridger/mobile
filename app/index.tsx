@@ -1,8 +1,8 @@
+import { PATHS, Status } from "@/constants";
 import { useConnector } from "@/modules/connector";
 import { Redirect } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
 import { useBluetoothPermissions } from "../hooks/useBluetoothPermissions";
-import { PATHS, Status } from "@/constants";
 
 export default function AppEntry() {
   const { isLoading, allPermissionsGranted } = useBluetoothPermissions();

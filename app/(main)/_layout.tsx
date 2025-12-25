@@ -1,4 +1,6 @@
-import { useConnector } from "@/modules/connector";
+import { PATHS } from "@/constants";
+import { useAppConfig } from "@/hooks/useConfig";
+import ConnectorModule, { useConnector } from "@/modules/connector";
 import {
   Redirect,
   Stack,
@@ -8,9 +10,9 @@ import { useEffect } from "react";
 import { AppState, AppStateStatus, View } from "react-native";
 import { useShallow } from "zustand/shallow";
 import Header from "../../components/Header";
-import { PATHS } from "@/constants";
 
 export default function MainLayout() {
+  const { extra } = useAppConfig();
   const params = useLocalSearchParams();
   const [subscribe, unsubscribe] = useConnector(
     useShallow((state) => [state.subscribe, state.unsubscribe])
@@ -32,6 +34,11 @@ export default function MainLayout() {
       unsubscribe();
     };
   }, [subscribe, unsubscribe]);
+
+    useEffect(() => {
+      ConnectorModule.start(extra.SERVICE_UUID, extra.CHARACTERISTIC_UUID);
+      console.log("ConnectorModule started.");
+    }, [extra.SERVICE_UUID, extra.CHARACTERISTIC_UUID]);
 
   if (params.address) {
     return (

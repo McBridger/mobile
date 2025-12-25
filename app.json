@@ -2,7 +2,7 @@
   "expo": {
     "name": "McBridger",
     "slug": "mc-bridger",
-    "version": "0.1.4",
+    "version": "0.1.5",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "bridger",
@@ -13,9 +13,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#FAFAFA",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,

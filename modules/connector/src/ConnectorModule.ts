@@ -3,14 +3,14 @@ import { NativeModule, requireNativeModule } from 'expo';
 import { ConnectorModuleEvents } from './Connector.types';
 
 declare class ConnectorModule extends NativeModule<ConnectorModuleEvents> {
+  start(serviceUuid: string, characteristicUuid: string): Promise<void>;
+  stop(): Promise<void>;
+
   isConnected(): Promise<boolean>;
-  setup(serviceUuid: string, characteristicUuid: string): Promise<void>;
   connect(address: string): Promise<void>;
   disconnect(): Promise<void>;
   send(data: string): Promise<void>;
 
-  startBridgerService(): Promise<void>;
-  stopBridgerService(): Promise<void>;
   getHistory(): Promise<string[]>;
   clearHistory(): Promise<void>;
 }
