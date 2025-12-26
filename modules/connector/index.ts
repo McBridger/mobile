@@ -1,11 +1,10 @@
-import { AppConfig } from "@/app.config";
 import { SubscriptionManager } from "@/utils";
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 import {
   ConnectorModuleEvents,
-  BrokerStatus,
-  MessagePayload
+  MessagePayload,
+  STATUS,
 } from "./src/Connector.types";
 import ConnectorModule from "./src/ConnectorModule";
 
@@ -26,7 +25,9 @@ export type Item = {
 // --- State, Actions, and Store Definition ---
 
 interface ConnectorState {
-  brokerStatus: BrokerStatus;
+  status: `${STATUS}`;
+  prevStatus: `${STATUS}` | null;
+  isReady: boolean;
   items: Map<string, Item>;
 }
 
@@ -45,8 +46,20 @@ type InternalConnectorStore = ConnectorStore & {
   [SubscriptionManager.KEY]: SubscriptionManager<ConnectorModuleEvents>;
 };
 
+export const WORKING_STATUSES = new Set<`${STATUS}`>([
+  STATUS.READY,
+  STATUS.DISCOVERING,
+  STATUS.CONNECTING,
+  STATUS.CONNECTED,
+  STATUS.DISCONNECTED,
+]);
+
+const getIsReady = (status: `${STATUS}`) => WORKING_STATUSES.has(status);
+
 const initialState: ConnectorState = {
-  brokerStatus: "idle",
+  status: STATUS.IDLE,
+  prevStatus: null,
+  isReady: false,
   items: new Map(),
 };
 
@@ -67,14 +80,18 @@ export const useConnector = create<InternalConnectorStore>()(
             id: payload.id,
             type: "received",
             content: payload.value,
-            time: payload.time || Date.now(),
+            time: payload.timestamp || Date.now(),
           });
           return { items: newItems };
         });
       },
       onStateChanged: (payload) => {
-        log(`Native event: state changed to ${payload.status}.`);
-        set({ brokerStatus: payload.status });
+        log(`Native event: state changed from ${get().status} to ${payload.status}.`);
+        set({ 
+          prevStatus: get().status,
+          status: payload.status,
+          isReady: getIsReady(payload.status)
+        });
       }
     };
 
@@ -112,7 +129,10 @@ export const useConnector = create<InternalConnectorStore>()(
         // Sync initial status from native
         const currentStatus = ConnectorModule.getStatus();
         log(`Initial native status: ${currentStatus}`);
-        set({ brokerStatus: currentStatus });
+        set({ 
+          status: currentStatus || STATUS.IDLE,
+          isReady: getIsReady(currentStatus || STATUS.IDLE)
+        });
       },
 
       unsubscribe: () => {
