@@ -1,6 +1,5 @@
 package expo.modules.connector.transports.ble
 
-import android.bluetooth.BluetoothDevice
 import android.os.ParcelUuid
 import android.util.Log
 import kotlinx.coroutines.channels.awaitClose
@@ -16,12 +15,10 @@ class BleScanner {
      * Converts the imperative Bluetooth LE scanner API into a reactive Flow.
      * Automatically manages the scanning lifecycle.
      */
-    fun scan(serviceUuid: UUID): Flow<BluetoothDevice> = callbackFlow {
+    fun scan(serviceUuid: UUID): Flow<ScanResult> = callbackFlow {
         val callback = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
-                // Try to emit the found device to the flow. 
-                // trySend is non-blocking, which is essential for BLE callbacks.
-                trySend(result.device)
+                trySend(result)
             }
 
             override fun onScanFailed(errorCode: Int) {
