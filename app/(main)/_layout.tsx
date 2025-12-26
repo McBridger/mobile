@@ -34,10 +34,12 @@ export default function MainLayout() {
   }, [subscribe, unsubscribe]);
 
   const initialize = useCallback(async () => {
+    const { isReady, setup } = useConnector.getState();
+
     // 1. Perform auto-setup for dev/test mode if mnemonic is provided in env
-    if (!ConnectorModule.isReady() && extra.MNEMONIC_LOCAL && extra.ENCRYPTION_SALT) {
+    if (!isReady && extra.MNEMONIC_LOCAL && extra.ENCRYPTION_SALT) {
       console.log("Found test mnemonic in env, performing auto-setup.");
-      await ConnectorModule.setup(extra.MNEMONIC_LOCAL, extra.ENCRYPTION_SALT);
+      await setup(extra.MNEMONIC_LOCAL, extra.ENCRYPTION_SALT);
     }
 
     // 2. Start the foreground service

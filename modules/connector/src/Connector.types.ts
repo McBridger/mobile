@@ -19,8 +19,6 @@ export type MessagePayload = {
 };
 
 export type ConnectorModuleEvents = {
-  onConnected: () => void;
-  onDisconnected: () => void;
   onReceived: (payload: MessagePayload) => void;
   onStateChanged: (payload: { status: `${STATUS}` }) => void;
 };
