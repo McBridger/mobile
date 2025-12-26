@@ -9,6 +9,7 @@ import expo.modules.connector.crypto.EncryptionService
 import expo.modules.connector.interfaces.IBleTransport
 import expo.modules.connector.models.Message
 import expo.modules.connector.transports.ble.BleScanner
+import expo.modules.connector.transports.ble.BleTransport
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.CoroutineScope
@@ -17,6 +18,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import java.nio.ByteBuffer
 import java.util.UUID
 
@@ -84,7 +86,7 @@ object Broker {
                 // Ensure auto-discovery is enabled for the new setup
                 isAutoDiscoveryEnabled = true
                 
-                val transport = expo.modules.connector.transports.ble.BleTransport(appContext)
+                val transport = BleTransport(appContext)
                 registerBle(transport)
                 
                 _state.value = State.READY
@@ -154,11 +156,15 @@ object Broker {
         Log.i(TAG, "tryDiscovery: Starting Magic Sync discovery for $advertiseUuid")
         _state.value = State.DISCOVERING
         discoveryJob = scope.launch {
-            scanner.scan(advertiseUuid).collect { device ->
-                Log.i(TAG, "Magic Sync: Found bridge at ${device.address}. Connecting...")
-                // Found a bridge - cancel discovery and attempt connection
-                discoveryJob?.cancel()
+            try {
+                // Use first() to take only ONE device and immediately stop scanning
+                val device = scanner.scan(advertiseUuid).first()
+                Log.i(TAG, "Magic Sync: Found bridge at ${device.address}. Attempting connection.")
                 connect(device.address)
+            } catch (e: Exception) {
+                if (e !is kotlinx.coroutines.CancellationException) {
+                    Log.e(TAG, "discoveryJob: Error during scan", e)
+                }
             }
         }
     }
@@ -188,6 +194,12 @@ object Broker {
     }
 
     suspend fun connect(address: String) {
+        val currentState = state.value
+        if (currentState == State.CONNECTING || currentState == State.CONNECTED) {
+            Log.d(TAG, "connect: Already $currentState, ignoring connection request to $address")
+            return
+        }
+
         Log.d(TAG, "connect: Attempting to connect to $address")
         bleTransport.connect(address)
         Log.d(TAG, "connect: bleTransport.connect called for $address")
@@ -296,4 +308,3 @@ object Broker {
         ERROR
     }
 }
-
