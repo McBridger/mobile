@@ -13,8 +13,8 @@ import {
 import { useShallow } from "zustand/react/shallow";
 
 export default function Connection() {
-  const status = useConnector((state) => state.status);
-  const isConnected = status === "connected";
+  const brokerStatus = useConnector((state) => state.brokerStatus);
+  const isConnected = brokerStatus === "connected";
 
   const _items = useConnector((state) => state.items);
   const items = useMemo(

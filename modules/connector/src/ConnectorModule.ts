@@ -1,17 +1,18 @@
 import { NativeModule, requireNativeModule } from 'expo';
 
-import { ConnectorModuleEvents } from './Connector.types';
+import { ConnectorModuleEvents, MessagePayload, BrokerStatus } from './Connector.types';
 
 declare class ConnectorModule extends NativeModule<ConnectorModuleEvents> {
   start(): Promise<void>;
   stop(): Promise<void>;
 
   isConnected(): Promise<boolean>;
+  getStatus(): BrokerStatus;
   connect(address: string): Promise<void>;
   disconnect(): Promise<void>;
   send(data: string): Promise<void>;
 
-  getHistory(): Promise<any[]>;
+  getHistory(): Promise<MessagePayload[]>;
   clearHistory(): Promise<void>;
 
   isReady(): boolean;

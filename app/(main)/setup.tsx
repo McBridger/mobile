@@ -7,7 +7,7 @@ import {
   Alert,
 } from "react-native";
 import { useRouter } from "expo-router";
-import ConnectorModule from "@/modules/connector";
+import ConnectorModule, { useConnector } from "@/modules/connector";
 import { useAppConfig } from "@/hooks/useConfig";
 import { MnemonicDisplay } from "@/components/MnemonicDisplay";
 import { MnemonicForm } from "@/components/MnemonicForm";
@@ -16,19 +16,22 @@ export default function Setup() {
   const router = useRouter();
   const { extra } = useAppConfig();
   
-  const [isReady, setIsReady] = useState(false);
+  const brokerStatus = useConnector((state) => state.brokerStatus);
+  const setup = useConnector((state) => state.setup);
+  
   const [mnemonic, setMnemonic] = useState<string | null>(null);
 
   useEffect(() => {
-    const ready = ConnectorModule.isReady();
-    setIsReady(ready);
-    if (ready) setMnemonic(ConnectorModule.getMnemonic());
-  }, []);
+    if (ConnectorModule.isReady()) {
+      setMnemonic(ConnectorModule.getMnemonic());
+    }
+  }, [brokerStatus]);
 
   const handleSave = async (phrase: string) => {
     try {
-      await ConnectorModule.setup(phrase, extra.ENCRYPTION_SALT);
+      await setup(phrase, extra.ENCRYPTION_SALT);
       await ConnectorModule.start();
+      // Only navigate here, after manual setup completion
       router.replace("/");
     } catch (e) {
       Alert.alert("Error", "Failed to initialize secure storage.");
@@ -46,13 +49,16 @@ export default function Setup() {
           style: "destructive", 
           onPress: async () => {
             await ConnectorModule.reset();
-            setIsReady(false);
             setMnemonic(null);
+            // After reset, brokerStatus becomes 'idle', trigger UI update
           } 
         }
       ]
     );
   };
+
+  // Only show MnemonicDisplay if we are actually past the setup phase
+  const isSetupDone = brokerStatus !== "idle" && brokerStatus !== "encrypting" && brokerStatus !== "error";
 
   return (
     <KeyboardAvoidingView
@@ -60,7 +66,7 @@ export default function Setup() {
       style={styles.container}
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {isReady ? (
+        {isSetupDone ? (
           <MnemonicDisplay mnemonic={mnemonic} onReset={handleReset} />
         ) : (
           <MnemonicForm 

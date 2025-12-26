@@ -7,31 +7,40 @@ import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const Header = () => {
-  const status = useConnector((state) => state.status);
-  const name = useConnector((state) => state.name);
+  const brokerStatus = useConnector((state) => state.brokerStatus);
   const router = useRouter();
   const segments = useSegments();
   const currentRouteName = segments[segments.length - 1];
 
   const getBackgroundColor = useCallback(() => {
-    switch (status) {
+    switch (brokerStatus) {
       case "connected":
-        return "#34C759"; // iOS Success Green
+        return "#34C759"; // Green
       case "connecting":
-        return "#007AFF"; // iOS Blue
-      case "disconnecting":
-        return "#5856D6"; // iOS Purple
+      case "discovering":
+        return "#007AFF"; // Blue
+      case "encrypting":
+      case "keys_ready":
+      case "transport_initializing":
+        return "#FF9500"; // Orange
+      case "error":
+        return "#FF3B30"; // Red
       default:
-        return "#8E8E93"; // iOS Gray
+        return "#8E8E93"; // Gray
     }
-  }, [status]);
+  }, [brokerStatus]);
 
   const getStatusText = useCallback(() => {
-    if (status === "connected") return name || "Connected";
-    if (status === "connecting") return "Connecting...";
-    if (status === "disconnected") return "Magic Sync Active";
-    return capitalize(status);
-  }, [status, name]);
+    switch (brokerStatus) {
+      case "connected": return "Connected";
+      case "connecting": return "Connecting...";
+      case "discovering": return "Searching for Mac...";
+      case "encrypting": return "Encrypting...";
+      case "ready": return "Ready to Sync";
+      case "error": return "Connection Error";
+      default: return capitalize(brokerStatus);
+    }
+  }, [brokerStatus]);
 
   const handleLeftButtonPress = useCallback(() => {
     if (currentRouteName === "connection")
