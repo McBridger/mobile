@@ -15,18 +15,18 @@ const Header = () => {
   const getBackgroundColor = useCallback(() => {
     switch (brokerStatus) {
       case "connected":
-        return "#34C759"; // Green
+        return "#008564"; // Green
       case "connecting":
       case "discovering":
-        return "#007AFF"; // Blue
+        return "#769cdf"; // Blue
       case "encrypting":
       case "keys_ready":
       case "transport_initializing":
-        return "#FF9500"; // Orange
+        return "#ff9b7e"; // Orange
       case "error":
-        return "#FF3B30"; // Red
+        return "#e6000f"; // Red
       default:
-        return "#8E8E93"; // Gray
+        return "#B2B2B2"; // Gray
     }
   }, [brokerStatus]);
 
