@@ -26,14 +26,12 @@ export type Item = {
 
 interface ConnectorState {
   status: `${STATUS}`;
-  prevStatus: `${STATUS}` | null;
   isReady: boolean;
   items: Map<string, Item>;
 }
 
 interface ConnectorActions {
   setup: (mnemonic: string, salt: string) => Promise<void>;
-  disconnect: () => void;
   send: (data: string) => void;
 
   subscribe: () => void;
@@ -54,24 +52,18 @@ export const WORKING_STATUSES = new Set<`${STATUS}`>([
   STATUS.DISCONNECTED,
 ]);
 
+const getInitialStatus = () => ConnectorModule.getStatus() || STATUS.IDLE;
 const getIsReady = (status: `${STATUS}`) => WORKING_STATUSES.has(status);
 
 const initialState: ConnectorState = {
-  status: STATUS.IDLE,
-  prevStatus: null,
-  isReady: false,
+  status: getInitialStatus(),
+  isReady: getIsReady(getInitialStatus()),
   items: new Map(),
 };
 
 export const useConnector = create<InternalConnectorStore>()(
   subscribeWithSelector((set, get) => {
     const handlers: ConnectorModuleEvents = {
-      onConnected: () => {
-        log("Native event: connected.");
-      },
-      onDisconnected: () => {
-        log("Native event: disconnected.");
-      },
       onReceived: (payload) => {
         log(`Native event: data received (ID: ${payload.id}).`);
         set((state) => {
@@ -88,7 +80,6 @@ export const useConnector = create<InternalConnectorStore>()(
       onStateChanged: (payload) => {
         log(`Native event: state changed from ${get().status} to ${payload.status}.`);
         set({ 
-          prevStatus: get().status,
           status: payload.status,
           isReady: getIsReady(payload.status)
         });
@@ -110,12 +101,6 @@ export const useConnector = create<InternalConnectorStore>()(
         } catch (err: any) {
           error("Setup failed:", err.message);
         }
-      },
-
-      disconnect: () => {
-        ConnectorModule.disconnect().catch((err) => {
-          error("Promise disconnect() was rejected.", err);
-        })
       },
 
       send: (data: string) => {

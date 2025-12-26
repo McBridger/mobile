@@ -44,7 +44,7 @@ const Header = () => {
 
   const handleLeftButtonPress = useCallback(() => {
     if (currentRouteName === "connection")
-      router.push({ pathname: "/setup", params: { intentional: "true" } });
+      router.push("/setup");
   }, [currentRouteName, router]);
 
   const leftButton =

@@ -4,12 +4,8 @@ import { ConnectorModuleEvents, MessagePayload, STATUS } from './Connector.types
 
 declare class ConnectorModule extends NativeModule<ConnectorModuleEvents> {
   start(): Promise<void>;
-  stop(): Promise<void>;
 
-  isConnected(): Promise<boolean>;
   getStatus(): STATUS;
-  connect(address: string): Promise<void>;
-  disconnect(): Promise<void>;
   send(data: string): Promise<void>;
 
   getHistory(): Promise<MessagePayload[]>;
