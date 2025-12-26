@@ -21,11 +21,16 @@ export default function Connection() {
     <View style={styles.clipboardItem}>
       <Card style={{ backgroundColor: theme.colors.surfaceContainerHigh }}>
         <Card.Content>
-          <Text variant="titleMedium" style={{ color: theme.colors.primary }}>
+          <Text
+            variant="titleMedium"
+            style={[styles.itemType, { color: theme.colors.primary }]}
+          >
             {item.type === "sent" ? "Sent:" : "Received:"}
           </Text>
-          <Text style={styles.itemContent}>{item.content}</Text>
-          <Text variant="bodySmall" style={styles.itemTimestamp}>
+          <Text variant="bodyMedium" style={styles.itemContent}>
+            {item.content}
+          </Text>
+          <Text variant="labelMedium" style={styles.itemTimestamp}>
             {new Date(item.time).toLocaleTimeString()}
           </Text>
         </Card.Content>
@@ -57,8 +62,8 @@ export default function Connection() {
           <Button
             textColor={theme.colors.onSurface}
             buttonColor={theme.colors.primaryContainer}
-            mode="outlined"
-            labelStyle={{ fontSize: 16, fontWeight: 'bold' }} 
+            mode="contained"
+            labelStyle={{ fontSize: 16, fontWeight: "bold" }}
             onPress={disconnect}
           >
             Disconnect
@@ -79,8 +84,13 @@ const styles = StyleSheet.create({
   clipboardItem: {
     marginBottom: 8,
   },
+  itemType: {
+    fontWeight: "bold",
+     marginBottom: 4,
+  },
   itemContent: {
     marginBottom: 8,
+    fontSize: 16,
   },
   itemTimestamp: {
     textAlign: "right",
