@@ -26,7 +26,7 @@ class ConnectorModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("Connector")
 
-    Events("onConnected", "onDisconnected", "onReceived")
+    Events("onConnected", "onDisconnected", "onReceived", "onStateChanged")
 
     OnCreate {
       Log.d(TAG, "OnCreate: Initializing Broker and collecting messages.")
@@ -58,11 +58,13 @@ class ConnectorModule : Module() {
       scope.launch {
         Broker.state.collect { state ->
           Log.d(TAG, "onStateChange event: Broker state changed to $state")
+          
+          // Send granular state to JS
+          sendEvent("onStateChanged", mapOf("status" to state.name.lowercase()))
 
           when (state) {
             Broker.State.CONNECTED -> sendEvent("onConnected")
             Broker.State.DISCONNECTED -> sendEvent("onDisconnected")
-            Broker.State.IDLE -> sendEvent("onDisconnected")
             else -> {}
           }
         }
@@ -75,14 +77,8 @@ class ConnectorModule : Module() {
     }
 
     AsyncFunction("setup") { mnemonic: String, salt: String ->
-      Log.d(TAG, "setup: Initializing EncryptionService with provided mnemonic.")
-      val context = appContext.reactContext?.applicationContext ?: return@AsyncFunction
-      
-      EncryptionService.setup(context, mnemonic, salt)
-      
-      // Immediately register the transport now that we have keys
-      Log.i(TAG, "setup: Encryption ready, registering BleTransport.")
-      Broker.registerBle(BleTransport(context))
+      Log.d(TAG, "setup: Delegating setup to Broker.")
+      Broker.setup(mnemonic, salt)
     }
 
     AsyncFunction("isConnected") {
@@ -97,12 +93,16 @@ class ConnectorModule : Module() {
       return@Function ready
     }
 
-    AsyncFunction("startDiscovery") {
-      Broker.startDiscovery()
+    Function("getStatus") {
+      val status = Broker.state.value.name.lowercase()
+      Log.d(TAG, "getStatus: Returning $status")
+      return@Function status
     }
 
-    AsyncFunction("stopDiscovery") {
-      Broker.stopDiscovery()
+    AsyncFunction("isConnected") {
+      val isConnected = Broker.state.value == Broker.State.CONNECTED
+      Log.d(TAG, "isConnected: Current state is ${Broker.state.value}, returning $isConnected")
+      return@AsyncFunction isConnected
     }
 
     AsyncFunction("connect") { address: String ->
@@ -176,21 +176,8 @@ class ConnectorModule : Module() {
 
     AsyncFunction("reset") {
       Log.d(TAG, "reset: Full system reset initiated.")
-      val context = appContext.reactContext?.applicationContext ?: return@AsyncFunction null
-      
-      // 1. Clear secure storage
-      EncryptionService.clear(context)
-      
-      // 2. Disconnect Broker
-      scope.launch {
-        Broker.disconnect()
-      }
-      
-      // 3. Stop foreground service
-      val intent = Intent(context, ForegroundService::class.java)
-      context.stopService(intent)
-      
-      Log.i(TAG, "reset: System reset complete.")
+      Broker.reset()
+      Log.i(TAG, "reset: System reset command sent to Broker.")
       return@AsyncFunction null
     }
   }

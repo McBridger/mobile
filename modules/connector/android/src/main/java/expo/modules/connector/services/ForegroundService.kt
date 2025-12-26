@@ -84,9 +84,14 @@ class ForegroundService : Service() {
         val (title, text) = when (state) {
             Broker.State.CONNECTED -> "Bridger Connected" to "Ready to sync."
             Broker.State.CONNECTING -> "Bridger Connecting..." to "Looking for bridge."
-            Broker.State.IDLE -> "Bridger Active" to "Waiting for connection."
+            Broker.State.IDLE -> "Bridger Active" to "Waiting for setup."
             Broker.State.DISCONNECTED -> "Bridger Disconnected" to "Connection lost."
             Broker.State.ERROR -> "Bridger Error" to "Check Bluetooth or permissions."
+            Broker.State.ENCRYPTING -> "Bridger Setup" to "Generating secure keys..."
+            Broker.State.KEYS_READY, 
+            Broker.State.TRANSPORT_INITIALIZING -> "Bridger Setup" to "Initializing Bluetooth..."
+            Broker.State.READY -> "Bridger Ready" to "Waiting for Mac to appear."
+            Broker.State.DISCOVERING -> "Bridger Scanning" to "Searching for your Mac..."
         }
         Log.d(TAG, "updateNotificationForState: Notification title: \"$title\", text: \"$text\"")
         notificationManager.notify(SERVICE_NOTIFICATION_ID, buildNotification(title, text))

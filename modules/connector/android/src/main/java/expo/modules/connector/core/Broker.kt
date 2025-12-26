@@ -36,7 +36,9 @@ object Broker {
     
     private val scanner = BleScanner()
     private var discoveryJob: Job? = null
-    private var isAutoDiscoveryEnabled = false
+    private var setupJob: Job? = null
+    private var transportCollectionJob: Job? = null
+    private var isAutoDiscoveryEnabled = true
 
     fun init(context: Context): Broker {
         val applicationContext = context.applicationContext
@@ -45,6 +47,7 @@ object Broker {
         if (!::appContext.isInitialized) {
             this.appContext = applicationContext
             this.history = History.getInstance(this.appContext)
+            this.isAutoDiscoveryEnabled = true
             Log.i(TAG, "init: Broker initialized successfully for the first time.")
             return this
         }
@@ -58,25 +61,86 @@ object Broker {
         return this
     }
 
-    fun startDiscovery() {
-        Log.d(TAG, "startDiscovery: Enabling Magic Sync.")
-        isAutoDiscoveryEnabled = true
-        tryDiscovery()
+    /**
+     * Orchestrates the entire setup process:
+     * IDLE -> ENCRYPTING -> KEYS_READY -> TRANSPORT_INITIALIZING -> READY
+     */
+    fun setup(mnemonic: String, salt: String) {
+        Log.i(TAG, "setup: Initiating Magic Sync setup.")
+        setupJob?.cancel()
+        setupJob = scope.launch {
+            try {
+                _state.value = State.ENCRYPTING
+                Log.d(TAG, "setup: Phase 1 - Computing master keys (PBKDF2).")
+                
+                // This is a heavy blocking call, run on Default dispatcher
+                EncryptionService.setup(appContext, mnemonic, salt)
+                
+                _state.value = State.KEYS_READY
+                Log.d(TAG, "setup: Phase 2 - Keys ready, initializing transport.")
+                
+                _state.value = State.TRANSPORT_INITIALIZING
+                
+                // Ensure auto-discovery is enabled for the new setup
+                isAutoDiscoveryEnabled = true
+                
+                val transport = expo.modules.connector.transports.ble.BleTransport(appContext)
+                registerBle(transport)
+                
+                _state.value = State.READY
+                Log.i(TAG, "setup: Magic Sync is READY. Starting discovery.")
+                tryDiscovery()
+            } catch (e: Exception) {
+                Log.e(TAG, "setup: Failed during initialization", e)
+                _state.value = State.ERROR
+            }
+        }
     }
 
-    fun stopDiscovery() {
-        Log.d(TAG, "stopDiscovery: Disabling Magic Sync.")
-        isAutoDiscoveryEnabled = false
+    /**
+     * Resets the broker to its initial state.
+     * Clears keys, disconnects transport, and stops discovery.
+     */
+    fun reset() {
+        Log.i(TAG, "reset: Full Broker reset initiated.")
         discoveryJob?.cancel()
-        discoveryJob = null
+        setupJob?.cancel()
+        transportCollectionJob?.cancel()
+        
+        // 1. Disconnect BLE if active
+        scope.launch {
+            try {
+                if (::bleTransport.isInitialized) {
+                    bleTransport.disconnect()
+                    Log.d(TAG, "reset: BLE disconnected.")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "reset: Error during disconnect", e)
+            }
+        }
+
+        // 2. Clear secure storage
+        try {
+            EncryptionService.clear(appContext)
+            Log.d(TAG, "reset: Encryption keys cleared.")
+        } catch (e: Exception) {
+            Log.e(TAG, "reset: Error clearing keys", e)
+        }
+
+        // 3. Go to IDLE state
+        _state.value = State.IDLE
     }
 
+    /**
+     * Internal logic to trigger discovery if conditions are met.
+     */
     private fun tryDiscovery() {
         if (!isAutoDiscoveryEnabled) return
         
-        // If we are already connecting or connected, no need to scan
-        if (state.value != State.IDLE && state.value != State.ERROR) {
-            Log.d(TAG, "tryDiscovery: Skip scanning, state is ${state.value}")
+        // Allow scanning if we are READY, IDLE, or DISCONNECTED
+        val currentState = state.value
+        if (currentState != State.IDLE && currentState != State.READY && currentState != State.DISCONNECTED) {
+            Log.d(TAG, "tryDiscovery: Skip scanning, state is $currentState")
             return
         }
 
@@ -88,6 +152,7 @@ object Broker {
         }
 
         Log.i(TAG, "tryDiscovery: Starting Magic Sync discovery for $advertiseUuid")
+        _state.value = State.DISCOVERING
         discoveryJob = scope.launch {
             scanner.scan(advertiseUuid).collect { device ->
                 Log.i(TAG, "Magic Sync: Found bridge at ${device.address}. Connecting...")
@@ -100,18 +165,25 @@ object Broker {
 
     fun registerBle(bleTransport: IBleTransport): Broker {
         Log.d(TAG, "registerBle: Registering BLE transport. Transport hash: ${bleTransport.hashCode()}")
+        
+        // Cancel previous collection to avoid leaks and multiple state updates
+        transportCollectionJob?.cancel()
+        
         this.bleTransport = bleTransport
 
-        scope.launch {
-            Log.d(TAG, "registerBle: Collecting incomingMessages from bleTransport")
-            bleTransport.incomingMessages.collect { msg -> onIncomingMessage(msg) }
-        }
-        scope.launch {
-            Log.d(TAG, "registerBle: Collecting connectionState from bleTransport")
-            bleTransport.connectionState.collect { state -> onStateChange(state) }
+        transportCollectionJob = scope.launch {
+            launch {
+                Log.d(TAG, "registerBle: Collecting incomingMessages from bleTransport")
+                bleTransport.incomingMessages.collect { msg -> onIncomingMessage(msg) }
+            }
+            launch {
+                Log.d(TAG, "registerBle: Collecting connectionState from bleTransport")
+                bleTransport.connectionState.collect { state -> onStateChange(state) }
+            }
         }
 
-        Log.i(TAG, "registerBle: BLE Transport registered.")
+        Log.i(TAG, "registerBle: BLE Transport registered. Trying initial discovery.")
+        tryDiscovery()
         return this
     }
 
@@ -179,11 +251,11 @@ object Broker {
 
         when (state) {
             IBleTransport.ConnectionState.CONNECTED -> {
-                Log.i(TAG, "onStateChange: Broker state changed to CONNECTED")
+                Log.i(TAG, "onStateChange: Broker state changed to CONNECTED (physical)")
                 discoveryJob?.cancel() // Connection established, stop any active discovery
             }
             IBleTransport.ConnectionState.READY -> {
-                Log.i(TAG, "onStateChange: Broker state changed to READY")
+                Log.i(TAG, "onStateChange: Broker state changed to READY_CONNECTED (internal)")
                 _state.value = State.CONNECTED
 
                 val message = Message(type = Message.Type.DEVICE_NAME, value = Build.MODEL)
@@ -191,8 +263,8 @@ object Broker {
                 Log.i(TAG, "Welcome message sent")
             }
             IBleTransport.ConnectionState.DISCONNECTED -> {
-                _state.value = State.IDLE
-                Log.i(TAG, "onStateChange: Broker state changed to IDLE. Checking rescan...")
+                _state.value = State.DISCONNECTED
+                Log.i(TAG, "onStateChange: Broker state changed to DISCONNECTED. Checking rescan...")
                 if (isAutoDiscoveryEnabled) tryDiscovery()
             }
             IBleTransport.ConnectionState.CONNECTING -> {
@@ -213,6 +285,11 @@ object Broker {
 
     enum class State {
         IDLE,
+        ENCRYPTING,
+        KEYS_READY,
+        TRANSPORT_INITIALIZING,
+        READY,
+        DISCOVERING,
         CONNECTING,
         CONNECTED,
         DISCONNECTED,
