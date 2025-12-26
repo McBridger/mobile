@@ -1,20 +1,13 @@
-import {
-  Item,
-  useConnector
-} from "@/modules/connector";
+import { Item, useConnector } from "@/modules/connector";
 import React, { useMemo } from "react";
-import {
-  FlatList,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
-} from "react-native";
+import { FlatList, StyleSheet, View } from "react-native";
 import { useShallow } from "zustand/react/shallow";
+import { useTheme, Button, Card, Text } from "react-native-paper";
 
 export default function Connection() {
   const brokerStatus = useConnector((state) => state.brokerStatus);
   const isConnected = brokerStatus === "connected";
+  const theme = useTheme();
 
   const _items = useConnector((state) => state.items);
   const items = useMemo(
@@ -26,13 +19,17 @@ export default function Connection() {
 
   const renderItem = ({ item }: { item: Item }) => (
     <View style={styles.clipboardItem}>
-      <Text style={styles.itemType}>
-        {item.type === "sent" ? "Sent:" : "Received:"}
-      </Text>
-      <Text style={styles.itemContent}>{item.content}</Text>
-      <Text style={styles.itemTimestamp}>
-        {new Date(item.time).toLocaleTimeString()}
-      </Text>
+      <Card style={{ backgroundColor: theme.colors.surfaceContainerHigh }}>
+        <Card.Content>
+          <Text variant="titleMedium" style={{ color: theme.colors.primary }}>
+            {item.type === "sent" ? "Sent:" : "Received:"}
+          </Text>
+          <Text style={styles.itemContent}>{item.content}</Text>
+          <Text variant="bodySmall" style={styles.itemTimestamp}>
+            {new Date(item.time).toLocaleTimeString()}
+          </Text>
+        </Card.Content>
+      </Card>
     </View>
   );
 
@@ -42,7 +39,7 @@ export default function Connection() {
         data={items}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
-        style={styles.list}
+        style={{ backgroundColor: theme.colors.background }}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
@@ -57,12 +54,15 @@ export default function Connection() {
 
       {isConnected && (
         <View style={styles.footer}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.disconnectButton]}
+          <Button
+            textColor={theme.colors.onSurface}
+            buttonColor={theme.colors.primaryContainer}
+            mode="outlined"
+            labelStyle={{ fontSize: 16, fontWeight: 'bold' }} 
             onPress={disconnect}
           >
-            <Text style={styles.actionButtonText}>Disconnect</Text>
-          </TouchableOpacity>
+            Disconnect
+          </Button>
         </View>
       )}
     </View>
@@ -72,43 +72,17 @@ export default function Connection() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
-  },
-  list: {
-    flex: 1,
   },
   listContent: {
     padding: 20,
-    paddingBottom: 40,
   },
   clipboardItem: {
-    backgroundColor: "#fff",
-    padding: 15,
-    borderRadius: 12,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#eee",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  itemType: {
-    fontSize: 12,
-    fontWeight: "bold",
-    color: "#007AFF",
-    marginBottom: 4,
-    textTransform: "uppercase",
+    marginBottom: 8,
   },
   itemContent: {
-    fontSize: 16,
-    color: "#1a1a1a",
     marginBottom: 8,
   },
   itemTimestamp: {
-    fontSize: 11,
-    color: "#bbb",
     textAlign: "right",
   },
   emptyContainer: {
@@ -127,23 +101,5 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     alignItems: "center",
-  },
-  actionButton: {
-    paddingHorizontal: 30,
-    paddingVertical: 15,
-    borderRadius: 30,
-    elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-  },
-  disconnectButton: {
-    backgroundColor: "#FF3B30",
-  },
-  actionButtonText: {
-    color: "white",
-    fontWeight: "bold",
-    fontSize: 16,
   },
 });
