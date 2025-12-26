@@ -1,4 +1,4 @@
-import { useConnector } from "@/modules/connector";
+import { useConnector, STATUS } from "@/modules/connector";
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useSegments } from "expo-router";
 import { capitalize } from "lodash";
@@ -7,44 +7,44 @@ import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const Header = () => {
-  const brokerStatus = useConnector((state) => state.brokerStatus);
+  const status = useConnector((state) => state.status);
   const router = useRouter();
   const segments = useSegments();
   const currentRouteName = segments[segments.length - 1];
 
   const getBackgroundColor = useCallback(() => {
-    switch (brokerStatus) {
-      case "connected":
+    switch (status) {
+      case STATUS.CONNECTED:
         return "#34C759"; // Green
-      case "connecting":
-      case "discovering":
+      case STATUS.CONNECTING:
+      case STATUS.DISCOVERING:
         return "#007AFF"; // Blue
-      case "encrypting":
-      case "keys_ready":
-      case "transport_initializing":
+      case STATUS.ENCRYPTING:
+      case STATUS.KEYS_READY:
+      case STATUS.TRANSPORT_INITIALIZING:
         return "#FF9500"; // Orange
-      case "error":
+      case STATUS.ERROR:
         return "#FF3B30"; // Red
       default:
         return "#8E8E93"; // Gray
     }
-  }, [brokerStatus]);
+  }, [status]);
 
   const getStatusText = useCallback(() => {
-    switch (brokerStatus) {
-      case "connected": return "Connected";
-      case "connecting": return "Connecting...";
-      case "discovering": return "Searching for Mac...";
-      case "encrypting": return "Encrypting...";
-      case "ready": return "Ready to Sync";
-      case "error": return "Connection Error";
-      default: return capitalize(brokerStatus);
+    switch (status) {
+      case STATUS.CONNECTED: return "Connected";
+      case STATUS.CONNECTING: return "Connecting...";
+      case STATUS.DISCOVERING: return "Searching for Mac...";
+      case STATUS.ENCRYPTING: return "Encrypting...";
+      case STATUS.READY: return "Ready to Sync";
+      case STATUS.ERROR: return "Connection Error";
+      default: return capitalize(status.toLowerCase());
     }
-  }, [brokerStatus]);
+  }, [status]);
 
   const handleLeftButtonPress = useCallback(() => {
     if (currentRouteName === "connection")
-      router.push("/setup");
+      router.push({ pathname: "/setup", params: { intentional: "true" } });
   }, [currentRouteName, router]);
 
   const leftButton =

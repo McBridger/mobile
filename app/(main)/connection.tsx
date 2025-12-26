@@ -1,20 +1,17 @@
-import {
-  Item,
-  useConnector
-} from "@/modules/connector";
+import { Item, STATUS, useConnector } from "@/modules/connector";
+import { Redirect } from "expo-router";
 import React, { useMemo } from "react";
 import {
   FlatList,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View
 } from "react-native";
-import { useShallow } from "zustand/react/shallow";
 
 export default function Connection() {
-  const brokerStatus = useConnector((state) => state.brokerStatus);
-  const isConnected = brokerStatus === "connected";
+  const status = useConnector((state) => state.status);
+  const isReady = useConnector((state) => state.isReady);
+  const isConnected = status === STATUS.CONNECTED;
 
   const _items = useConnector((state) => state.items);
   const items = useMemo(
@@ -22,7 +19,8 @@ export default function Connection() {
     [_items]
   );
 
-  const [disconnect] = useConnector(useShallow((state) => [state.disconnect]));
+  // Guard: If not ready, go to setup
+  if (!isReady) return <Redirect href="/setup" />;
 
   const renderItem = ({ item }: { item: Item }) => (
     <View style={styles.clipboardItem}>
@@ -54,17 +52,6 @@ export default function Connection() {
           </View>
         }
       />
-
-      {isConnected && (
-        <View style={styles.footer}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.disconnectButton]}
-            onPress={disconnect}
-          >
-            <Text style={styles.actionButtonText}>Disconnect</Text>
-          </TouchableOpacity>
-        </View>
-      )}
     </View>
   );
 }
@@ -120,30 +107,5 @@ const styles = StyleSheet.create({
     color: "#999",
     fontSize: 14,
     lineHeight: 20,
-  },
-  footer: {
-    position: "absolute",
-    bottom: 30,
-    left: 0,
-    right: 0,
-    alignItems: "center",
-  },
-  actionButton: {
-    paddingHorizontal: 30,
-    paddingVertical: 15,
-    borderRadius: 30,
-    elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-  },
-  disconnectButton: {
-    backgroundColor: "#FF3B30",
-  },
-  actionButtonText: {
-    color: "white",
-    fontWeight: "bold",
-    fontSize: 16,
   },
 });

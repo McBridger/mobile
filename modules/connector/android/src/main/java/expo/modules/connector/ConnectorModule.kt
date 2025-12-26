@@ -59,8 +59,8 @@ class ConnectorModule : Module() {
         Broker.state.collect { state ->
           Log.d(TAG, "onStateChange event: Broker state changed to $state")
           
-          // Send granular state to JS
-          sendEvent("onStateChanged", mapOf("status" to state.name.lowercase()))
+          // Send granular state to JS in UPPERCASE
+          sendEvent("onStateChanged", mapOf("status" to state.name))
 
           when (state) {
             Broker.State.CONNECTED -> sendEvent("onConnected")
@@ -94,7 +94,7 @@ class ConnectorModule : Module() {
     }
 
     Function("getStatus") {
-      val status = Broker.state.value.name.lowercase()
+      val status = Broker.state.value.name
       Log.d(TAG, "getStatus: Returning $status")
       return@Function status
     }
