@@ -1,5 +1,5 @@
 import { useConnector } from "@/modules/connector";
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useSegments } from "expo-router";
 import { capitalize } from "lodash";
 import React, { useCallback } from "react";
@@ -32,19 +32,29 @@ const Header = () => {
 
   const getStatusText = useCallback(() => {
     switch (brokerStatus) {
-      case "connected": return "Connected";
-      case "connecting": return "Connecting...";
-      case "discovering": return "Searching for Mac...";
-      case "encrypting": return "Encrypting...";
-      case "ready": return "Ready to Sync";
-      case "error": return "Connection Error";
-      default: return capitalize(brokerStatus);
+      case "connected":
+        return "Connected";
+      case "connecting":
+        return "Connecting...";
+      case "discovering":
+        return "Searching for Mac...";
+      case "encrypting":
+        return "Encrypting...";
+      case "ready":
+        return "Ready to Sync";
+      case "error":
+        return "Connection Error";
+      default:
+        return capitalize(brokerStatus);
     }
   }, [brokerStatus]);
 
   const handleLeftButtonPress = useCallback(() => {
-    if (currentRouteName === "connection")
-      router.push("/setup");
+    if (currentRouteName === "connection") router.push("/setup");
+  }, [currentRouteName, router]);
+
+  const handleBackButtonPress = useCallback(() => {
+     if (currentRouteName === "setup") router.push("/connection");
   }, [currentRouteName, router]);
 
   const leftButton =
@@ -55,15 +65,20 @@ const Header = () => {
       >
         <Ionicons name="settings-outline" size={24} color="white" />
       </TouchableOpacity>
-    ) : null;
+    ) : (
+      <TouchableOpacity onPress={handleBackButtonPress}>
+        <Ionicons name="arrow-back-outline" size={24} color="white" />
+      </TouchableOpacity>
+    );
 
   return (
-    <SafeAreaView style={{ backgroundColor: getBackgroundColor() }} edges={['top']}>
+    <SafeAreaView
+      style={{ backgroundColor: getBackgroundColor() }}
+      edges={["top"]}
+    >
       <View style={styles.headerContainer}>
         <View style={styles.buttonWrapper}>{leftButton}</View>
-        <Text style={styles.headerTitle}>
-          {getStatusText()}
-        </Text>
+        <Text style={styles.headerTitle}>{getStatusText()}</Text>
         <View style={styles.buttonWrapper} />
       </View>
     </SafeAreaView>
@@ -80,7 +95,7 @@ const styles = StyleSheet.create({
   },
   buttonWrapper: {
     width: 40,
-    alignItems: 'center',
+    alignItems: "center",
   },
   headerTitle: {
     fontSize: 18,
@@ -96,6 +111,5 @@ const styles = StyleSheet.create({
     padding: 5,
   },
 });
-
 
 export default Header;

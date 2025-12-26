@@ -3,7 +3,7 @@ export const LIGHT_THEME = {
   surfaceTint: "#A63B00",
   onPrimary: "#FFFFFF",
   primaryContainer: "#F26522",
-  onPrimaryContainer: "#4F1800",
+  onPrimaryContainer: "#434545",
   secondary: "#5D5E5F",
   onSecondary: "#FFFFFF",
   secondaryContainer: "#B2B2B2",
