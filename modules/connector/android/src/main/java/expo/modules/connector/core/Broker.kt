@@ -7,7 +7,9 @@ import android.os.Build
 import android.util.Log
 import expo.modules.connector.crypto.EncryptionService
 import expo.modules.connector.interfaces.IBleTransport
+import expo.modules.connector.interfaces.IBleScanner
 import expo.modules.connector.models.Message
+import expo.modules.connector.models.BleDevice
 import expo.modules.connector.transports.ble.BleScanner
 import expo.modules.connector.transports.ble.BleTransport
 import kotlinx.coroutines.Job
@@ -20,7 +22,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.TimeoutCancellationException
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.UUID
-import no.nordicsemi.android.support.v18.scanner.ScanResult
 import kotlin.time.Duration.Companion.milliseconds
 
 object Broker {
@@ -38,10 +39,15 @@ object Broker {
     private lateinit var history: History
     private lateinit var appContext: Context
     
-    private val scanner = BleScanner()
+    private var scanner: IBleScanner = BleScanner()
     private var discoveryJob: Job? = null
     private var setupJob: Job? = null
     private var transportCollectionJob: Job? = null
+
+    fun setScanner(scanner: IBleScanner) {
+        Log.i(TAG, "setScanner: Injecting new scanner implementation: ${scanner.javaClass.simpleName}")
+        this.scanner = scanner
+    }
 
     fun init(context: Context): Broker {
         if (isInitialized.getAndSet(true)) {
@@ -93,11 +99,11 @@ object Broker {
                     // Use the watchdog to keep the scanner fresh
                     scanWithWatchdog(advertiseUuid)
                 })
-                .collect({ scanResult ->
-                    Log.i(TAG, "Discovery: Bingo! Device found: ${scanResult.device.address}")
+                .collect({ device ->
+                    Log.i(TAG, "Discovery: Bingo! Device found: ${device.address}")
                     // connect() will set state to CONNECTING, which triggers flatMapLatest 
                     // to cancel this scan flow automatically.
-                    connect(scanResult.device.address)
+                    connect(device.address)
                 })
         }
     }
@@ -106,7 +112,7 @@ object Broker {
      * Creates a self-healing scan flow.
      */
     @OptIn(FlowPreview::class)
-    private fun scanWithWatchdog(uuid: UUID): Flow<ScanResult> {
+    private fun scanWithWatchdog(uuid: UUID): Flow<BleDevice> {
         return scanner.scan(uuid)
             .onStart { 
                 Log.d(TAG, "Watchdog: Scan started/restarted")
