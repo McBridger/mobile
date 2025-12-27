@@ -2,55 +2,53 @@ package expo.modules.connector.transports.ble
 
 import android.os.ParcelUuid
 import android.util.Log
+import expo.modules.connector.interfaces.IBleScanner
+import expo.modules.connector.models.BleDevice
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.map
 import no.nordicsemi.android.support.v18.scanner.*
 import java.util.UUID
 
-class BleScanner {
+class BleScanner : IBleScanner {
     private val scanner = BluetoothLeScannerCompat.getScanner()
 
-    /**
-     * Converts the imperative Bluetooth LE scanner API into a reactive Flow.
-     * Automatically manages the scanning lifecycle.
-     */
-    fun scan(serviceUuid: UUID): Flow<ScanResult> = callbackFlow {
+    override fun scan(serviceUuid: UUID): Flow<BleDevice> = callbackFlow {
         val callback = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
                 trySend(result)
             }
 
             override fun onScanFailed(errorCode: Int) {
-                Log.e(TAG, "onScanFailed: Scan failed with error code $errorCode")
+                Log.e(TAG, "onScanFailed: Error code $errorCode")
                 close(Exception("Scan failed with code $errorCode"))
             }
         }
 
-        val filters = listOf(
-            ScanFilter.Builder()
-                .setServiceUuid(ParcelUuid(serviceUuid))
-                .build()
-        )
-        
         val settings = ScanSettings.Builder()
-            .setScanMode(ScanSettings.SCAN_MODE_LOW_POWER)
+            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .setReportDelay(0)
             .build()
 
-        Log.d(TAG, "Starting reactive scan for service: $serviceUuid")
-        try {
-            scanner.startScan(filters, settings, callback)
-        } catch (e: Exception) {
-            close(e)
-        }
+        val filter = ScanFilter.Builder()
+            .setServiceUuid(ParcelUuid(serviceUuid))
+            .build()
 
-        // Clean up: when the Flow is cancelled or the scope is closed,
-        // stop the hardware scanner automatically.
+        Log.d(TAG, "scan: Starting BLE scan for service $serviceUuid")
+        scanner.startScan(mutableListOf(filter), settings, callback)
+
         awaitClose {
-            Log.d(TAG, "Stopping reactive scan (scope closed)")
+            Log.d(TAG, "scan: Stopping BLE scan")
             scanner.stopScan(callback)
         }
+    }.map { result ->
+        // Mapping from Android/Nordic ScanResult to our domain BleDevice
+        BleDevice(
+            name = result.device.name ?: result.scanRecord?.deviceName,
+            address = result.device.address,
+            rssi = result.rssi
+        )
     }
 
     companion object {
