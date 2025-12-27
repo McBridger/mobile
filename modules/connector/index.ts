@@ -1,11 +1,10 @@
-import { AppConfig } from "@/app.config";
 import { SubscriptionManager } from "@/utils";
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 import {
   ConnectorModuleEvents,
-  BrokerStatus,
-  MessagePayload
+  MessagePayload,
+  STATUS,
 } from "./src/Connector.types";
 import ConnectorModule from "./src/ConnectorModule";
 
@@ -26,13 +25,13 @@ export type Item = {
 // --- State, Actions, and Store Definition ---
 
 interface ConnectorState {
-  brokerStatus: BrokerStatus;
+  status: `${STATUS}`;
+  isReady: boolean;
   items: Map<string, Item>;
 }
 
 interface ConnectorActions {
   setup: (mnemonic: string, salt: string) => Promise<void>;
-  disconnect: () => void;
   send: (data: string) => void;
 
   subscribe: () => void;
@@ -45,20 +44,26 @@ type InternalConnectorStore = ConnectorStore & {
   [SubscriptionManager.KEY]: SubscriptionManager<ConnectorModuleEvents>;
 };
 
+export const WORKING_STATUSES = new Set<`${STATUS}`>([
+  STATUS.READY,
+  STATUS.DISCOVERING,
+  STATUS.CONNECTING,
+  STATUS.CONNECTED,
+  STATUS.DISCONNECTED,
+]);
+
+const getInitialStatus = () => ConnectorModule.getStatus() || STATUS.IDLE;
+const getIsReady = (status: `${STATUS}`) => WORKING_STATUSES.has(status);
+
 const initialState: ConnectorState = {
-  brokerStatus: "idle",
+  status: getInitialStatus(),
+  isReady: getIsReady(getInitialStatus()),
   items: new Map(),
 };
 
 export const useConnector = create<InternalConnectorStore>()(
   subscribeWithSelector((set, get) => {
     const handlers: ConnectorModuleEvents = {
-      onConnected: () => {
-        log("Native event: connected.");
-      },
-      onDisconnected: () => {
-        log("Native event: disconnected.");
-      },
       onReceived: (payload) => {
         log(`Native event: data received (ID: ${payload.id}).`);
         set((state) => {
@@ -67,14 +72,17 @@ export const useConnector = create<InternalConnectorStore>()(
             id: payload.id,
             type: "received",
             content: payload.value,
-            time: payload.time || Date.now(),
+            time: payload.timestamp || Date.now(),
           });
           return { items: newItems };
         });
       },
       onStateChanged: (payload) => {
-        log(`Native event: state changed to ${payload.status}.`);
-        set({ brokerStatus: payload.status });
+        log(`Native event: state changed from ${get().status} to ${payload.status}.`);
+        set({ 
+          status: payload.status,
+          isReady: getIsReady(payload.status)
+        });
       }
     };
 
@@ -95,12 +103,6 @@ export const useConnector = create<InternalConnectorStore>()(
         }
       },
 
-      disconnect: () => {
-        ConnectorModule.disconnect().catch((err) => {
-          error("Promise disconnect() was rejected.", err);
-        })
-      },
-
       send: (data: string) => {
         ConnectorModule.send(data).catch((err) => {
           error("Promise send() was rejected.", err);
@@ -112,7 +114,10 @@ export const useConnector = create<InternalConnectorStore>()(
         // Sync initial status from native
         const currentStatus = ConnectorModule.getStatus();
         log(`Initial native status: ${currentStatus}`);
-        set({ brokerStatus: currentStatus });
+        set({ 
+          status: currentStatus || STATUS.IDLE,
+          isReady: getIsReady(currentStatus || STATUS.IDLE)
+        });
       },
 
       unsubscribe: () => {

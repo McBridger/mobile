@@ -26,7 +26,7 @@ class ConnectorModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("Connector")
 
-    Events("onConnected", "onDisconnected", "onReceived", "onStateChanged")
+    Events("onReceived", "onStateChanged")
 
     OnCreate {
       Log.d(TAG, "OnCreate: Initializing Broker and collecting messages.")
@@ -59,14 +59,8 @@ class ConnectorModule : Module() {
         Broker.state.collect { state ->
           Log.d(TAG, "onStateChange event: Broker state changed to $state")
           
-          // Send granular state to JS
-          sendEvent("onStateChanged", mapOf("status" to state.name.lowercase()))
-
-          when (state) {
-            Broker.State.CONNECTED -> sendEvent("onConnected")
-            Broker.State.DISCONNECTED -> sendEvent("onDisconnected")
-            else -> {}
-          }
+          // Send granular state to JS in UPPERCASE
+          sendEvent("onStateChanged", mapOf("status" to state.name))
         }
       }
     }
@@ -81,12 +75,6 @@ class ConnectorModule : Module() {
       Broker.setup(mnemonic, salt)
     }
 
-    AsyncFunction("isConnected") {
-      val isConnected = Broker.state.value == Broker.State.CONNECTED
-      Log.d(TAG, "isConnected: Current state is ${Broker.state.value}, returning $isConnected")
-      return@AsyncFunction isConnected
-    }
-
     Function("isReady") {
       val ready = EncryptionService.isReady()
       Log.d(TAG, "isReady: Returning $ready")
@@ -94,33 +82,9 @@ class ConnectorModule : Module() {
     }
 
     Function("getStatus") {
-      val status = Broker.state.value.name.lowercase()
+      val status = Broker.state.value.name
       Log.d(TAG, "getStatus: Returning $status")
       return@Function status
-    }
-
-    AsyncFunction("isConnected") {
-      val isConnected = Broker.state.value == Broker.State.CONNECTED
-      Log.d(TAG, "isConnected: Current state is ${Broker.state.value}, returning $isConnected")
-      return@AsyncFunction isConnected
-    }
-
-    AsyncFunction("connect") { address: String ->
-      Log.d(TAG, "connect: Attempting to connect to $address")
-      scope.launch {
-        Broker.connect(address)
-        Log.d(TAG, "connect: Broker.connect called for $address")
-      }
-      return@AsyncFunction null
-    }
-
-    AsyncFunction("disconnect") {
-      Log.d(TAG, "disconnect: Attempting to disconnect")
-      scope.launch {
-        Broker.disconnect()
-        Log.d(TAG, "disconnect: Broker.disconnect called")
-      }
-      return@AsyncFunction null
     }
 
     AsyncFunction("send") { data: String ->
@@ -145,18 +109,6 @@ class ConnectorModule : Module() {
       }
 
       return@AsyncFunction null
-    }
-
-    AsyncFunction("stop") {
-      Log.d(TAG, "stop: Stopping ForegroundService")
-      val context = appContext.reactContext?.applicationContext ?: run {
-        Log.e(TAG, "stop: Application context is null.")
-        return@AsyncFunction null
-      }
-      val intent = Intent(context, ForegroundService::class.java)
-      context.stopService(intent)
-      Log.d(TAG, "stop: Called stopService")
-      return@AsyncFunction null 
     }
 
     AsyncFunction("getHistory") {

@@ -1,12 +1,13 @@
-import { Item, useConnector } from "@/modules/connector";
+import { Item, STATUS, useConnector } from "@/modules/connector";
+import { Redirect } from "expo-router";
 import React, { useMemo } from "react";
 import { FlatList, StyleSheet, View } from "react-native";
-import { useShallow } from "zustand/react/shallow";
-import { useTheme, Button, Card, Text } from "react-native-paper";
+import { Card, Text, useTheme } from "react-native-paper";
 
 export default function Connection() {
-  const brokerStatus = useConnector((state) => state.brokerStatus);
-  const isConnected = brokerStatus === "connected";
+  const status = useConnector((state) => state.status);
+  const isReady = useConnector((state) => state.isReady);
+  const isConnected = status === STATUS.CONNECTED;
   const theme = useTheme();
 
   const _items = useConnector((state) => state.items);
@@ -15,7 +16,8 @@ export default function Connection() {
     [_items]
   );
 
-  const [disconnect] = useConnector(useShallow((state) => [state.disconnect]));
+  // Guard: If not ready, go to setup
+  if (!isReady) return <Redirect href="/setup" />;
 
   const renderItem = ({ item }: { item: Item }) => (
     <View style={styles.clipboardItem}>
@@ -56,20 +58,6 @@ export default function Connection() {
           </View>
         }
       />
-
-      {isConnected && (
-        <View style={styles.footer}>
-          <Button
-            textColor={theme.colors.onSurface}
-            buttonColor={theme.colors.primaryContainer}
-            mode="contained"
-            labelStyle={{ fontSize: 16, fontWeight: "bold" }}
-            onPress={disconnect}
-          >
-            Disconnect
-          </Button>
-        </View>
-      )}
     </View>
   );
 }
@@ -104,12 +92,5 @@ const styles = StyleSheet.create({
     color: "#999",
     fontSize: 14,
     lineHeight: 20,
-  },
-  footer: {
-    position: "absolute",
-    bottom: 30,
-    left: 0,
-    right: 0,
-    alignItems: "center",
   },
 });

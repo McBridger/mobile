@@ -9,20 +9,24 @@ import expo.modules.connector.crypto.EncryptionService
 import expo.modules.connector.interfaces.IBleTransport
 import expo.modules.connector.models.Message
 import expo.modules.connector.transports.ble.BleScanner
+import expo.modules.connector.transports.ble.BleTransport
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.launch
-import java.nio.ByteBuffer
+import kotlinx.coroutines.TimeoutCancellationException
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.UUID
+import no.nordicsemi.android.support.v18.scanner.ScanResult
+import kotlin.time.Duration.Companion.milliseconds
 
 object Broker {
     private const val TAG = "Broker"
     private val scope = CoroutineScope(Dispatchers.Default)
+    private val isInitialized = AtomicBoolean(false)
 
     private val _state = MutableStateFlow(State.IDLE)
     val state = _state.asStateFlow()
@@ -38,27 +42,91 @@ object Broker {
     private var discoveryJob: Job? = null
     private var setupJob: Job? = null
     private var transportCollectionJob: Job? = null
-    private var isAutoDiscoveryEnabled = true
 
     fun init(context: Context): Broker {
-        val applicationContext = context.applicationContext
-        Log.d(TAG, "init: Called with context hash: ${context.hashCode()}, applicationContext hash: ${applicationContext.hashCode()}")
-
-        if (!::appContext.isInitialized) {
-            this.appContext = applicationContext
-            this.history = History.getInstance(this.appContext)
-            this.isAutoDiscoveryEnabled = true
-            Log.i(TAG, "init: Broker initialized successfully for the first time.")
+        if (isInitialized.getAndSet(true)) {
+            Log.d(TAG, "init: Broker already initialized, skipping.")
             return this
         }
 
-        if (this.appContext != applicationContext) {
-            Log.e(TAG, "init: Attempt to re-initialize Broker with a different ApplicationContext! Existing hash: ${this.appContext.hashCode()}, New hash: ${applicationContext.hashCode()}")
-            throw IllegalStateException("Broker has already been initialized with a different ApplicationContext. Only one ApplicationContext is supported per process.")
-        }
-
-        Log.d(TAG, "init: Broker already initialized with the same ApplicationContext. Doing nothing.")
+        this.appContext = context.applicationContext
+        this.history = History.getInstance(this.appContext)
+        
+        // Start the reactive discovery loop once
+        startDiscoveryLoop()
+        
+        Log.i(TAG, "init: Broker initialized successfully.")
         return this
+    }
+
+    /**
+     * The heart of Magic Sync: A reactive loop that monitors the state
+     * and automatically manages the scanning lifecycle.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun startDiscoveryLoop() {
+        discoveryJob?.cancel()
+        discoveryJob = scope.launch {
+            state
+                .map({ currentState ->
+                    // Scan in any of these states
+                    currentState == State.READY || 
+                    currentState == State.DISCOVERING ||
+                    currentState == State.DISCONNECTED || 
+                    currentState == State.ERROR
+                })
+                .distinctUntilChanged()
+                .flatMapLatest({ shouldScan ->
+                    if (!shouldScan) {
+                        Log.i(TAG, "Discovery: DEACTIVATED (State: ${state.value})")
+                        return@flatMapLatest flowOf()
+                    }
+
+                    val advertiseUuid = EncryptionService.deriveUuid("McBridge_Advertise_UUID")
+                    if (advertiseUuid == null) {
+                        Log.e(TAG, "Discovery: UUID null, cannot scan")
+                        return@flatMapLatest flowOf()
+                    }
+
+                    Log.i(TAG, "Discovery: STARTING reactive loop for $advertiseUuid")
+                    
+                    // Use the watchdog to keep the scanner fresh
+                    scanWithWatchdog(advertiseUuid)
+                })
+                .collect({ scanResult ->
+                    Log.i(TAG, "Discovery: Bingo! Device found: ${scanResult.device.address}")
+                    // connect() will set state to CONNECTING, which triggers flatMapLatest 
+                    // to cancel this scan flow automatically.
+                    connect(scanResult.device.address)
+                })
+        }
+    }
+
+    /**
+     * Creates a self-healing scan flow.
+     */
+    @OptIn(FlowPreview::class)
+    private fun scanWithWatchdog(uuid: UUID): Flow<ScanResult> {
+        return scanner.scan(uuid)
+            .onStart { 
+                Log.d(TAG, "Watchdog: Scan started/restarted")
+                _state.value = State.DISCOVERING 
+            }
+            .filter { it.rssi > -85 }
+            .timeout(15000.milliseconds) // Throw TimeoutCancellationException if quiet for 15s
+            .retry { e ->
+                if (e is TimeoutCancellationException) {
+                    Log.d(TAG, "Watchdog: No devices found in 15s. Restarting to refresh BT stack...")
+                    true // true = restart the flow
+                } else {
+                    Log.e(TAG, "Watchdog: Fatal scan error", e)
+                    _state.value = State.ERROR
+                    false // false = stop and propagate error
+                }
+            }
+            .catch { e ->
+                Log.e(TAG, "Watchdog: Flow caught exception: ${e.message}")
+            }
     }
 
     /**
@@ -81,15 +149,11 @@ object Broker {
                 
                 _state.value = State.TRANSPORT_INITIALIZING
                 
-                // Ensure auto-discovery is enabled for the new setup
-                isAutoDiscoveryEnabled = true
-                
-                val transport = expo.modules.connector.transports.ble.BleTransport(appContext)
+                val transport = BleTransport(appContext)
                 registerBle(transport)
                 
                 _state.value = State.READY
-                Log.i(TAG, "setup: Magic Sync is READY. Starting discovery.")
-                tryDiscovery()
+                Log.i(TAG, "setup: Magic Sync is READY. The discovery loop will pick this up.")
             } catch (e: Exception) {
                 Log.e(TAG, "setup: Failed during initialization", e)
                 _state.value = State.ERROR
@@ -103,7 +167,6 @@ object Broker {
      */
     fun reset() {
         Log.i(TAG, "reset: Full Broker reset initiated.")
-        discoveryJob?.cancel()
         setupJob?.cancel()
         transportCollectionJob?.cancel()
         
@@ -127,40 +190,8 @@ object Broker {
             Log.e(TAG, "reset: Error clearing keys", e)
         }
 
-        // 3. Go to IDLE state
+        // 3. Go to IDLE state (discovery loop will stop automatically)
         _state.value = State.IDLE
-    }
-
-    /**
-     * Internal logic to trigger discovery if conditions are met.
-     */
-    private fun tryDiscovery() {
-        if (!isAutoDiscoveryEnabled) return
-        
-        // Allow scanning if we are READY, IDLE, or DISCONNECTED
-        val currentState = state.value
-        if (currentState != State.IDLE && currentState != State.READY && currentState != State.DISCONNECTED) {
-            Log.d(TAG, "tryDiscovery: Skip scanning, state is $currentState")
-            return
-        }
-
-        if (discoveryJob?.isActive == true) return
-
-        val advertiseUuid = EncryptionService.deriveUuid("McBridge_Advertise_UUID") ?: run {
-            Log.w(TAG, "tryDiscovery: Encryption not ready, cannot derive UUID.")
-            return
-        }
-
-        Log.i(TAG, "tryDiscovery: Starting Magic Sync discovery for $advertiseUuid")
-        _state.value = State.DISCOVERING
-        discoveryJob = scope.launch {
-            scanner.scan(advertiseUuid).collect { device ->
-                Log.i(TAG, "Magic Sync: Found bridge at ${device.address}. Connecting...")
-                // Found a bridge - cancel discovery and attempt connection
-                discoveryJob?.cancel()
-                connect(device.address)
-            }
-        }
     }
 
     fun registerBle(bleTransport: IBleTransport): Broker {
@@ -182,13 +213,20 @@ object Broker {
             }
         }
 
-        Log.i(TAG, "registerBle: BLE Transport registered. Trying initial discovery.")
-        tryDiscovery()
+        Log.i(TAG, "registerBle: BLE Transport registered. Discovery loop will handle connection.")
         return this
     }
 
     suspend fun connect(address: String) {
+        val currentState = state.value
+        if (currentState == State.CONNECTING || currentState == State.CONNECTED) {
+            Log.d(TAG, "connect: Already $currentState, ignoring connection request to $address")
+            return
+        }
+
         Log.d(TAG, "connect: Attempting to connect to $address")
+        // Trigger state change to stop the scanner via flatMapLatest
+        _state.value = State.CONNECTING
         bleTransport.connect(address)
         Log.d(TAG, "connect: bleTransport.connect called for $address")
     }
@@ -252,7 +290,6 @@ object Broker {
         when (state) {
             IBleTransport.ConnectionState.CONNECTED -> {
                 Log.i(TAG, "onStateChange: Broker state changed to CONNECTED (physical)")
-                discoveryJob?.cancel() // Connection established, stop any active discovery
             }
             IBleTransport.ConnectionState.READY -> {
                 Log.i(TAG, "onStateChange: Broker state changed to READY_CONNECTED (internal)")
@@ -263,19 +300,16 @@ object Broker {
                 Log.i(TAG, "Welcome message sent")
             }
             IBleTransport.ConnectionState.DISCONNECTED -> {
+                Log.i(TAG, "onStateChange: Broker state changed to DISCONNECTED.")
                 _state.value = State.DISCONNECTED
-                Log.i(TAG, "onStateChange: Broker state changed to DISCONNECTED. Checking rescan...")
-                if (isAutoDiscoveryEnabled) tryDiscovery()
             }
             IBleTransport.ConnectionState.CONNECTING -> {
-                _state.value = State.CONNECTING
                 Log.i(TAG, "onStateChange: Broker state changed to CONNECTING")
-                discoveryJob?.cancel()
+                _state.value = State.CONNECTING
             }
             IBleTransport.ConnectionState.POWERED_OFF -> {
-                _state.value = State.ERROR
                 Log.e(TAG, "onStateChange: Broker state changed to ERROR (Bluetooth POWERED_OFF)")
-                discoveryJob?.cancel()
+                _state.value = State.ERROR
             }
             else -> {
                 Log.w(TAG, "onStateChange: Unhandled BLE connection state: $state")
@@ -296,4 +330,3 @@ object Broker {
         ERROR
     }
 }
-
