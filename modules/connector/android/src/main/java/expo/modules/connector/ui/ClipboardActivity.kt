@@ -7,11 +7,13 @@ import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
 import expo.modules.connector.core.Broker
+import org.koin.android.ext.android.inject
 import java.util.Optional
 
 class ClipboardActivity : Activity() {
     private val TAG = "ClipboardActivity"
     private var isClipboardProcessed = false
+    private val broker: Broker by inject()
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
@@ -28,15 +30,6 @@ class ClipboardActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Log.d(TAG, "Activity created.")
-        Broker.init(applicationContext) 
-    }
-
-    override fun onPause() {
-        super.onPause()
-        if (isFinishing) return
-
-        Log.d(TAG, "Activity paused. Finishing now.")
-        finish()
     }
 
     private fun sendClipboardData() {
@@ -47,22 +40,19 @@ class ClipboardActivity : Activity() {
             return
         }
 
-        Broker.clipboardUpdate(dataToSend)
+        broker.clipboardUpdate(dataToSend)
         Log.i(TAG, "Clipboard data sent successfully: $dataToSend")
         showToast("Clipboard data sent.")
     }
 
     private fun getClipboardText(): String? {
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-
-        return Optional.ofNullable(clipboard)
-            .filter { it.hasPrimaryClip() }
-            .map { it.primaryClip }
-            .filter { it?.itemCount ?: 0 > 0 }
-            .map { it?.getItemAt(0)?.text }
-            .map { it?.toString() }
-            .filter { !it.isNullOrEmpty() }
-            .orElse(null)
+        
+        return clipboard.primaryClip?.takeIf { it.itemCount > 0 }
+            ?.getItemAt(0)
+            ?.text
+            ?.toString()
+            ?.takeIf { it.isNotEmpty() }
     }
 
     private fun showToast(message: String) {

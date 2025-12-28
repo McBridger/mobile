@@ -12,6 +12,7 @@ interface IBleTransport {
     suspend fun disconnect()
 
     suspend fun send(message: Message): Boolean
+    fun stop()
 
     enum class ConnectionState {
         DISCONNECTED,

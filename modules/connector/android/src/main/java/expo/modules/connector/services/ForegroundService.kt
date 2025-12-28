@@ -12,17 +12,14 @@ import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import expo.modules.connector.R
 import expo.modules.connector.core.Broker
-import expo.modules.connector.transports.ble.BleTransport
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
+import org.koin.android.ext.android.inject
 
 class ForegroundService : Service() {
 
     private val scope = CoroutineScope(Dispatchers.Main + Job())
     private lateinit var notificationManager: NotificationManager
+    private val broker: Broker by inject()
 
     companion object {
         private const val TAG = "BridgerService"
@@ -30,30 +27,20 @@ class ForegroundService : Service() {
         private var CHANNEL_ID = "BridgerForegroundServiceChannel"
     }
 
-    override fun onBind(intent: Intent?): IBinder? {
-        Log.d(TAG, "onBind: Service binding.")
-        return null
-    }
+    override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "onCreate: Service created.")
-        
-        // Ensure unique ID per package if multiple apps use this lib (unlikely but safe)
         SERVICE_NOTIFICATION_ID += applicationContext.packageName.hashCode()
         CHANNEL_ID += applicationContext.packageName
         
         notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         createNotificationChannel()
 
-        // 1. Initialize Broker (Idempotent)
-        Log.d(TAG, "onCreate: Initializing Broker.")
-        Broker.init(applicationContext)
-
-        // 3. Listen to state changes for Notification updates
         scope.launch {
             Log.d(TAG, "onCreate: Starting to collect Broker state changes for notification updates.")
-            Broker.state.collect { state ->
+            broker.state.collect { state ->
                 Log.d(TAG, "onCreate: Broker state changed to $state, updating notification.")
                 updateNotificationForState(state)
             }
