@@ -1,14 +1,17 @@
 package expo.modules.connector.transports.ble
-     
+
 import android.bluetooth.BluetoothDevice
 import android.content.Context
 import android.util.Log
-import expo.modules.connector.crypto.EncryptionService
 import expo.modules.connector.interfaces.IBleTransport
 import expo.modules.connector.interfaces.IBleManager
+import expo.modules.connector.interfaces.IEncryptionService
+import expo.modules.connector.crypto.decryptMessage
+import expo.modules.connector.crypto.encryptMessage
 import expo.modules.connector.models.Message
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,7 +22,8 @@ import no.nordicsemi.android.ble.observer.ConnectionObserver
 
 class BleTransport(
     private val context: Context,
-    private val bleManager: IBleManager = BleManager(context),
+    private val bleManager: IBleManager,
+    private val encryptionService: IEncryptionService,
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO)
 ) : IBleTransport {
 
@@ -32,8 +36,8 @@ class BleTransport(
     init {
         Log.d(TAG, "init: BleTransport initializing.")
         
-        val serviceUuid = EncryptionService.deriveUuid("McBridge_Service_UUID")
-        val charUuid = EncryptionService.deriveUuid("McBridge_Characteristic_UUID")
+        val serviceUuid = encryptionService.deriveUuid("McBridge_Service_UUID")
+        val charUuid = encryptionService.deriveUuid("McBridge_Characteristic_UUID")
         
         if (serviceUuid != null && charUuid != null) {
             Log.d(TAG, "init: Configured with Service: $serviceUuid, Char: $charUuid")
@@ -56,11 +60,15 @@ class BleTransport(
 
             Log.d(TAG, "onDataReceived: Raw bytes received: ${rawBytes.size} bytes from ${device.address}")
             try {
-                val message = Message.fromEncryptedData(rawBytes, device.address)
-                Log.i(TAG, "onDataReceived: Successfully decrypted message Type: ${message.getType()}, ID: ${message.id}")
-                scope.launch { _incomingMessages.emit(message) }
+                val message = encryptionService.decryptMessage(rawBytes, device.address)
+                if (message != null) {
+                    Log.i(TAG, "onDataReceived: Successfully decrypted message Type: ${message.getType()}, ID: ${message.id}")
+                    scope.launch { _incomingMessages.emit(message) }
+                } else {
+                    Log.e(TAG, "onDataReceived: Failed to decrypt or parse message (result was null)")
+                }
             } catch (e: Exception) {
-                Log.e(TAG, "onDataReceived: Failed to decrypt or parse message: ${e.message}")
+                Log.e(TAG, "onDataReceived: Exception during decryption: ${e.message}")
             }
         }
 
@@ -119,7 +127,7 @@ class BleTransport(
             return false
         }
 
-        val encryptedData = message.toEncryptedData()
+        val encryptedData = encryptionService.encryptMessage(message)
         if (encryptedData == null) {
             Log.e(TAG, "send: Encryption failed for message ID: ${message.id}")
             return false
@@ -130,6 +138,11 @@ class BleTransport(
         Log.i(TAG, "send: Message ID: ${message.id} sent successfully.")
 
         return true
+    }
+
+    override fun stop() {
+        Log.d(TAG, "stop: Stopping transport and cancelling scope.")
+        scope.cancel()
     }
 
     companion object {

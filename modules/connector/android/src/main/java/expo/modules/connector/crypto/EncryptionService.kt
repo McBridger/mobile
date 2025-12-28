@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import expo.modules.connector.interfaces.IEncryptionService
 import java.nio.ByteBuffer
 import java.security.spec.KeySpec
 import java.util.UUID
@@ -16,31 +17,24 @@ import javax.crypto.spec.PBEKeySpec
 import javax.crypto.spec.SecretKeySpec
 import kotlin.math.ceil
 
-object EncryptionService {
-    private const val TAG = "EncryptionService"
-    private const val PREFS_NAME = "mcbridge_secure_prefs"
-    private const val KEY_MASTER_KEY = "master_key_hex"
-    private const val KEY_MNEMONIC = "mnemonic"
-    
-    private const val GCM_NONCE_LENGTH = 12
-    private const val GCM_TAG_LENGTH = 16
-    
+class EncryptionService(private val context: Context) : IEncryptionService {
     private var masterKey: ByteArray? = null
     private var mnemonic: String? = null
-
-    fun isReady(): Boolean = masterKey != null
     
-    fun getMnemonic(): String? = mnemonic
+    // Cache for derived results to avoid heavy re-computation
+    private val derivedCache = mutableMapOf<String, ByteArray>()
+    private val uuidCache = mutableMapOf<String, UUID>()
 
-    /**
-     * One-time setup: derives master key via PBKDF2 and persists it along with the mnemonic.
-     */
-    fun setup(context: Context, mnemonic: String, saltHex: String) {
-        Log.i(TAG, "setup: Performing one-time key derivation.")
+    override fun isReady(): Boolean = masterKey != null
+    
+    override fun getMnemonic(): String? = mnemonic
+
+    override fun setup(mnemonic: String, saltHex: String) {
+        Log.i(TAG, "setup: Performing key derivation.")
+        clearCache()
         this.mnemonic = mnemonic
         val saltBytes = hexToBytes(saltHex)
         
-        // Heavy derivation happens here
         val iterations = 600_000
         val keyLength = 256
         val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
@@ -48,59 +42,60 @@ object EncryptionService {
         val derivedKey = factory.generateSecret(spec).encoded
         this.masterKey = derivedKey
         
-        persist(context, mnemonic, bytesToHex(derivedKey))
+        persist(mnemonic, bytesToHex(derivedKey))
     }
 
-    /**
-     * Fast load: retrieves already derived master key from secure storage.
-     */
-    fun load(context: Context): Boolean {
+    override fun load(): Boolean {
         return try {
-            val prefs = getSharedPrefs(context)
+            Log.d(TAG, "load: Attempting to open EncryptedSharedPreferences...")
+            val prefs = getSharedPrefs()
             val savedMasterKeyHex = prefs.getString(KEY_MASTER_KEY, null)
             val savedMnemonic = prefs.getString(KEY_MNEMONIC, null)
 
-            if (savedMasterKeyHex != null) {
-                Log.i(TAG, "load: Found saved master key. System ready.")
-                this.masterKey = hexToBytes(savedMasterKeyHex)
-                this.mnemonic = savedMnemonic
-                true
-            } else {
-                false
+            if (savedMasterKeyHex == null) {
+                Log.w(TAG, "load: No master key found in storage.")
+                return false
             }
+
+            Log.i(TAG, "load: Found saved master key. System ready.")
+            this.masterKey = hexToBytes(savedMasterKeyHex)
+            this.mnemonic = savedMnemonic
+            true
         } catch (e: Exception) {
-            Log.e(TAG, "load: Failed to load credentials: ${e.message}")
+            Log.e(TAG, "load: Fatal error while reading encrypted storage: ${e.message}", e)
             false
         }
     }
 
-    private fun persist(context: Context, mnemonic: String, masterKeyHex: String) {
+    private fun persist(mnemonic: String, masterKeyHex: String) {
         try {
-            val prefs = getSharedPrefs(context)
-            prefs.edit().apply {
+            getSharedPrefs().edit().apply {
                 putString(KEY_MNEMONIC, mnemonic)
                 putString(KEY_MASTER_KEY, masterKeyHex)
                 apply()
             }
-            Log.d(TAG, "persist: Credentials saved securely.")
         } catch (e: Exception) {
             Log.e(TAG, "persist: Error saving: ${e.message}")
         }
     }
 
-    fun clear(context: Context) {
+    override fun clear() {
         try {
-            val prefs = getSharedPrefs(context)
-            prefs.edit().clear().apply()
+            getSharedPrefs().edit().clear().apply()
             this.masterKey = null
             this.mnemonic = null
-            Log.i(TAG, "clear: Credentials cleared from secure storage.")
+            clearCache()
         } catch (e: Exception) {
-            Log.e(TAG, "clear: Error clearing credentials: ${e.message}")
+            Log.e(TAG, "clear: Error clearing: ${e.message}")
         }
     }
 
-    private fun getSharedPrefs(context: Context): SharedPreferences {
+    private fun clearCache() {
+        derivedCache.clear()
+        uuidCache.clear()
+    }
+
+    private fun getSharedPrefs(): SharedPreferences {
         val masterKey = MasterKey.Builder(context)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
             .build()
@@ -114,19 +109,32 @@ object EncryptionService {
         )
     }
 
-    fun derive(info: String, byteCount: Int): ByteArray? {
+    override fun derive(info: String, byteCount: Int): ByteArray? {
+        val cacheKey = "$info-$byteCount"
+        derivedCache[cacheKey]?.let { return it }
+
         val ikm = masterKey ?: return null
-        val prk = hkdfExtract(ikm)
-        return hkdfExpand(prk, info.toByteArray(Charsets.UTF_8), byteCount)
+        val hmac = Mac.getInstance("HmacSHA256")
+        val salt = ByteArray(hmac.macLength) { 0 }
+        hmac.init(SecretKeySpec(salt, "HmacSHA256"))
+        val prk = hmac.doFinal(ikm)
+
+        return hkdfExpand(prk, info.toByteArray(Charsets.UTF_8), byteCount).also {
+            derivedCache[cacheKey] = it
+        }
     }
 
-    fun deriveUuid(info: String): UUID? {
+    override fun deriveUuid(info: String): UUID? {
+        uuidCache[info]?.let { return it }
+        
         val bytes = derive(info, 16) ?: return null
         val buffer = ByteBuffer.wrap(bytes)
-        return UUID(buffer.long, buffer.long)
+        return UUID(buffer.long, buffer.long).also {
+            uuidCache[info] = it
+        }
     }
 
-    fun encrypt(data: ByteArray, keyBytes: ByteArray): ByteArray? {
+    override fun encrypt(data: ByteArray, keyBytes: ByteArray): ByteArray? {
         return try {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             val nonce = ByteArray(GCM_NONCE_LENGTH).apply { java.security.SecureRandom().nextBytes(this) }
@@ -134,11 +142,17 @@ object EncryptionService {
             cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(keyBytes, "AES"), spec)
             val cipherText = cipher.doFinal(data)
             ByteBuffer.allocate(nonce.size + cipherText.size).put(nonce).put(cipherText).array()
-        } catch (e: Exception) { null }
+        } catch (e: Exception) {
+            Log.e(TAG, "encrypt: Failed to encrypt data: ${e.message}", e)
+            null
+        }
     }
 
-    fun decrypt(combinedData: ByteArray, keyBytes: ByteArray): ByteArray? {
-        if (combinedData.size < GCM_NONCE_LENGTH + GCM_TAG_LENGTH) return null
+    override fun decrypt(combinedData: ByteArray, keyBytes: ByteArray): ByteArray? {
+        if (combinedData.size < GCM_NONCE_LENGTH + GCM_TAG_LENGTH) {
+            Log.e(TAG, "decrypt: Data too short (size: ${combinedData.size})")
+            return null
+        }
         return try {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             val nonce = combinedData.sliceArray(0 until GCM_NONCE_LENGTH)
@@ -146,14 +160,10 @@ object EncryptionService {
             val spec = GCMParameterSpec(GCM_TAG_LENGTH * 8, nonce)
             cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(keyBytes, "AES"), spec)
             cipher.doFinal(encrypted)
-        } catch (e: Exception) { null }
-    }
-
-    private fun hkdfExtract(ikm: ByteArray): ByteArray {
-        val hmac = Mac.getInstance("HmacSHA256")
-        val salt = ByteArray(hmac.macLength) { 0 }
-        hmac.init(SecretKeySpec(salt, "HmacSHA256"))
-        return hmac.doFinal(ikm)
+        } catch (e: Exception) {
+            Log.e(TAG, "decrypt: Failed to decrypt data: ${e.message}", e)
+            null
+        }
     }
 
     private fun hkdfExpand(prk: ByteArray, info: ByteArray, outLen: Int): ByteArray {
@@ -170,12 +180,20 @@ object EncryptionService {
 
     private fun hexToBytes(hex: String): ByteArray {
         val s = hex.removePrefix("0x")
-        return ByteArray(s.length / 2) { i ->
-            ((Character.digit(s[i * 2], 16) shl 4) + Character.digit(s[i * 2 + 1], 16)).toByte()
-        }
+        check(s.length % 2 == 0) { "Must have an even length" }
+        return s.chunked(2)
+            .map { it.toInt(16).toByte() }
+            .toByteArray()
     }
 
-    private fun bytesToHex(bytes: ByteArray): String {
-        return bytes.joinToString("") { "%02x".format(it) }
+    private fun bytesToHex(bytes: ByteArray): String = bytes.joinToString("") { "%02x".format(it) }
+
+    companion object {
+        private const val TAG = "EncryptionService"
+        private const val PREFS_NAME = "mcbridge_secure_prefs"
+        private const val KEY_MASTER_KEY = "master_key_hex"
+        private const val KEY_MNEMONIC = "mnemonic"
+        private const val GCM_NONCE_LENGTH = 12
+        private const val GCM_TAG_LENGTH = 16
     }
 }

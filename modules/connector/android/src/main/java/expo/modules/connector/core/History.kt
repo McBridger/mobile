@@ -15,12 +15,17 @@ import java.io.FileWriter
 import java.io.IOException
 import java.util.concurrent.ConcurrentLinkedQueue
 
-class History private constructor(private val historyFile: File) {
+class History(context: Context) {
     private val gson = Gson()
     private val historyQueue = ConcurrentLinkedQueue<String>()
     
     // Scope for IO operations to avoid blocking UI thread
     private val scope = CoroutineScope(Dispatchers.IO)
+    
+    private val historyFile: File by lazy {
+        val packageName = context.packageName
+        File(context.filesDir, "bridger_history_$packageName.json")
+    }
 
     init {
         // Load history in background
@@ -85,17 +90,5 @@ class History private constructor(private val historyFile: File) {
 
     companion object {
         private const val TAG = "History"
-        @Volatile
-        private var INSTANCE: History? = null
-
-        fun getInstance(context: Context): History {
-            return INSTANCE ?: synchronized(this) {
-                val appContext = context.applicationContext
-                val packageName = appContext.packageName
-                val file = File(appContext.filesDir, "bridger_history_$packageName.json")
-
-                INSTANCE ?: History(file).also { INSTANCE = it }
-            }
-        }
     }
 }
