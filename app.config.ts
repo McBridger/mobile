@@ -4,7 +4,7 @@ import { capitalize } from "lodash";
 import { z } from "zod";
 
 const Extra = z.object({
-  APP_VARIANT: z.enum(["dev", "preview", "prod"]),
+  APP_VARIANT: z.enum(["dev", "preview", "prod", "mock"]),
   ENCRYPTION_SALT: z.string(),
   MNEMONIC_LENGTH: z.number().default(6),
   MNEMONIC_LOCAL: z.string().optional(),

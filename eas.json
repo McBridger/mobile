@@ -17,6 +17,18 @@
         "APP_VARIANT": "preview"
       }
     },
+    "mock": {
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleDebug"
+      },
+      "credentialsSource": "local",
+      "env": {
+        "APP_VARIANT": "mock",
+        "WITH_MOCK": "true",
+        "ENCRYPTION_SALT": "0123456789abcdef"
+      }
+    },
     "prod": {
       "android": {
         "buildType": "apk"

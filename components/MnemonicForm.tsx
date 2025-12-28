@@ -47,6 +47,8 @@ export const MnemonicForm = ({ length, onSave }: Props) => {
           <View key={index} style={styles.inputWrapper}>
             <Text style={styles.label}>Word #{index + 1}</Text>
             <TextInput
+              testID={`mnemonic-input-${index}`}
+              accessibilityLabel={`mnemonic-input-${index}`}
               style={[styles.input, !isValid(word) && styles.inputInvalid]}
               value={word}
               onChangeText={(text) => handleInputChange(text, index)}

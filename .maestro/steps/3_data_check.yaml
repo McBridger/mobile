@@ -1,0 +1,6 @@
+appId: com.mc.bridger.mock
+---
+- assertVisible: "Maestro"
+- assertVisible: "RECEIVED:"
+- takeScreenshot: "data-received"
+- stopApp

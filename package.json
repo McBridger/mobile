@@ -8,6 +8,8 @@
     "android:prebuild": "APP_VARIANT=dev expo prebuild --clean --platform android",
     "android:check": "APP_VARIANT=dev bunx expo doctor",
     "android:dev": "export APP_VARIANT=dev && expo prebuild --clean --platform android && expo run:android",
+    "e2e:build": "export WITH_MOCK=true && export APP_VARIANT=mock && export ENCRYPTION_SALT=0123456789abcdef && bunx expo prebuild --platform android && cd android && ./gradlew assembleRelease",
+    "e2e:test": "export APP_VARIANT=mock && bun .maestro/runner.ts",
     "android:build": "dotenvx run -- eas build --local --platform android --profile preview",
     "android:build:prod": "dotenvx run -- eas build --local --platform android --profile prod",
     "android:build:debug": "cd android && ./gradlew assembleDebug",
