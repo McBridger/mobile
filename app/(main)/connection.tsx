@@ -3,6 +3,7 @@ import { Redirect } from "expo-router";
 import React, { useMemo } from "react";
 import { FlatList, StyleSheet, View } from "react-native";
 import { Card, Text, useTheme } from "react-native-paper";
+import { LinearGradient } from "expo-linear-gradient";
 
 export default function Connection() {
   const status = useConnector((state) => state.status);
@@ -21,8 +22,26 @@ export default function Connection() {
 
   const renderItem = ({ item }: { item: Item }) => (
     <View style={styles.clipboardItem}>
-      <Card style={{ backgroundColor: theme.colors.surfaceContainerHigh }}>
-        <Card.Content>
+      <Card style={styles.clipboardCard}>
+        <LinearGradient
+          start={{ x: 0, y: 1 }}
+          end={{ x: 1, y: 0 }}
+          colors={[
+            "#303030",
+            "#2e2e31",
+            "#2b2c32",
+            "#282a33",
+            "#232934",
+            "#252b3d",
+            "#2a2c46",
+            "#332c4d",
+            "#542952",
+            "#752047",
+            "#8c1f2f",
+            "#923307",
+          ]}
+          style={{ padding: 16 }}
+        >
           <Text
             variant="titleMedium"
             style={[styles.itemType, { color: theme.colors.primary }]}
@@ -35,7 +54,7 @@ export default function Connection() {
           <Text variant="labelMedium" style={styles.itemTimestamp}>
             {new Date(item.time).toLocaleTimeString()}
           </Text>
-        </Card.Content>
+        </LinearGradient>
       </Card>
     </View>
   );
@@ -72,9 +91,14 @@ const styles = StyleSheet.create({
   clipboardItem: {
     marginBottom: 8,
   },
+  clipboardCard: {
+    margin: 10,
+    overflow: "hidden",
+    elevation: 4,
+  },
   itemType: {
     fontWeight: "bold",
-     marginBottom: 4,
+    marginBottom: 4,
   },
   itemContent: {
     marginBottom: 8,
