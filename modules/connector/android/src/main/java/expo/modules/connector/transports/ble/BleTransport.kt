@@ -1,13 +1,17 @@
 package expo.modules.connector.transports.ble
-     
-import android.bluetooth.BluetoothManager
+
+import android.bluetooth.BluetoothDevice
 import android.content.Context
 import android.util.Log
-import expo.modules.connector.crypto.EncryptionService
 import expo.modules.connector.interfaces.IBleTransport
+import expo.modules.connector.interfaces.IBleManager
+import expo.modules.connector.interfaces.IEncryptionService
+import expo.modules.connector.crypto.decryptMessage
+import expo.modules.connector.crypto.encryptMessage
 import expo.modules.connector.models.Message
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,12 +19,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import no.nordicsemi.android.ble.data.Data
 import no.nordicsemi.android.ble.observer.ConnectionObserver
-import java.nio.ByteBuffer
-import java.util.UUID
 
 class BleTransport(
     private val context: Context,
-    private val bleManager: BleManager = BleManager(context),
+    private val bleManager: IBleManager,
+    private val encryptionService: IEncryptionService,
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO)
 ) : IBleTransport {
 
@@ -33,8 +36,8 @@ class BleTransport(
     init {
         Log.d(TAG, "init: BleTransport initializing.")
         
-        val serviceUuid = EncryptionService.deriveUuid("McBridge_Service_UUID")
-        val charUuid = EncryptionService.deriveUuid("McBridge_Characteristic_UUID")
+        val serviceUuid = encryptionService.deriveUuid("McBridge_Service_UUID")
+        val charUuid = encryptionService.deriveUuid("McBridge_Characteristic_UUID")
         
         if (serviceUuid != null && charUuid != null) {
             Log.d(TAG, "init: Configured with Service: $serviceUuid, Char: $charUuid")
@@ -48,50 +51,54 @@ class BleTransport(
 
     private fun setupCallbacks() {
         Log.d(TAG, "setupCallbacks: Setting up data received and connection observers.")
-        bleManager.onDataReceived = onData@{ device, data ->
+        bleManager.onDataReceived = onData@{ device: BluetoothDevice, data: Data ->
             val rawBytes = data.value
             if (rawBytes == null) {
                 Log.w(TAG, "onDataReceived: Received data, but it was empty.")
                 return@onData
             }
-            
+
             Log.d(TAG, "onDataReceived: Raw bytes received: ${rawBytes.size} bytes from ${device.address}")
             try {
-                val message = Message.fromEncryptedData(rawBytes, device.address)
-                Log.i(TAG, "onDataReceived: Successfully decrypted message Type: ${message.getType()}, ID: ${message.id}")
-                scope.launch { _incomingMessages.emit(message) }
+                val message = encryptionService.decryptMessage(rawBytes, device.address)
+                if (message != null) {
+                    Log.i(TAG, "onDataReceived: Successfully decrypted message Type: ${message.getType()}, ID: ${message.id}")
+                    scope.launch { _incomingMessages.emit(message) }
+                } else {
+                    Log.e(TAG, "onDataReceived: Failed to decrypt or parse message (result was null)")
+                }
             } catch (e: Exception) {
-                Log.e(TAG, "onDataReceived: Failed to decrypt or parse message: ${e.message}")
+                Log.e(TAG, "onDataReceived: Exception during decryption: ${e.message}")
             }
         }
 
-        bleManager.connectionObserver = object : ConnectionObserver {
-            override fun onDeviceConnecting(device: android.bluetooth.BluetoothDevice) {
+        bleManager.observer = object : ConnectionObserver {
+            override fun onDeviceConnecting(device: BluetoothDevice) {
                 Log.d(TAG, "onDeviceConnecting: ${device.address}")
                 _connectionState.value = IBleTransport.ConnectionState.CONNECTING
             }
 
-            override fun onDeviceConnected(device: android.bluetooth.BluetoothDevice) {
+            override fun onDeviceConnected(device: BluetoothDevice) {
                 Log.i(TAG, "onDeviceConnected: ${device.address}")
                 _connectionState.value = IBleTransport.ConnectionState.CONNECTED
             }
 
-            override fun onDeviceFailedToConnect(device: android.bluetooth.BluetoothDevice, reason: Int) {
+            override fun onDeviceFailedToConnect(device: BluetoothDevice, reason: Int) {
                 Log.e(TAG, "onDeviceFailedToConnect: ${device.address}, reason: $reason")
                 _connectionState.value = IBleTransport.ConnectionState.DISCONNECTED
             }
 
-            override fun onDeviceReady(device: android.bluetooth.BluetoothDevice) {
+            override fun onDeviceReady(device: BluetoothDevice) {
                 Log.i(TAG, "onDeviceReady: ${device.address} - Device is ready for communication.")
                 _connectionState.value = IBleTransport.ConnectionState.READY
             }
 
-            override fun onDeviceDisconnected(device: android.bluetooth.BluetoothDevice, reason: Int) {
+            override fun onDeviceDisconnected(device: BluetoothDevice, reason: Int) {
                 Log.i(TAG, "onDeviceDisconnected: ${device.address}, reason: $reason")
                 _connectionState.value = IBleTransport.ConnectionState.DISCONNECTED
             }
             
-            override fun onDeviceDisconnecting(device: android.bluetooth.BluetoothDevice) {
+            override fun onDeviceDisconnecting(device: BluetoothDevice) {
                 Log.d(TAG, "onDeviceDisconnecting: ${device.address}")
             }
         }
@@ -99,20 +106,9 @@ class BleTransport(
 
     override suspend fun connect(address: String) {
         Log.d(TAG, "connect: Attempting to connect to $address")
-        val adapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
-        if (adapter == null || !adapter.isEnabled) {
-            Log.e(TAG, "connect: Bluetooth adapter is null or not enabled.")
-            _connectionState.value = IBleTransport.ConnectionState.POWERED_OFF
-            return
-        }
         try {
-            bleManager
-                .connect(adapter.getRemoteDevice(address))
-                .retry(3, 100)
-                .useAutoConnect(false)
-                .timeout(10000)
-                .enqueue()
-            Log.d(TAG, "connect: Enqueued connection request for $address.")
+            bleManager.connect(address)
+            Log.d(TAG, "connect: Connection request initiated for $address.")
         } catch (e: Exception) {
             Log.e(TAG, "connect: Exception during connection attempt: ${e.message}")
             _connectionState.value = IBleTransport.ConnectionState.DISCONNECTED
@@ -121,8 +117,7 @@ class BleTransport(
 
     override suspend fun disconnect() {
         Log.d(TAG, "disconnect: Attempting to disconnect.")
-        bleManager.disconnect().enqueue()
-        Log.d(TAG, "disconnect: Enqueued disconnection request.")
+        bleManager.disconnect()
     }
 
     override suspend fun send(message: Message): Boolean {
@@ -132,7 +127,7 @@ class BleTransport(
             return false
         }
 
-        val encryptedData = message.toEncryptedData()
+        val encryptedData = encryptionService.encryptMessage(message)
         if (encryptedData == null) {
             Log.e(TAG, "send: Encryption failed for message ID: ${message.id}")
             return false
@@ -143,6 +138,11 @@ class BleTransport(
         Log.i(TAG, "send: Message ID: ${message.id} sent successfully.")
 
         return true
+    }
+
+    override fun stop() {
+        Log.d(TAG, "stop: Stopping transport and cancelling scope.")
+        scope.cancel()
     }
 
     companion object {
