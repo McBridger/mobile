@@ -1,6 +1,6 @@
-appId: com.mc.bridger.mock
+appId: com.mc.bridger.e2e
 ---
 - assertVisible: "Maestro"
 - assertVisible: "RECEIVED:"
-- takeScreenshot: "data-received"
+- takeScreenshot: "maestro-data-received"
 - stopApp

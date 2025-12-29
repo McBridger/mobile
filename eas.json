@@ -17,16 +17,16 @@
         "APP_VARIANT": "preview"
       }
     },
-    "mock": {
+    "e2e": {
+      "distribution": "internal",
       "android": {
-        "buildType": "apk",
-        "gradleCommand": ":app:assembleDebug"
+        "buildType": "apk"
       },
-      "credentialsSource": "local",
       "env": {
-        "APP_VARIANT": "mock",
+        "APP_VARIANT": "e2e",
         "WITH_MOCK": "true",
-        "ENCRYPTION_SALT": "0123456789abcdef"
+        "ENCRYPTION_SALT": "0123456789abcdef",
+        "MNEMONIC_LENGTH": "2"
       }
     },
     "prod": {

@@ -2,48 +2,36 @@ name: Android PR Check
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [main]
     paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - '.gitignore'
+      - "**.md"
+      - "docs/**"
+      - ".gitignore"
 
 permissions:
   contents: read
   actions: write
 
 env:
-  APP_VARIANT: prod
+  APP_VARIANT: e2e
+  WITH_MOCK: true
+  ENCRYPTION_SALT: 0123456789abcdef
+  MNEMONIC_LENGTH: 2
+  CI: true
 
 jobs:
-  build-and-lint:
+  lint-and-doctor:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          packages: 'platforms;android-34 build-tools;34.0.0'
-
-      - name: Create .env file
-        run: |
-          echo "ENCRYPTION_SALT=test_salt_hex_placeholder" >> .env
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@v1
         with:
           bun-version: latest
 
-      - name: Install Bun dependencies
+      - name: Install dependencies
         run: bun install
 
       - name: Run Linter
@@ -52,21 +40,9 @@ jobs:
       - name: Run Expo Doctor
         run: bunx expo-doctor
 
-      - name: Generate Android project
-        run: bunx expo prebuild --platform android --no-install
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v5.0.0
-        with:
-          cache-read-only: false
-
-      - name: Build Debug APK
-        run: |
-          cd android && ./gradlew assembleDebug
-
   e2e-android:
     runs-on: macos-latest
-    needs: build-and-lint
+    needs: lint-and-doctor
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -74,21 +50,27 @@ jobs:
       - name: Set up JDK 17
         uses: actions/setup-java@v3
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: "temurin"
+          java-version: "17"
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@v1
         with:
           bun-version: latest
 
-      - name: Install Bun dependencies
-        run: cd mobile && bun install
+      - name: Install dependencies
+        run: bun install
 
-      - name: Set up Maestro
+      - name: Setup EAS & Maestro
         run: |
+          npm install -g eas-cli
           curl -FsSL https://get.maestro.mobile.dev | bash
           echo "$HOME/.maestro/bin" >> $GITHUB_PATH
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5.0.0
+        with:
+          cache-read-only: false
 
       - name: Run E2E Tests
         uses: reactivecircus/android-emulator-runner@v2
@@ -96,11 +78,12 @@ jobs:
           api-level: 34
           target: google_apis
           arch: x86_64
-          working-directory: mobile
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          disable-animations: true
           script: |
-            export WITH_MOCK=true
-            export APP_VARIANT=mock
-            export ENCRYPTION_SALT=0123456789abcdef
-            bunx expo prebuild --platform android
-            cd android && ./gradlew installDebug
-            maestro test .maestro/mock_flow.yaml
+            # We need EXPO_TOKEN in repository secrets so eas can download keys
+            # If it's missing, eas build --local will fail during account check
+            bun run android:e2e
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}

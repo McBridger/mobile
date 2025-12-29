@@ -1,4 +1,4 @@
-appId: com.mc.bridger.mock
+appId: com.mc.bridger.e2e
 ---
 - launchApp:
     clearState: true

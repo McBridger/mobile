@@ -47,3 +47,4 @@ app-example
 modules/**/build
 .roo
 *.apk
+maestro-*.png
