@@ -78,8 +78,8 @@ jobs:
           api-level: 34
           target: google_apis
           arch: arm64-v8a
-          force-avd-creation: false
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          force-avd-creation: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -no-metrics
           disable-animations: true
           script: |
             # We need EXPO_TOKEN in repository secrets so eas can download keys
