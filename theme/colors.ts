@@ -19,7 +19,7 @@ export const LIGHT_THEME = {
   onError: "#FFFFFF",
   errorContainer: "#FFDAD6",
   onErrorContainer: "#93000A",
-  // Status Colors (Custom)
+  // Colors (Custom)
   connected: "#059669",
   connecting: "#D97706",
   statusError: "#E11D48",
@@ -29,6 +29,7 @@ export const LIGHT_THEME = {
   statusRippleLight: "rgba(128, 128, 128, 0.15)",
   primaryMuted: "rgba(242, 101, 34, 0.15)",
   errorMuted: "rgba(225, 29, 72, 0.1)",
+  cardBorder: "rgba(0, 0, 0, 0.05)"
 };
 
 export const DARK_THEME = {
@@ -52,7 +53,7 @@ export const DARK_THEME = {
   onError: "#690005",
   errorContainer: "#93000A",
   onErrorContainer: "#FFDAD6",
-  // Status Colors (Custom)
+  // Colors (Custom)
   connected: "#059669",
   connecting: "#D97706",
   statusError: "#E11D48",
@@ -62,4 +63,5 @@ export const DARK_THEME = {
   statusRippleLight: "rgba(128, 128, 128, 0.15)",
   primaryMuted: "rgba(242, 101, 34, 0.25)",
   errorMuted: "rgba(225, 29, 72, 0.2)",
+  cardBorder: "rgba(0, 0, 0, 0.05)"
 };

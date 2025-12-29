@@ -1,15 +1,15 @@
 import { Item, STATUS, useConnector } from "@/modules/connector";
+import { AppTheme } from "@/theme/CustomTheme";
 import { Redirect } from "expo-router";
 import React, { useMemo } from "react";
 import { FlatList, StyleSheet, View } from "react-native";
 import { Card, Text, useTheme } from "react-native-paper";
-import { LinearGradient } from "expo-linear-gradient";
 
 export default function Connection() {
   const status = useConnector((state) => state.status);
   const isReady = useConnector((state) => state.isReady);
   const isConnected = status === STATUS.CONNECTED;
-  const theme = useTheme();
+  const theme = useTheme() as AppTheme;
 
   const _items = useConnector((state) => state.items);
   const items = useMemo(
@@ -21,55 +21,70 @@ export default function Connection() {
   if (!isReady) return <Redirect href="/setup" />;
 
   const renderItem = ({ item }: { item: Item }) => (
-    <View style={styles.clipboardItem}>
-      <Card style={styles.clipboardCard}>
-        <LinearGradient
-          start={{ x: 0, y: 1 }}
-          end={{ x: 1, y: 0 }}
-          colors={[
-            "#303030",
-            "#2e2e31",
-            "#2b2c32",
-            "#282a33",
-            "#232934",
-            "#252b3d",
-            "#2a2c46",
-            "#332c4d",
-            "#542952",
-            "#752047",
-            "#8c1f2f",
-            "#923307",
-          ]}
-          style={{ padding: 16 }}
-        >
+    <Card
+      style={[styles.logCard, { borderColor: theme.colors.cardBorder }]}
+      mode="elevated"
+      elevation={1}
+    >
+      <Card.Content style={styles.cardContent}>
+        <View style={styles.logInfo}>
+          <View
+            style={[
+              styles.labelBadge,
+              {
+                backgroundColor: theme.dark
+                  ? theme.colors.statusRipple
+                  : theme.colors.statusRippleLight,
+              },
+            ]}
+          >
+            <Text
+              variant="labelSmall"
+              style={[
+                styles.labelText,
+                { color: theme.colors.onSurfaceVariant },
+              ]}
+            >
+              {item.type === "sent" ? "SENT" : "RECEIVED"}
+            </Text>
+          </View>
           <Text
             variant="titleMedium"
-            style={[styles.itemType, { color: theme.colors.primary }]}
+            style={{ color: theme.colors.onSurface }}
           >
-            {item.type === "sent" ? "Sent:" : "Received:"}
-          </Text>
-          <Text variant="bodyMedium" style={styles.itemContent}>
             {item.content}
           </Text>
-          <Text variant="labelMedium" style={styles.itemTimestamp}>
+        </View>
+        <View style={styles.logMeta}>
+          <Text
+            variant="labelMedium"
+            style={[styles.timeText, { color: theme.colors.onSurfaceVariant }]}
+          >
             {new Date(item.time).toLocaleTimeString()}
           </Text>
-        </LinearGradient>
-      </Card>
-    </View>
+        </View>
+      </Card.Content>
+    </Card>
   );
 
   return (
-    <View style={styles.container}>
+    <View
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
+    >
       <FlatList
         data={items}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
-        style={{ backgroundColor: theme.colors.background }}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>
+            <Text
+              variant="titleMedium"
+              style={[
+                styles.emptyText,
+                { color: theme.colors.onSurfaceVariant },
+              ]}
+            >
               {isConnected
                 ? "No data synced yet. Try copying something on your Mac!"
                 : "Waiting for connection to start syncing..."}
@@ -88,24 +103,37 @@ const styles = StyleSheet.create({
   listContent: {
     padding: 20,
   },
-  clipboardItem: {
+  logCard: {
+    borderRadius: 20,
+    marginBottom: 12,
+    borderWidth: 1,
+  },
+  cardContent: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+  logInfo: {
+    flex: 1,
+    marginRight: 10,
+  },
+  labelBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
     marginBottom: 8,
   },
-  clipboardCard: {
-    margin: 10,
-    overflow: "hidden",
-    elevation: 4,
+  labelText: {
+    letterSpacing: 0.5,
   },
-  itemType: {
-    fontWeight: "bold",
-    marginBottom: 4,
+  logMeta: {
+    alignItems: "flex-end",
   },
-  itemContent: {
-    marginBottom: 8,
-    fontSize: 16,
-  },
-  itemTimestamp: {
-    textAlign: "right",
+  timeText: {
+    marginTop: 4,
   },
   emptyContainer: {
     padding: 40,
@@ -113,8 +141,6 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     textAlign: "center",
-    color: "#999",
-    fontSize: 14,
-    lineHeight: 20,
+    lineHeight: 22,
   },
 });
