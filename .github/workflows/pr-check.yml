@@ -93,6 +93,8 @@ jobs:
           force-avd-creation: false
           emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
-          script: bun run android:e2e
+          script: |
+            export PATH="$PATH:$HOME/.maestro/bin"
+            bun run android:e2e
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
