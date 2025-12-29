@@ -75,6 +75,14 @@ jobs:
           echo "MAESTRO_HOME=$HOME/.maestro" >> $GITHUB_ENV
           echo "$HOME/.maestro/bin" >> $GITHUB_PATH
 
+      - name: Verify Maestro
+        run: |
+          export PATH="$PATH:$HOME/.maestro/bin"
+          maestro --version
+          export MAESTRO_PATH="$HOME/.maestro/bin/maestro"
+          # Dry run check of our runner script
+          bun .maestro/runner.ts --help || true
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v5.0.0
         with:
@@ -95,6 +103,7 @@ jobs:
           disable-animations: true
           script: |
             export PATH="$PATH:$HOME/.maestro/bin"
+            export MAESTRO_PATH="$HOME/.maestro/bin/maestro"
             bun run android:e2e
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
