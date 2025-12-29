@@ -18,6 +18,7 @@ env:
   ENCRYPTION_SALT: 0123456789abcdef
   MNEMONIC_LENGTH: 2
   CI: true
+  MAESTRO_CLI_NO_ANALYTICS: 1
 
 jobs:
   lint-and-doctor:
@@ -80,7 +81,6 @@ jobs:
           export PATH="$PATH:$HOME/.maestro/bin"
           maestro --version
           export MAESTRO_PATH="$HOME/.maestro/bin/maestro"
-          # Dry run check of our runner script
           bun .maestro/runner.ts --help || true
 
       - name: Set up Gradle
@@ -107,3 +107,13 @@ jobs:
             bun run android:e2e
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Upload Maestro Reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maestro-report
+          path: |
+            ~/.maestro/tests/
+            mobile/.maestro/reports/
+          if-no-files-found: warn

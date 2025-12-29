@@ -68,6 +68,7 @@ export const MnemonicForm = ({ length, onSave }: Props) => {
       </TouchableOpacity>
 
       <TouchableOpacity
+        testID="start-magic-sync-button"
         style={[styles.button, !isComplete && styles.buttonDisabled]}
         onPress={() => onSave(words.join("-"))}
         disabled={!isComplete}
