@@ -6,7 +6,7 @@ async function runTest() {
   try {
     // 1. Setup Phase
     console.log("\n[Step 1] Running Setup...");
-    await $`~/.maestro/bin/maestro test .maestro/steps/1_setup.yaml`;
+    await $`maestro test .maestro/steps/1_setup.yaml`;
 
     // 2. Discovery Simulation
     console.log("\n[Step 2] Simulating Device Discovery via ADB...");
@@ -15,7 +15,7 @@ async function runTest() {
 
     // 3. Discovery Check
     console.log("\n[Step 3] Verifying Connection Status...");
-    await $`~/.maestro/bin/maestro test .maestro/steps/2_discovery_check.yaml`;
+    await $`maestro test .maestro/steps/2_discovery_check.yaml`;
 
     // 4. Data Simulation
     console.log("\n[Step 4] Simulating Incoming Data via ADB...");
@@ -26,7 +26,7 @@ async function runTest() {
 
     // 5. Data Check
     console.log("\n[Step 5] Verifying Received Data...");
-    await $`~/.maestro/bin/maestro test .maestro/steps/3_data_check.yaml`;
+    await $`maestro test .maestro/steps/3_data_check.yaml`;
 
     console.log("\n✅ E2E Test Passed Successfully!");
   } catch (error) {
