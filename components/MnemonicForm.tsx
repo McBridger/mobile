@@ -61,8 +61,8 @@ export const MnemonicForm = ({ words, onWordsChange, length }: Props) => {
               style={[
                 styles.input,
                 {
-                  backgroundColor: theme.colors.surface,
-                  borderColor: theme.colors.outline,
+                  backgroundColor: theme.colors.surfaceVariant,
+                  borderColor: theme.colors.outlineVariant,
                   color: theme.colors.onSurface,
                 },
                 !isValid(word) && {
@@ -73,7 +73,7 @@ export const MnemonicForm = ({ words, onWordsChange, length }: Props) => {
               value={word}
               onChangeText={(text) => handleInputChange(text, index)}
               placeholder="---"
-              placeholderTextColor={theme.dark ? "#555" : "#ccc"}
+              placeholderTextColor={theme.colors.placeholder}
               autoCapitalize="none"
               autoCorrect={false}
             />
@@ -82,7 +82,7 @@ export const MnemonicForm = ({ words, onWordsChange, length }: Props) => {
       </View>
 
       <Button
-        mode="contained"
+        mode="outlined"
         onPress={generateRandomPhrase}
         style={styles.generateButton}
         buttonColor={theme.colors.primaryMuted}

@@ -45,9 +45,9 @@ const Header = () => {
       case STATUS.ENCRYPTING:
         return "Encrypting";
       case STATUS.READY:
-        return "Ready to Sync";
+        return "Ready to sync";
       case STATUS.ERROR:
-        return "Connection Error";
+        return "Connection error";
       default:
         return capitalize(status.toLowerCase());
     }

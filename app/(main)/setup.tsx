@@ -111,7 +111,7 @@ export default function Setup() {
             mode="contained"
             style={[
               styles.btnAction,
-              !isComplete && { backgroundColor: theme.colors.secondaryContainer, opacity: 0.5 }
+              !isComplete && { opacity: 0.5 }
             ]}
             contentStyle={styles.btnContent}
             buttonColor={theme.colors.primary} 
