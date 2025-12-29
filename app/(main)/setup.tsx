@@ -3,6 +3,7 @@ import { MnemonicForm } from "@/components/MnemonicForm";
 import { useAppConfig } from "@/hooks/useConfig";
 import ConnectorModule, { useConnector } from "@/modules/connector";
 import { AppTheme } from "@/theme/CustomTheme";
+import { wordlist } from "@scure/bip39/wordlists/english.js";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -25,6 +26,7 @@ export default function Setup() {
   
   const [mnemonic, setMnemonic] = useState<string | null>(null);
   const [wasReadyOnMount] = useState(isReady);
+  const [words, setWords] = useState<string[]>(Array(extra.MNEMONIC_LENGTH).fill(""));
 
   useEffect(() => {
     // Auto-navigate to connection ONLY if we finished setup while being here
@@ -35,8 +37,9 @@ export default function Setup() {
     if (isReady) setMnemonic(ConnectorModule.getMnemonic());
   }, [isReady]);
 
-  const handleSave = async (phrase: string) => {
+  const handleSave = async () => {
     try {
+      const phrase = words.join("-");
       await setup(phrase, extra.ENCRYPTION_SALT);
       await ConnectorModule.start();
       // Only navigate here, after manual setup completion
@@ -58,12 +61,17 @@ export default function Setup() {
           onPress: async () => {
             await ConnectorModule.reset();
             setMnemonic(null);
+            setWords(Array(extra.MNEMONIC_LENGTH).fill(""));
             // After reset, brokerStatus becomes 'idle', trigger UI update
           } 
         }
       ]
     );
   };
+
+  const isComplete = words.every(
+    (word) => word.length > 0 && wordlist.includes(word)
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -77,28 +85,45 @@ export default function Setup() {
               <MnemonicDisplay mnemonic={mnemonic} onReset={handleReset} />
             ) : (
               <MnemonicForm 
+                words={words}
+                onWordsChange={setWords}
                 length={extra.MNEMONIC_LENGTH} 
-                onSave={handleSave} 
               />
             )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-      {isReady && (
-        <SafeAreaView edges={['bottom']} style={styles.bottomActions}>
+      <SafeAreaView edges={['bottom']} style={styles.bottomActions}>
+        {isReady ? (
           <Button 
             mode="contained"
-            style={styles.btnDanger}
-            contentStyle={styles.btnDangerContent}
+            style={styles.btnAction}
+            contentStyle={styles.btnContent}
             buttonColor={theme.colors.errorMuted} 
             textColor={theme.colors.error}
             onPress={handleReset}
-            labelStyle={styles.btnDangerText}
+            labelStyle={styles.btnText}
           >
-            Reset phrase setup
+            Reset Security
           </Button>
-        </SafeAreaView>
-      )}
+        ) : (
+          <Button 
+            mode="contained"
+            style={[
+              styles.btnAction,
+              !isComplete && { backgroundColor: theme.colors.secondaryContainer, opacity: 0.5 }
+            ]}
+            contentStyle={styles.btnContent}
+            buttonColor={theme.colors.primary} 
+            textColor={theme.colors.onPrimary}
+            onPress={handleSave}
+            disabled={!isComplete}
+            labelStyle={styles.btnText}
+          >
+            Start Magic Sync
+          </Button>
+        )}
+      </SafeAreaView>
     </View>
   );
 }
@@ -119,15 +144,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 24,
   },
-  btnDanger: {
+  btnAction: {
     width: "100%",
     borderRadius: 22,
     marginBottom: 10,
   },
-  btnDangerContent: {
+  btnContent: {
     paddingVertical: 10,
   },
-  btnDangerText: {
+  btnText: {
     fontSize: 16,
     fontWeight: "800",
   },

@@ -1,7 +1,7 @@
 import { useThemeStore } from "@/hooks/useThemeStore";
 import { STATUS, useConnector } from "@/modules/connector";
 import { AppTheme } from "@/theme/CustomTheme";
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useSegments } from "expo-router";
 import { capitalize } from "lodash";
 import React, { useCallback, useMemo } from "react";
@@ -36,22 +36,33 @@ const Header = () => {
 
   const getStatusText = useCallback(() => {
     switch (status) {
-      case STATUS.CONNECTED: return "Connected";
-      case STATUS.CONNECTING: return "Connecting";
-      case STATUS.DISCOVERING: return "Searching for Mac";
-      case STATUS.ENCRYPTING: return "Encrypting";
-      case STATUS.READY: return "Ready to Sync";
-      case STATUS.ERROR: return "Connection Error";
-      default: return capitalize(status.toLowerCase());
+      case STATUS.CONNECTED:
+        return "Connected";
+      case STATUS.CONNECTING:
+        return "Connecting";
+      case STATUS.DISCOVERING:
+        return "Searching for Mac";
+      case STATUS.ENCRYPTING:
+        return "Encrypting";
+      case STATUS.READY:
+        return "Ready to Sync";
+      case STATUS.ERROR:
+        return "Connection Error";
+      default:
+        return capitalize(status.toLowerCase());
     }
   }, [status]);
 
   const getTitle = useMemo(() => {
     switch (currentRouteName) {
-      case "connection": return "Activity Feed";
-      case "setup": return "Security";
-      case "permissions": return "Permissions";
-      default: return "App";
+      case "connection":
+        return "Activity Feed";
+      case "setup":
+        return "Security";
+      case "permissions":
+        return "Permissions";
+      default:
+        return "App";
     }
   }, [currentRouteName]);
 
@@ -60,42 +71,52 @@ const Header = () => {
   }, [currentRouteName, router]);
 
   const handleBackButtonPress = useCallback(() => {
-     if (currentRouteName === "setup") router.back();
+    if (currentRouteName === "setup") router.back();
   }, [currentRouteName, router]);
 
   const showBackButton = currentRouteName !== "connection";
+  const isStatusIdle = status === STATUS.IDLE;
 
   return (
-    <Appbar.Header 
+    <Appbar.Header
       style={[styles.appbar, { backgroundColor: getBackgroundColor() }]}
       mode="center-aligned"
     >
-      <Appbar.Action
-        icon={({ size }) => (
-          <Ionicons 
-            name={showBackButton ? "arrow-back-outline" : "settings-outline"} 
-            size={size} 
-            color={theme.colors.onStatus} 
-          />
-        )}
-        onPress={showBackButton ? handleBackButtonPress : handleLeftButtonPress}
-        color={theme.colors.onStatus}
-        rippleColor={theme.colors.statusRipple}
-      />
+      {!isStatusIdle && (
+        <Appbar.Action
+          icon={({ size }) => (
+            <Ionicons
+              name={showBackButton ? "arrow-back-outline" : "settings-outline"}
+              size={size}
+              color={theme.colors.onStatus}
+            />
+          )}
+          onPress={
+            showBackButton ? handleBackButtonPress : handleLeftButtonPress
+          }
+          color={theme.colors.onStatus}
+          rippleColor={theme.colors.statusRipple}
+        />
+      )}
 
       <Appbar.Content
         title={
           <View style={styles.titleContainer}>
-            <View style={[styles.statusBadge, { backgroundColor: theme.colors.statusBadgeBackground }]}>
-              <Text 
-                variant="labelSmall" 
+            <View
+              style={[
+                styles.statusBadge,
+                { backgroundColor: theme.colors.statusBadgeBackground },
+              ]}
+            >
+              <Text
+                variant="labelSmall"
                 style={[styles.statusText, { color: theme.colors.onStatus }]}
               >
                 {getStatusText()}
               </Text>
             </View>
-            <Text 
-              variant="titleLarge" 
+            <Text
+              variant="titleLarge"
               style={[styles.headerTitle, { color: theme.colors.onStatus }]}
             >
               {getTitle}
@@ -106,10 +127,10 @@ const Header = () => {
 
       <Appbar.Action
         icon={({ size }) => (
-          <Ionicons 
-            name={theme.dark ? "sunny-outline" : "moon-outline"} 
-            size={size} 
-            color={theme.colors.onStatus} 
+          <Ionicons
+            name={theme.dark ? "sunny-outline" : "moon-outline"}
+            size={size}
+            color={theme.colors.onStatus}
           />
         )}
         onPress={toggleTheme}
@@ -123,7 +144,7 @@ const Header = () => {
 const styles = StyleSheet.create({
   appbar: {
     height: 90,
-    justifyContent: 'center',
+    justifyContent: "center",
     elevation: 0,
   },
   titleContainer: {

@@ -1,25 +1,26 @@
-import React, { useState } from "react";
+import { AppTheme } from "@/theme/CustomTheme";
+import { wordlist } from "@scure/bip39/wordlists/english.js";
+import React from "react";
 import {
   StyleSheet,
-  Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from "react-native";
-import { wordlist } from "@scure/bip39/wordlists/english.js";
+import { Button, Text, useTheme } from "react-native-paper";
 
 interface Props {
+  words: string[];
+  onWordsChange: (words: string[]) => void;
   length: number;
-  onSave: (phrase: string) => void;
 }
 
-export const MnemonicForm = ({ length, onSave }: Props) => {
-  const [words, setWords] = useState<string[]>(Array(length).fill(""));
+export const MnemonicForm = ({ words, onWordsChange, length }: Props) => {
+  const theme = useTheme() as AppTheme;
 
   const handleInputChange = (text: string, index: number) => {
     const newWords = [...words];
     newWords[index] = text.toLowerCase().trim();
-    setWords(newWords);
+    onWordsChange(newWords);
   };
 
   const generateRandomPhrase = () => {
@@ -27,30 +28,52 @@ export const MnemonicForm = ({ length, onSave }: Props) => {
       const randomIndex = Math.floor(Math.random() * wordlist.length);
       return wordlist[randomIndex];
     });
-    setWords(randomWords);
+    onWordsChange(randomWords);
   };
 
   const isValid = (word: string) => word === "" || wordlist.includes(word);
-  const isComplete = words.every(
-    (word) => word.length > 0 && wordlist.includes(word)
-  );
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Setup McBridge</Text>
-      <Text style={styles.subtitle}>
+      <Text 
+        variant="titleLarge" 
+        style={[styles.title, { color: theme.colors.onSurface }]}
+      >
+        Setup McBridge
+      </Text>
+      <Text 
+        variant="bodyLarge" 
+        style={[styles.subtitle, { color: theme.colors.onSurfaceVariant }]}
+      >
         Enter a {length}-word phrase or generate a new one to start.
       </Text>
 
       <View style={styles.grid}>
         {words.map((word, index) => (
           <View key={index} style={styles.inputWrapper}>
-            <Text style={styles.label}>Word #{index + 1}</Text>
+            <Text
+              variant="labelMedium"
+              style={[styles.label, { color: theme.colors.onSurfaceVariant }]}
+            >
+              #{index + 1}
+            </Text>
             <TextInput
-              style={[styles.input, !isValid(word) && styles.inputInvalid]}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.outline,
+                  color: theme.colors.onSurface,
+                },
+                !isValid(word) && {
+                  borderColor: theme.colors.error,
+                  backgroundColor: theme.colors.errorMuted,
+                },
+              ]}
               value={word}
               onChangeText={(text) => handleInputChange(text, index)}
               placeholder="---"
+              placeholderTextColor={theme.dark ? "#555" : "#ccc"}
               autoCapitalize="none"
               autoCorrect={false}
             />
@@ -58,20 +81,16 @@ export const MnemonicForm = ({ length, onSave }: Props) => {
         ))}
       </View>
 
-      <TouchableOpacity
-        style={styles.generateButton}
+      <Button
+        mode="contained"
         onPress={generateRandomPhrase}
+        style={styles.generateButton}
+        buttonColor={theme.colors.primaryMuted}
+        textColor={theme.colors.primary}
+        labelStyle={styles.generateButtonText}
       >
-        <Text style={styles.generateButtonText}>Generate New Phrase</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[styles.button, !isComplete && styles.buttonDisabled]}
-        onPress={() => onSave(words.join("-"))}
-        disabled={!isComplete}
-      >
-        <Text style={styles.buttonText}>Start Magic Sync</Text>
-      </TouchableOpacity>
+        Generate new phrase
+      </Button>
     </View>
   );
 };
@@ -82,18 +101,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   title: {
-    fontSize: 28,
-    fontWeight: "800",
-    color: "#1a1a1a",
-    marginTop: 40,
+    marginTop: 20,
     marginBottom: 8,
+    fontWeight: "800",
   },
   subtitle: {
-    fontSize: 16,
-    color: "#666",
     textAlign: "center",
-    marginBottom: 40,
-    lineHeight: 22,
+    marginBottom: 30,
   },
   grid: {
     flexDirection: "row",
@@ -102,52 +116,28 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   inputWrapper: {
-    width: "48%",
-    marginBottom: 20,
+    width: "31%",
+    marginBottom: 16,
   },
   label: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#999",
-    marginBottom: 6,
+    marginBottom: 4,
     textTransform: "uppercase",
+    fontWeight: "800",
   },
   input: {
-    backgroundColor: "#fff",
     borderWidth: 1,
-    borderColor: "#e0e0e0",
     borderRadius: 12,
-    padding: 14,
-    fontSize: 16,
-    color: "#1a1a1a",
-  },
-  inputInvalid: {
-    borderColor: "#FF3B30",
-    backgroundColor: "#FFF5F5",
+    padding: 12,
+    fontSize: 14,
   },
   generateButton: {
-    padding: 12,
-    marginBottom: 20,
+    marginTop: 24,
+    borderRadius: 16,
+    paddingVertical: 6,
+    paddingHorizontal: 28,
   },
   generateButtonText: {
-    color: "#007AFF",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  button: {
-    backgroundColor: "#007AFF",
-    width: "100%",
-    padding: 18,
-    borderRadius: 16,
-    alignItems: "center",
-    marginTop: 10,
-  },
-  buttonDisabled: {
-    backgroundColor: "#ccc",
-  },
-  buttonText: {
-    color: "#fff",
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: "700",
   },
 });
