@@ -1,5 +1,7 @@
+import { AppTheme } from "@/theme/CustomTheme";
 import React, { useState } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, View } from "react-native";
+import { Button, Surface, Text, useTheme } from "react-native-paper";
 
 interface Props {
   mnemonic: string | null;
@@ -8,32 +10,55 @@ interface Props {
 
 export const MnemonicDisplay = ({ mnemonic, onReset }: Props) => {
   const [show, setShow] = useState(false);
+  const theme = useTheme() as AppTheme;
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Your Mnemonic</Text>
-      <Text style={styles.subtitle}>
+      <Text
+        variant="titleLarge"
+        style={[styles.title, { color: theme.colors.onSurface }]}
+      >
+        Your Mnemonic phrase
+      </Text>
+      <Text
+        variant="bodyLarge"
+        style={[styles.subtitle, { color: theme.colors.onSurfaceVariant }]}
+      >
         Use this phrase on your other devices to establish a secure connection.
       </Text>
 
-      <View style={styles.phraseCard}>
-        <TouchableOpacity
-          style={styles.phraseContainer}
-          onPress={() => setShow(!show)}
-          activeOpacity={0.7}
+      <Surface
+        style={[
+          styles.glassBox,
+          {
+            backgroundColor: theme.colors.surface,
+            borderColor: theme.colors.outline,
+          },
+        ]}
+        elevation={1}
+      >
+        <Text
+          variant="titleLarge"
+          style={[
+            styles.placeholderDots,
+            {
+              color: theme.colors.onSurfaceVariant,
+              opacity: show ? 1 : 0.3,
+            },
+          ]}
         >
-          <Text style={[styles.phraseText, !show && styles.phraseHidden]}>
-            {show ? mnemonic : "•••• •••• •••• ••••"}
-          </Text>
-          <Text style={styles.phraseHint}>
-            {show ? "Tap to hide" : "Tap to reveal"}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <TouchableOpacity style={styles.resetButton} onPress={onReset}>
-        <Text style={styles.resetButtonText}>Reset Setup</Text>
-      </TouchableOpacity>
+          {show ? mnemonic : "•••• •••• •••• ••••"}
+        </Text>
+        <Button
+          onPress={() => setShow(!show)}
+          mode="contained"
+          buttonColor={theme.colors.primaryMuted}
+          textColor={theme.colors.primary}
+          style={styles.btnReveal}
+        >
+          {show ? "Hide phrase" : "Reveal phrase"}
+        </Button>
+      </Surface>
     </View>
   );
 };
@@ -42,61 +67,34 @@ const styles = StyleSheet.create({
   container: {
     width: "100%",
     alignItems: "center",
+    height: "100%",
   },
   title: {
-    fontSize: 28,
-    fontWeight: "800",
-    color: "#1a1a1a",
-    marginTop: 40,
-    marginBottom: 8,
+    marginTop: 20,
+    marginBottom: 12,
   },
   subtitle: {
-    fontSize: 16,
-    color: "#666",
     textAlign: "center",
-    marginBottom: 40,
-    lineHeight: 22,
+    marginBottom: 24,
+    paddingHorizontal: 10,
   },
-  phraseCard: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 20,
+  glassBox: {
     width: "100%",
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
-  },
-  phraseContainer: {
-    backgroundColor: "#f9f9f9",
-    borderRadius: 12,
-    padding: 20,
+    borderRadius: 24,
+    padding: 40,
+    paddingHorizontal: 20,
     alignItems: "center",
-    borderStyle: "dashed",
     borderWidth: 1,
-    borderColor: "#ccc",
+    marginBottom: 24,
   },
-  phraseText: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#1a1a1a",
+  placeholderDots: {
+    letterSpacing: 4,
+    marginBottom: 24,
     textAlign: "center",
   },
-  phraseHidden: {
-    color: "#ccc",
-    letterSpacing: 4,
-  },
-  phraseHint: {
-    fontSize: 12,
-    color: "#007AFF",
-    marginTop: 10,
-    fontWeight: "600",
-  },
-  resetButton: {
-    marginTop: 40,
-    padding: 15,
-  },
-  resetButtonText: {
-    color: "#FF3B30",
-    fontSize: 16,
-    fontWeight: "600",
+  btnReveal: {
+    borderRadius: 16,
+    paddingHorizontal: 28,
+    paddingVertical: 6,
   },
 });
