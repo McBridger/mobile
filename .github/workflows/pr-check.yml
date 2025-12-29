@@ -71,7 +71,7 @@ jobs:
 
       - name: Setup Maestro
         run: |
-          curl -FsSL https://get.maestro.mobile.dev | bash
+          curl -fsSL https://get.maestro.mobile.dev | bash
           echo "MAESTRO_HOME=$HOME/.maestro" >> $GITHUB_ENV
           echo "$HOME/.maestro/bin" >> $GITHUB_PATH
 
