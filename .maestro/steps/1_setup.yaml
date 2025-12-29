@@ -10,8 +10,7 @@ appId: com.mc.bridger.e2e
 - tapOn:
     id: "mnemonic-input-1"
 - inputText: "ability"
-- tapOn:
-    id: "start-magic-sync-button"
+- hideKeyboard
 - tapOn:
     id: "start-magic-sync-button"
 - waitForAnimationToEnd
