@@ -47,23 +47,17 @@ jobs:
 
       - name: Enable KVM group perms
         run: |
-          sudo touch /etc/udev/rules.d/99-kvm4all.rules
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
+          sudo chmod 666 /dev/kvm
 
       - name: Run E2E Tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 30
-          target: google_apis
+          target: google_apis_atd
           arch: x86_64
           force-avd-creation: false
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
-          script: |
-            # We need EXPO_TOKEN in repository secrets so eas can download keys
-            # If it's missing, eas build --local will fail during account check
-            bun run android:e2e
+          script: bun run android:e2e
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
