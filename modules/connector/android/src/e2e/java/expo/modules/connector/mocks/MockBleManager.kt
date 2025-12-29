@@ -36,7 +36,7 @@ class MockBleManager(private val context: Context) : IBleManager {
         
         scope.launch {
             try {
-                // Пытаемся создать девайс, если адрес валидный, иначе - фейковый
+                // Try to create a device if address is valid, otherwise use fallback mock
                 val device = if (BluetoothAdapter.checkBluetoothAddress(address)) {
                     bluetoothAdapter?.getRemoteDevice(address)
                 } else {

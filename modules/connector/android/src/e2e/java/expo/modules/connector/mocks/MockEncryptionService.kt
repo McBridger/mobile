@@ -6,7 +6,7 @@ import android.util.Log
 
 class MockEncryptionService : IEncryptionService {
     private val TAG = "MockEncryptionService"
-    private var isSetup = false // Начинаем с FALSE
+    private var isSetup = false
 
     override fun isReady(): Boolean = isSetup
     
@@ -28,13 +28,13 @@ class MockEncryptionService : IEncryptionService {
     }
 
     override fun derive(info: String, byteCount: Int): ByteArray? {
-        // Возвращаем фиксированный набор байтов (например, все нули)
-        // Это сделает шифрование детерминированным
+        // Return fixed set of bytes (e.g., all zeros)
+        // This makes encryption deterministic
         return ByteArray(byteCount) { 0 }
     }
 
     override fun deriveUuid(info: String): UUID? {
-        // Возвращаем предсказуемые UUID для тестов
+        // Return predictable UUIDs for tests
         return when (info) {
             "McBridge_Advertise_UUID" -> UUID.fromString("00000000-0000-0000-0000-000000000001")
             "McBridge_Service_UUID"   -> UUID.fromString("00000000-0000-0000-0000-000000000002")
@@ -43,13 +43,13 @@ class MockEncryptionService : IEncryptionService {
     }
 
     override fun encrypt(data: ByteArray, keyBytes: ByteArray): ByteArray? {
-        // В моке можно просто возвращать данные без шифрования для простоты тестов
+        // In mock, we can return raw data for simplicity
         Log.d(TAG, "Mock encrypt: returning raw data (size: ${data.size})")
         return data
     }
 
     override fun decrypt(combinedData: ByteArray, keyBytes: ByteArray): ByteArray? {
-        // В моке возвращаем как есть
+        // Return as is in mock
         Log.d(TAG, "Mock decrypt: returning raw data (size: ${combinedData.size})")
         return combinedData
     }

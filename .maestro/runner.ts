@@ -10,7 +10,6 @@ async function runTest() {
 
     // 2. Discovery Simulation
     console.log("\n[Step 2] Simulating Device Discovery via ADB...");
-    // Исправлено: MA:ES:TR:00:23:45 (нули вместо О)
     await $`adb shell am broadcast -a expo.modules.connector.SCAN_DEVICE -p com.mc.bridger.mock --es address "MA:ES:TR:00:23:45" --es name "Maestro-Mac"`;
     await Bun.sleep(4000); 
 
@@ -20,7 +19,7 @@ async function runTest() {
 
     // 4. Data Simulation
     console.log("\n[Step 4] Simulating Incoming Data via ADB...");
-    // HEX для {"t":0,"p":"Maestro"} - правильный формат для Message.Transfer (t=0 - CLIPBOARD)
+    // HEX for {"t":0,"p":"Maestro"} - correct format for Message.Transfer (t=0 - CLIPBOARD)
     const jsonHex = Buffer.from('{"t":0,"p":"Maestro"}').toString('hex');
     await $`adb shell am broadcast -a expo.modules.connector.RECEIVE_DATA -p com.mc.bridger.mock --es address "MA:ES:TR:00:23:45" --es data "${jsonHex}"`;
     await Bun.sleep(4000);
