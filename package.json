@@ -17,6 +17,8 @@
     "creds": "dotenvx run -- eas credentials"
   },
   "dependencies": {
+    "@expo-google-fonts/cormorant-infant": "^0.4.1",
+    "@expo-google-fonts/roboto": "^0.4.2",
     "@expo/metro-runtime": "~6.1.2",
     "@expo/vector-icons": "^15.0.3",
     "@react-navigation/bottom-tabs": "^7.4.0",
