@@ -13,7 +13,5 @@ appId: com.mc.bridger.e2e
 - hideKeyboard
 - tapOn:
     id: "start-magic-sync-button"
-- tapOn:
-    id: "start-magic-sync-button"
 - waitForAnimationToEnd
 - assertVisible: "Waiting for connection to start syncing..."
