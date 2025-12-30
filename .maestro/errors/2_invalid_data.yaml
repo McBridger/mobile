@@ -1,4 +1,4 @@
 appId: com.mc.bridger.e2e
 ---
 # After runner sends invalid data we check that no "RECEIVED:" items appeared
-- assertVisible: "No data synced yet. Try copying something on your Mac!"
+- assertVisible: "No data synced yet. Try copying something on your Mac"

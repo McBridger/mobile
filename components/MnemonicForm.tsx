@@ -58,6 +58,7 @@ export const MnemonicForm = ({ words, onWordsChange, length }: Props) => {
               #{index + 1}
             </Text>
             <TextInput
+              testID={`mnemonic-input-${index}`}
               style={[
                 styles.input,
                 {

@@ -82,18 +82,35 @@ const Header = () => {
       style={[styles.appbar, { backgroundColor: getBackgroundColor() }]}
       mode="center-aligned"
     >
-      {!isStatusIdle && (
+      {!isStatusIdle && showBackButton && (
         <Appbar.Action
+          testID="arrow-back-outline"
+          accessibilityLabel="Back"
           icon={({ size }) => (
             <Ionicons
-              name={showBackButton ? "arrow-back-outline" : "settings-outline"}
+              name="arrow-back-outline"
               size={size}
               color={theme.colors.onStatus}
             />
           )}
-          onPress={
-            showBackButton ? handleBackButtonPress : handleLeftButtonPress
-          }
+          onPress={handleBackButtonPress}
+          color={theme.colors.onStatus}
+          rippleColor={theme.colors.statusRipple}
+        />
+      )}
+
+      {!isStatusIdle && !showBackButton && (
+        <Appbar.Action
+          testID="settings-outline"
+          accessibilityLabel="Settings"
+          icon={({ size }) => (
+            <Ionicons
+              name="settings-outline"
+              size={size}
+              color={theme.colors.onStatus}
+            />
+          )}
+          onPress={handleLeftButtonPress}
           color={theme.colors.onStatus}
           rippleColor={theme.colors.statusRipple}
         />

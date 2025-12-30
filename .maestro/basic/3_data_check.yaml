@@ -1,11 +1,10 @@
 appId: com.mc.bridger.e2e
 ---
 - assertVisible: "Maestro"
-- assertVisible: "RECEIVED:"
+- assertVisible: "RECEIVED"
 - tapOn:
-    id: "settings-button"
-- tapOn:
-    id: "reset-setup-button"
+    label: "Settings"
+- tapOn: "Reset Security"
 - tapOn: "Reset"
 - assertVisible: "Setup McBridge"
 - tapOn:

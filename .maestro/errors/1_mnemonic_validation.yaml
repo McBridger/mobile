@@ -17,7 +17,7 @@ appId: com.mc.bridger.e2e
 - tapOn:
     id: "mnemonic-input-1"
 - inputText: "notaword"
-- hideKeyboard
+
 - assertVisible: 
     id: "start-magic-sync-button"
     enabled: false

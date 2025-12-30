@@ -118,6 +118,7 @@ export default function Setup() {
           <SafeAreaView edges={["bottom"]} style={styles.bottomActions}>
             {isReady ? (
               <Button
+                accessibilityLabel="Reset Setup"
                 mode="contained"
                 style={styles.btnAction}
                 contentStyle={styles.btnContent}
@@ -130,6 +131,7 @@ export default function Setup() {
               </Button>
             ) : (
               <Button
+                accessibilityLabel="Start Magic Sync"
                 mode="contained"
                 style={[styles.btnAction, !isComplete && { opacity: 0.5 }]}
                 contentStyle={styles.btnContent}
