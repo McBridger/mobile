@@ -2,5 +2,16 @@ appId: com.mc.bridger.e2e
 ---
 - assertVisible: "Maestro"
 - assertVisible: "RECEIVED:"
-- takeScreenshot: "maestro-data-received"
+- tapOn:
+    id: "settings-button"
+- tapOn:
+    id: "reset-setup-button"
+- tapOn: "Reset"
+- assertVisible: "Setup McBridge"
+- tapOn:
+    id: "mnemonic-input-0"
+- inputText: "" # Clear if needed, though it should be empty
+- pasteText
+- assertVisible: "Maestro"
+- takeScreenshot: "maestro-clipboard-verified"
 - stopApp

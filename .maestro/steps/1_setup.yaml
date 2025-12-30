@@ -10,7 +10,8 @@ appId: com.mc.bridger.e2e
 - tapOn:
     id: "mnemonic-input-1"
 - inputText: "ability"
-- tapOn: "Start Magic Sync"
-- tapOn: "Start Magic Sync"
+- hideKeyboard
+- tapOn:
+    id: "start-magic-sync-button"
 - waitForAnimationToEnd
 - assertVisible: "Waiting for connection to start syncing..."

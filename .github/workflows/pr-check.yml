@@ -18,6 +18,7 @@ env:
   ENCRYPTION_SALT: 0123456789abcdef
   MNEMONIC_LENGTH: 2
   CI: true
+  MAESTRO_CLI_NO_ANALYTICS: 1
 
 jobs:
   lint-and-doctor:
@@ -30,6 +31,7 @@ jobs:
         uses: oven-sh/setup-bun@v1
         with:
           bun-version: latest
+          cache: true
 
       - name: Install dependencies
         run: bun install
@@ -40,6 +42,47 @@ jobs:
       - name: Run Expo Doctor
         run: bunx expo-doctor
 
+  e2e-android:
+    runs-on: ubuntu-latest
+    needs: lint-and-doctor
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+          cache: true
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Setup Expo & EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Setup Maestro
+        run: |
+          curl -fsSL https://get.maestro.mobile.dev | bash
+          echo "MAESTRO_HOME=$HOME/.maestro" >> $GITHUB_ENV
+          echo "$HOME/.maestro/bin" >> $GITHUB_PATH
+
+      - name: Verify Maestro
+        run: |
+          export PATH="$PATH:$HOME/.maestro/bin"
+          maestro --version
+          export MAESTRO_PATH="$HOME/.maestro/bin/maestro"
+          bun .maestro/runner.ts --help || true
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v5.0.0
         with:
@@ -47,10 +90,7 @@ jobs:
 
       - name: Enable KVM group perms
         run: |
-          sudo touch /etc/udev/rules.d/99-kvm4all.rules
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
+          sudo chmod 666 /dev/kvm
 
       - name: Run E2E Tests
         uses: reactivecircus/android-emulator-runner@v2
@@ -59,11 +99,21 @@ jobs:
           target: google_apis
           arch: x86_64
           force-avd-creation: false
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
           script: |
-            # We need EXPO_TOKEN in repository secrets so eas can download keys
-            # If it's missing, eas build --local will fail during account check
+            export PATH="$PATH:$HOME/.maestro/bin"
+            export MAESTRO_PATH="$HOME/.maestro/bin/maestro"
             bun run android:e2e
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Upload Maestro Reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maestro-report
+          path: |
+            ~/.maestro/tests/
+            mobile/.maestro/reports/
+          if-no-files-found: warn
