@@ -1,16 +1,19 @@
 package expo.modules.connector.models
 
 import android.os.Bundle
-import com.google.gson.Gson
-import com.google.gson.annotations.SerializedName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.encodeToString
 import java.util.UUID
 
+@Serializable
 data class Message(
-    @SerializedName("t") val typeId: Int,
-    @SerializedName("p") val value: String,
-    @SerializedName("a") val address: String? = null,
-    @SerializedName("id") val id: String = UUID.randomUUID().toString(),
-    @SerializedName("ts") val timestamp: Long = System.currentTimeMillis()
+    @SerialName("t") val typeId: Int,
+    @SerialName("p") val value: String,
+    @SerialName("a") val address: String? = null,
+    @SerialName("id") val id: String = UUID.randomUUID().toString(),
+    @SerialName("ts") val timestamp: Long = System.currentTimeMillis()
 ) {
     constructor(
         type: Type,
@@ -28,7 +31,7 @@ data class Message(
     
     fun getType(): Type = Type.entries[typeId]
 
-    fun toJson(): String = gson.toJson(this)
+    fun toJson(): String = Json.encodeToString(this)
 
     fun toBundle(): Bundle = Bundle().apply {
         putString("type", getType().name)
@@ -39,11 +42,9 @@ data class Message(
     }
 
     companion object {
-        private val gson = Gson()
-
         fun fromJson(json: String, address: String? = null): Message? {
             return try {
-                gson.fromJson(json, Message::class.java).copy(address = address)
+                Json.decodeFromString<Message>(json).copy(address = address)
             } catch (e: Exception) {
                 null
             }
@@ -53,9 +54,10 @@ data class Message(
     /**
      * DTO for transfer over BLE/Network to match iOS structure
      */
+    @Serializable
     data class Transfer(
-        @SerializedName("t") val type: Int,
-        @SerializedName("p") val payload: String,
-        @SerializedName("ts") val timestamp: Double? = null
+        @SerialName("t") val type: Int,
+        @SerialName("p") val payload: String,
+        @SerialName("ts") val timestamp: Double? = null
     )
 }

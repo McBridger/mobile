@@ -143,4 +143,14 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 22,
   },
+  itemContent: {
+    fontSize: 16,
+    color: "#1a1a1a",
+    marginBottom: 8,
+  },
+  itemTimestamp: {
+    fontSize: 11,
+    color: "#bbb",
+    textAlign: "right",
+  },
 });

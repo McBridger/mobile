@@ -162,9 +162,14 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
+  buttonWrapper: {
+    width: 40,
+    alignItems: 'center',
+  },
   headerTitle: {
     fontWeight: "800",
   },
 });
+
 
 export default Header;

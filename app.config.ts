@@ -1,10 +1,10 @@
-import 'tsx/cjs';
 import { ConfigContext, ExpoConfig } from "expo/config";
 import { capitalize } from "lodash";
+import 'tsx/cjs';
 import { z } from "zod";
 
 const Extra = z.object({
-  APP_VARIANT: z.enum(["dev", "preview", "prod"]),
+  APP_VARIANT: z.enum(["dev", "preview", "prod", "e2e"]).default("dev"),
   ENCRYPTION_SALT: z.string(),
   MNEMONIC_LENGTH: z.number().default(6),
   MNEMONIC_LOCAL: z.string().optional(),
@@ -14,6 +14,7 @@ const Extra = z.object({
 });
 
 export default ({ config }: ConfigContext): AppConfig => {
+  const appName = ['com', 'mc', 'bridger'];
   const extra = Extra.parse({
     ...config.extra,
     APP_VARIANT: process.env.APP_VARIANT,
@@ -22,18 +23,27 @@ export default ({ config }: ConfigContext): AppConfig => {
     MNEMONIC_LENGTH: process.env.MNEMONIC_LENGTH ? parseInt(process.env.MNEMONIC_LENGTH) : undefined,
   });
 
-  const appNameSuffix = extra.APP_VARIANT === "prod" ? "" : extra.APP_VARIANT;
-  const packageNameSuffix = extra.APP_VARIANT === "prod" ? "" : `.${extra.APP_VARIANT}`;
+  const suffix = extra.APP_VARIANT === "prod" ? "" : extra.APP_VARIANT;
+  if (suffix) appName.push(suffix);
 
   return {
     ...config,
-    name: `McBridger${capitalize(appNameSuffix)}`,
+    name: `McBridger${capitalize(suffix)}`,
     slug: 'bridger',
     android: {
       ...config.android,
-      package: `com.mc.bridger${packageNameSuffix}`,
+      package: appName.join('.'),
     },
     plugins: [
+      [
+        "expo-build-properties",
+        {
+          android: {
+            minSdkVersion: 25,
+            buildArchs: process.env.CI ? ["x86_64", "arm64-v8a"] : ["arm64-v8a"],
+          },
+        },
+      ],
       // @ts-expect-error
       ...config.plugins,
       // [

@@ -1,0 +1,3 @@
+appId: com.mc.bridger.e2e
+---
+- assertVisible: "No data synced yet. Try copying something on your Mac!"
