@@ -67,14 +67,14 @@ export default function MainLayout() {
           name="connection"
           options={{
             title: "Connection",
-            animation: "slide_from_right",
+            animation: "fade",
           }}
         />
         <Stack.Screen
           name="setup"
           options={{
             title: "Setup Mnemonic",
-            animation: "slide_from_bottom",
+            animation: "fade",
           }}
         />
       </Stack>

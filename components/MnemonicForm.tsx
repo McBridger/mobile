@@ -115,8 +115,8 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   inputWrapper: {
-    width: "31%",
-    marginBottom: 16,
+    width: "48%",
+    marginBottom: 20,
   },
   label: {
     marginBottom: 4,
@@ -125,7 +125,7 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderRadius: 12,
-    padding: 12,
+    padding: 14,
     fontSize: 14,
   },
   generateButton: {

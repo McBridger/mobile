@@ -1,7 +1,7 @@
 import { MnemonicDisplay } from "@/components/MnemonicDisplay";
 import { MnemonicForm } from "@/components/MnemonicForm";
 import { useAppConfig } from "@/hooks/useConfig";
-import ConnectorModule, { useConnector } from "@/modules/connector";
+import ConnectorModule, { STATUS, useConnector } from "@/modules/connector";
 import { AppTheme } from "@/theme/CustomTheme";
 import { wordlist } from "@scure/bip39/wordlists/english.js";
 import { useRouter } from "expo-router";
@@ -11,22 +11,28 @@ import {
   KeyboardAvoidingView,
   ScrollView,
   StyleSheet,
-  View
+  View,
 } from "react-native";
-import { Button, useTheme } from "react-native-paper";
+import { ActivityIndicator, Button, useTheme } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useShallow } from "zustand/shallow";
 
 export default function Setup() {
   const router = useRouter();
   const { extra } = useAppConfig();
   const theme = useTheme() as AppTheme;
-  
-  const isReady = useConnector((state) => state.isReady);
+
+  const [isReady, status] = useConnector(
+    useShallow((state) => [state.isReady, state.status])
+  );
+
   const setup = useConnector((state) => state.setup);
-  
+
   const [mnemonic, setMnemonic] = useState<string | null>(null);
   const [wasReadyOnMount] = useState(isReady);
-  const [words, setWords] = useState<string[]>(Array(extra.MNEMONIC_LENGTH).fill(""));
+  const [words, setWords] = useState<string[]>(
+    Array(extra.MNEMONIC_LENGTH).fill("")
+  );
 
   useEffect(() => {
     // Auto-navigate to connection ONLY if we finished setup while being here
@@ -55,16 +61,16 @@ export default function Setup() {
       "This will permanently delete your pairing phrase from this device.",
       [
         { text: "Cancel", style: "cancel" },
-        { 
-          text: "Reset", 
-          style: "destructive", 
+        {
+          text: "Reset",
+          style: "destructive",
           onPress: async () => {
             await ConnectorModule.reset();
             setMnemonic(null);
             setWords(Array(extra.MNEMONIC_LENGTH).fill(""));
             // After reset, brokerStatus becomes 'idle', trigger UI update
-          } 
-        }
+          },
+        },
       ]
     );
   };
@@ -73,57 +79,68 @@ export default function Setup() {
     (word) => word.length > 0 && wordlist.includes(word)
   );
 
+  const isLoading =
+    status === STATUS.ENCRYPTING ||
+    status === STATUS.KEYS_READY ||
+    status === STATUS.TRANSPORT_INITIALIZING ||
+    status === STATUS.DISCOVERING ||
+    status === STATUS.CONNECTING;
+
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <KeyboardAvoidingView
-        behavior="height"
-        style={styles.container}
-      >
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          <View style={styles.mainContent}>
+    <View
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
+    >
+      {isLoading ? (
+        <View style={styles.loaderContainer}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+        </View>
+      ) : (
+        <>
+          <KeyboardAvoidingView behavior="height" style={styles.container}>
+            <ScrollView contentContainerStyle={styles.scrollContent}>
+              <View style={styles.mainContent}>
+                {isReady ? (
+                  <MnemonicDisplay mnemonic={mnemonic} onReset={handleReset} />
+                ) : (
+                  <MnemonicForm
+                    words={words}
+                    onWordsChange={setWords}
+                    length={extra.MNEMONIC_LENGTH}
+                  />
+                )}
+              </View>
+            </ScrollView>
+          </KeyboardAvoidingView>
+          <SafeAreaView edges={["bottom"]} style={styles.bottomActions}>
             {isReady ? (
-              <MnemonicDisplay mnemonic={mnemonic} onReset={handleReset} />
+              <Button
+                mode="contained"
+                style={styles.btnAction}
+                contentStyle={styles.btnContent}
+                buttonColor={theme.colors.errorMuted}
+                textColor={theme.colors.error}
+                onPress={handleReset}
+                labelStyle={styles.btnText}
+              >
+                Reset Security
+              </Button>
             ) : (
-              <MnemonicForm 
-                words={words}
-                onWordsChange={setWords}
-                length={extra.MNEMONIC_LENGTH} 
-              />
+              <Button
+                mode="contained"
+                style={[styles.btnAction, !isComplete && { opacity: 0.5 }]}
+                contentStyle={styles.btnContent}
+                buttonColor={theme.colors.primary}
+                textColor={theme.colors.onPrimary}
+                onPress={handleSave}
+                disabled={!isComplete}
+                labelStyle={styles.btnText}
+              >
+                Start Magic Sync
+              </Button>
             )}
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-      <SafeAreaView edges={['bottom']} style={styles.bottomActions}>
-        {isReady ? (
-          <Button 
-            mode="contained"
-            style={styles.btnAction}
-            contentStyle={styles.btnContent}
-            buttonColor={theme.colors.errorMuted} 
-            textColor={theme.colors.error}
-            onPress={handleReset}
-            labelStyle={styles.btnText}
-          >
-            Reset Security
-          </Button>
-        ) : (
-          <Button 
-            mode="contained"
-            style={[
-              styles.btnAction,
-              !isComplete && { opacity: 0.5 }
-            ]}
-            contentStyle={styles.btnContent}
-            buttonColor={theme.colors.primary} 
-            textColor={theme.colors.onPrimary}
-            onPress={handleSave}
-            disabled={!isComplete}
-            labelStyle={styles.btnText}
-          >
-            Start Magic Sync
-          </Button>
-        )}
-      </SafeAreaView>
+          </SafeAreaView>
+        </>
+      )}
     </View>
   );
 }
@@ -132,13 +149,18 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  loaderContainer: {
+    flex: 0.9,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   scrollContent: {
     flexGrow: 1,
     padding: 24,
   },
   mainContent: {
     alignItems: "center",
-    width: '100%',
+    width: "100%",
   },
   bottomActions: {
     paddingHorizontal: 24,
