@@ -103,7 +103,6 @@ const styles = StyleSheet.create({
   title: {
     marginTop: 20,
     marginBottom: 8,
-    fontWeight: "800",
   },
   subtitle: {
     textAlign: "center",
@@ -122,7 +121,6 @@ const styles = StyleSheet.create({
   label: {
     marginBottom: 4,
     textTransform: "uppercase",
-    fontWeight: "800",
   },
   input: {
     borderWidth: 1,
@@ -138,6 +136,6 @@ const styles = StyleSheet.create({
   },
   generateButtonText: {
     fontSize: 15,
-    fontWeight: "700",
+    fontWeight: "bold",
   },
 });

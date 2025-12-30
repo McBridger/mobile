@@ -154,6 +154,6 @@ const styles = StyleSheet.create({
   },
   btnText: {
     fontSize: 16,
-    fontWeight: "800",
+    fontWeight: "bold",
   },
 });

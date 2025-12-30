@@ -117,7 +117,7 @@ const Header = () => {
             </View>
             <Text
               variant="titleLarge"
-              style={[styles.headerTitle, { color: theme.colors.onStatus }]}
+              style={{ color: theme.colors.onStatus }}
             >
               {getTitle}
             </Text>
@@ -158,16 +158,13 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   statusText: {
-    fontWeight: "800",
+    fontWeight: "bold",
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
   buttonWrapper: {
     width: 40,
     alignItems: 'center',
-  },
-  headerTitle: {
-    fontWeight: "800",
   },
 });
 
