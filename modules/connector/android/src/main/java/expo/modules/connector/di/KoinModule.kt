@@ -8,6 +8,9 @@ import expo.modules.connector.interfaces.*
 import expo.modules.connector.transports.ble.BleManager
 import expo.modules.connector.transports.ble.BleScanner
 import expo.modules.connector.transports.ble.BleTransport
+import org.koin.android.ext.koin.androidContext
+import org.koin.core.context.GlobalContext
+import org.koin.core.context.startKoin
 import org.koin.core.module.dsl.bind
 import org.koin.core.module.dsl.factoryOf
 import org.koin.core.module.dsl.singleOf
@@ -47,22 +50,35 @@ val connectorModule = module {
 }
 
 /**
- * Collects all modules, including mocks via reflection if present.
+ * Safely initializes Koin if it hasn't been started yet.
  */
-fun getAppModules(): List<org.koin.core.module.Module> {
-  val modules = mutableListOf(connectorModule)
+fun initKoin(context: android.content.Context) {
+    if (GlobalContext.getOrNull() != null) {
+        Log.d("KoinModule", "Koin already running, skipping init.")
+        return
+    }
 
-  try {
-    val clazz = Class.forName("expo.modules.connector.mocks.MockModuleKt")
-    val method = clazz.getMethod("getMockModule")
-    val mockModule = method.invoke(null) as org.koin.core.module.Module
-    modules.add(mockModule)
-    Log.i("KoinModule", "Successfully injected mockModule via reflection")
-  } catch (e: ClassNotFoundException) {
-    // Normal build, no mocks present
-  } catch (e: Exception) {
-    Log.e("KoinModule", "Failed to inject mockModule: ${e.message}")
-  }
+    try {
+        val modules = mutableListOf(connectorModule)
 
-  return modules
+        // Reflection magic to pull in mocks if they exist in the classpath (e.g. in E2E builds)
+        try {
+            val clazz = Class.forName("expo.modules.connector.mocks.MockModuleKt")
+            val method = clazz.getMethod("getMockModule")
+            val mockModule = method.invoke(null) as org.koin.core.module.Module
+            modules.add(mockModule)
+            Log.i("KoinModule", "Successfully injected mockModule via reflection")
+        } catch (ignored: ClassNotFoundException) {
+            // Normal build, no mocks present
+        }
+
+        startKoin {
+            androidContext(context.applicationContext)
+            modules(modules)
+            allowOverride(true)
+        }
+        Log.i("KoinModule", "Koin initialized successfully.")
+    } catch (e: Exception) {
+        Log.e("KoinModule", "Error starting Koin: ${e.message}")
+    }
 }

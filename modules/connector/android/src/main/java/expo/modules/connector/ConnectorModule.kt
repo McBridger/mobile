@@ -16,6 +16,7 @@ import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
 import org.koin.core.context.startKoin
 import org.koin.core.error.KoinApplicationAlreadyStartedException
+import expo.modules.connector.di.initKoin
 
 class ConnectorModule : Module(), KoinComponent {
   private val scope = CoroutineScope(Dispatchers.Main)
@@ -32,19 +33,7 @@ class ConnectorModule : Module(), KoinComponent {
 
     OnCreate {
       val context = appContext.reactContext?.applicationContext ?: return@OnCreate
-
-      try {
-        // Initialize Koin with auto-discovered modules (including mocks if WITH_MOCK=true)
-        startKoin {
-          androidContext(context)
-          modules(expo.modules.connector.di.getAppModules())
-          allowOverride(true)
-        }
-      } catch (e: KoinApplicationAlreadyStartedException) {
-        Log.w(TAG, "Koin already started.")
-      } catch (e: Exception) {
-        Log.e(TAG, "Koin initialization error: ${e.message}")
-      }
+      initKoin(context)
 
       // Re-connect the "pipe" to JavaScript using the lazy broker
       scope.launch {

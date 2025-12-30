@@ -14,6 +14,7 @@ import expo.modules.connector.R
 import expo.modules.connector.core.Broker
 import kotlinx.coroutines.*
 import org.koin.android.ext.android.inject
+import expo.modules.connector.di.initKoin
 
 class ForegroundService : Service() {
 
@@ -31,10 +32,12 @@ class ForegroundService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        Log.d(TAG, "onCreate: Service created.")
+        Log.d(TAG, "onCreate: Service created. Initializing Koin if needed.")
+        initKoin(this)
+
         SERVICE_NOTIFICATION_ID += applicationContext.packageName.hashCode()
         CHANNEL_ID += applicationContext.packageName
-        
+
         notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         createNotificationChannel()
 
@@ -75,7 +78,7 @@ class ForegroundService : Service() {
             Broker.State.DISCONNECTED -> "Bridger Disconnected" to "Connection lost."
             Broker.State.ERROR -> "Bridger Error" to "Check Bluetooth or permissions."
             Broker.State.ENCRYPTING -> "Bridger Setup" to "Generating secure keys..."
-            Broker.State.KEYS_READY, 
+            Broker.State.KEYS_READY,
             Broker.State.TRANSPORT_INITIALIZING -> "Bridger Setup" to "Initializing Bluetooth..."
             Broker.State.READY -> "Bridger Ready" to "Waiting for Mac to appear."
             Broker.State.DISCOVERING -> "Bridger Scanning" to "Searching for your Mac..."
