@@ -7,10 +7,12 @@ appId: com.mc.bridger.e2e
 - tapOn: "Reset Security"
 - tapOn: "Reset"
 - assertVisible: "Setup McBridge"
-- tapOn:
+
+- longPressOn:
     id: "mnemonic-input-0"
-- inputText: "" # Clear if needed, though it should be empty
-- pasteText
+- waitForAnimationToEnd
+- tapOn: "Paste"
+
 - assertVisible: "Maestro"
 - takeScreenshot: "maestro-clipboard-verified"
 - stopApp

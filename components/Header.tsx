@@ -133,6 +133,7 @@ const Header = () => {
               </Text>
             </View>
             <Text
+              testID="title"
               variant="titleLarge"
               style={{ color: theme.colors.onStatus }}
             >

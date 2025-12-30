@@ -9,8 +9,15 @@ appId: com.mc.bridger.e2e
 - tapOn:
     id: "mnemonic-input-0"
 - inputText: "abandon"
+
+- runFlow:
+    when:
+      visible: '?123'
+    commands:
+        - hideKeyboard
+
 - assertVisible: 
-    id: "start-magic-sync-button"
+    text: "Start Magic Sync"
     enabled: false
 
 # 2. Check invalid word (red border / validation)
@@ -18,11 +25,17 @@ appId: com.mc.bridger.e2e
     id: "mnemonic-input-1"
 - inputText: "notaword"
 
+- runFlow:
+    when:
+      visible: '?123'
+    commands:
+        - hideKeyboard
+
 - assertVisible: 
-    id: "start-magic-sync-button"
+    text: "Start Magic Sync"
     enabled: false
 
 - tapOn:
-    id: "start-magic-sync-button"
+    text: "Start Magic Sync"
 - assertVisible: "Setup McBridge" # Still here because 'notaword' is invalid
 - takeScreenshot: "maestro-error-invalid-mnemonic"

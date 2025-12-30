@@ -52,7 +52,7 @@ export abstract class MaestroTest {
 
   protected async runFlow(path: string) {
     const localPath = path.startsWith("file://") ? path.slice(7) : path;
-    await $`MAESTRO_SKIP_WAIT_FOR_QUIESCENCE=true ${this.maestroBin} test ${localPath}`;
+    await $`${this.maestroBin} test ${localPath}`;
   }
 
   /**
