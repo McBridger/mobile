@@ -50,6 +50,7 @@ const Header = () => {
   const leftButton =
     currentRouteName === "connection" ? (
       <TouchableOpacity
+        testID="settings-button"
         onPress={handleLeftButtonPress}
         style={styles.leftButton}
       >

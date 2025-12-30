@@ -27,8 +27,8 @@ async function runTest() {
     await $`adb shell am broadcast -a expo.modules.connector.RECEIVE_DATA -p com.mc.bridger.e2e --es address "MA:ES:TR:00:23:45" --es data "${jsonHex}"`;
     await Bun.sleep(1000);
 
-    // 5. Data Check
-    console.log("\n[Step 5] Verifying Received Data...");
+    // 5. Data Check & Clipboard Verification
+    console.log("\n[Step 5] Verifying Received Data & Clipboard...");
     await $`${MAESTRO_BIN} test .maestro/steps/3_data_check.yaml`;
 
     console.log("\n✅ E2E Test Passed Successfully!");

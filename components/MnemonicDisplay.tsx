@@ -31,7 +31,11 @@ export const MnemonicDisplay = ({ mnemonic, onReset }: Props) => {
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity style={styles.resetButton} onPress={onReset}>
+      <TouchableOpacity 
+        testID="reset-setup-button"
+        style={styles.resetButton} 
+        onPress={onReset}
+      >
         <Text style={styles.resetButtonText}>Reset Setup</Text>
       </TouchableOpacity>
     </View>
