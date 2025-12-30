@@ -1,5 +1,6 @@
 import { $ } from "bun";
 import { testRegistry } from "./decorators";
+import { APP_ID } from "./constants";
 
 export enum AdbEvent {
   SCAN_DEVICE = "expo.modules.connector.SCAN_DEVICE",
@@ -69,7 +70,7 @@ export abstract class MaestroTest {
       .map(([key, value]) => `--es ${key} "${value}"`) // Note: escaped quotes here are intentional for shell command
       .join(" ");
     
-    await $`adb shell am broadcast -a ${event} -p ${this.appId} ${extraArgs}`;
+    await $`adb shell am broadcast -a ${event} -p ${APP_ID} ${extraArgs}`;
   }
 
   protected async simulateScan(payload: { address: string; name: string }) {

@@ -1,8 +1,12 @@
 import { BasicTest } from "./basic";
 import { ErrorTest } from "./errors";
+import { grantPermissions } from "./permissions";
 
 async function runTest() {
   try {
+    // Ensure app has all required permissions before starting tests
+    await grantPermissions();
+
     // Run Happy Path
     await new BasicTest().run();
 
@@ -12,8 +16,6 @@ async function runTest() {
     console.log("\n✅ All E2E Tests Passed Successfully!");
   } catch (error) {
     console.error("\n❌ E2E Test Suite Failed!");
-    // We don't log the whole error object to keep CLI output clean, 
-    // but in a real CI environment you might want more detail.
     process.exit(1);
   }
 }
