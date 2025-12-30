@@ -86,7 +86,7 @@ export default function Connection() {
               ]}
             >
               {isConnected
-                ? "No data synced yet. Try copying something on your Mac!"
+                ? "No data synced yet. Try copying something on your Mac"
                 : "Waiting for connection to start syncing..."}
             </Text>
           </View>
