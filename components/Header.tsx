@@ -143,7 +143,7 @@ const Header = () => {
 
 const styles = StyleSheet.create({
   appbar: {
-    height: 90,
+    height: 80,
     justifyContent: "center",
     elevation: 0,
   },

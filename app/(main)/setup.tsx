@@ -9,6 +9,7 @@ import React, { useEffect, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StyleSheet,
   View,
@@ -96,7 +97,10 @@ export default function Setup() {
         </View>
       ) : (
         <>
-          <KeyboardAvoidingView behavior="height" style={styles.container}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={styles.container}
+          >
             <ScrollView contentContainerStyle={styles.scrollContent}>
               <View style={styles.mainContent}>
                 {isReady ? (
