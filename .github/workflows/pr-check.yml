@@ -95,7 +95,9 @@ jobs:
           bun .maestro/runner.ts --help || true
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v5.0.0
+        with:
+          cache-read-only: false
 
       # Build APK BEFORE starting emulator to save time
       - name: Build E2E APK
