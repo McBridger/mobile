@@ -46,6 +46,17 @@ jobs:
     runs-on: ubuntu-latest
     needs: lint-and-doctor
     steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          # keep android for obvious reasons
+          android: false
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -102,6 +113,12 @@ jobs:
       # Build APK BEFORE starting emulator to save time
       - name: Build E2E APK
         run: bun run android:e2e:build
+
+      - name: Cleanup Gradle build artifacts
+        run: |
+          # Keep the APK, but delete the heavy build folders to free space for the emulator
+          rm -rf mobile/android/app/build
+          rm -rf mobile/android/build
 
       - name: Enable KVM group perms
         run: sudo chmod 666 /dev/kvm
