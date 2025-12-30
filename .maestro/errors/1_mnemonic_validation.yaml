@@ -1,0 +1,28 @@
+appId: com.mc.bridger.e2e
+---
+- launchApp:
+    clearState: true
+- waitForAnimationToEnd
+- assertVisible: "Setup McBridge"
+
+# 1. Check incomplete mnemonic (button disabled)
+- tapOn:
+    id: "mnemonic-input-0"
+- inputText: "abandon"
+- assertVisible: 
+    id: "start-magic-sync-button"
+    enabled: false
+
+# 2. Check invalid word (red border / validation)
+- tapOn:
+    id: "mnemonic-input-1"
+- inputText: "notaword"
+- hideKeyboard
+- assertVisible: 
+    id: "start-magic-sync-button"
+    enabled: false
+
+- tapOn:
+    id: "start-magic-sync-button"
+- assertVisible: "Setup McBridge" # Still here because 'notaword' is invalid
+- takeScreenshot: "maestro-error-invalid-mnemonic"

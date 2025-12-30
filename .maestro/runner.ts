@@ -1,39 +1,19 @@
-import { $ } from "bun";
-
-// Fallback to global 'maestro' if no explicit path is provided
-const MAESTRO_BIN = process.env.MAESTRO_PATH || "maestro";
+import { BasicTest } from "./basic";
+import { ErrorTest } from "./errors";
 
 async function runTest() {
-  console.log("🚀 Starting McBridger E2E Mock Flow...");
-  console.log(`Using Maestro binary: ${MAESTRO_BIN}`);
-
   try {
-    // 1. Setup Phase
-    console.log("\n[Step 1] Running Setup...");
-    await $`${MAESTRO_BIN} test .maestro/steps/1_setup.yaml`;
+    // Run Happy Path
+    await new BasicTest().run();
 
-    // 2. Discovery Simulation
-    console.log("\n[Step 2] Simulating Device Discovery via ADB...");
-    await $`adb shell am broadcast -a expo.modules.connector.SCAN_DEVICE -p com.mc.bridger.e2e --es address "MA:ES:TR:00:23:45" --es name "Maestro-Mac"`;
-    await Bun.sleep(1000); 
+    // Run Error Cases
+    await new ErrorTest().run();
 
-    // 3. Discovery Check
-    console.log("\n[Step 3] Verifying Connection Status...");
-    await $`${MAESTRO_BIN} test .maestro/steps/2_discovery_check.yaml`;
-
-    // 4. Data Simulation
-    console.log("\n[Step 4] Simulating Incoming Data via ADB...");
-    const jsonHex = Buffer.from('{"t":0,"p":"Maestro"}').toString('hex');
-    await $`adb shell am broadcast -a expo.modules.connector.RECEIVE_DATA -p com.mc.bridger.e2e --es address "MA:ES:TR:00:23:45" --es data "${jsonHex}"`;
-    await Bun.sleep(1000);
-
-    // 5. Data Check & Clipboard Verification
-    console.log("\n[Step 5] Verifying Received Data & Clipboard...");
-    await $`${MAESTRO_BIN} test .maestro/steps/3_data_check.yaml`;
-
-    console.log("\n✅ E2E Test Passed Successfully!");
+    console.log("\n✅ All E2E Tests Passed Successfully!");
   } catch (error) {
-    console.error("\n❌ E2E Test Failed!");
+    console.error("\n❌ E2E Test Suite Failed!");
+    // We don't log the whole error object to keep CLI output clean, 
+    // but in a real CI environment you might want more detail.
     process.exit(1);
   }
 }
