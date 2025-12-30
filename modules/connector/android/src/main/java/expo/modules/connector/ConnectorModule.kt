@@ -4,7 +4,6 @@ import android.content.Intent
 import android.os.Build
 import android.util.Log
 import expo.modules.connector.core.Broker
-import expo.modules.connector.di.connectorModule
 import expo.modules.connector.services.ForegroundService
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
