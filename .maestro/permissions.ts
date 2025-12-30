@@ -1,20 +1,30 @@
 import { $ } from "bun";
 import { APP_ID } from "./constants";
 
-export const PERMISSIONS = [
-  "android.permission.BLUETOOTH_SCAN",
-  "android.permission.BLUETOOTH_CONNECT",
-  "android.permission.ACCESS_FINE_LOCATION",
-  "android.permission.POST_NOTIFICATIONS",
-];
 
 /**
  * Automatically grants required Android permissions via ADB.
- * Essential for CI environments where the emulator is clean.
+ * Version-aware: skips permissions that don't exist on older API levels.
  */
 export async function grantPermissions() {
   console.log("🔓 Granting permissions via ADB...");
-  for (const permission of PERMISSIONS) {
+  
+  const sdkVersionStr = await $`adb shell getprop ro.build.version.sdk`.text();
+  const sdkVersion = parseInt(sdkVersionStr.trim(), 10);
+  console.log(`  📱 Detected Android API Level: ${sdkVersion}`);
+
+  const permissions = ["android.permission.ACCESS_FINE_LOCATION"];
+
+  if (sdkVersion >= 31) {
+    permissions.push("android.permission.BLUETOOTH_SCAN");
+    permissions.push("android.permission.BLUETOOTH_CONNECT");
+  }
+
+  if (sdkVersion >= 33) {
+    permissions.push("android.permission.POST_NOTIFICATIONS");
+  }
+
+  for (const permission of permissions) {
     console.log(`  - ${permission}`);
     try {
       await $`adb shell pm grant ${APP_ID} ${permission}`;

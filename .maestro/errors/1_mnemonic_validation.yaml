@@ -10,11 +10,7 @@ appId: com.mc.bridger.e2e
     id: "mnemonic-input-0"
 - inputText: "abandon"
 
-- runFlow:
-    when:
-      visible: '?123'
-    commands:
-        - hideKeyboard
+- hideKeyboard
 
 - assertVisible: 
     text: "Start Magic Sync"
@@ -25,11 +21,7 @@ appId: com.mc.bridger.e2e
     id: "mnemonic-input-1"
 - inputText: "notaword"
 
-- runFlow:
-    when:
-      visible: '?123'
-    commands:
-        - hideKeyboard
+- hideKeyboard
 
 - assertVisible: 
     text: "Start Magic Sync"

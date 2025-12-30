@@ -70,9 +70,20 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
+      - name: Cache Maestro
+        id: cache-maestro
+        uses: actions/cache@v4
+        with:
+          path: ~/.maestro
+          key: ${{ runner.os }}-maestro-${{ hashFiles('.maestro/runner.ts') }}
+
       - name: Setup Maestro
+        if: steps.cache-maestro.outputs.cache-hit != 'true'
         run: |
           curl -fsSL https://get.maestro.mobile.dev | bash
+      
+      - name: Add Maestro to Path
+        run: |
           echo "MAESTRO_HOME=$HOME/.maestro" >> $GITHUB_ENV
           echo "$HOME/.maestro/bin" >> $GITHUB_PATH
 
@@ -84,27 +95,40 @@ jobs:
           bun .maestro/runner.ts --help || true
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v5.0.0
-        with:
-          cache-read-only: false
+        uses: gradle/actions/setup-gradle@v3
+
+      # Build APK BEFORE starting emulator to save time
+      - name: Build E2E APK
+        run: bun run android:e2e:build
 
       - name: Enable KVM group perms
-        run: |
-          sudo chmod 666 /dev/kvm
+        run: sudo chmod 666 /dev/kvm
+
+      # Cache Android System Image
+      - name: AVD cache
+        uses: actions/cache@v4
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-30
 
       - name: Run E2E Tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 30
-          target: google_apis
+          target: aosp
           arch: x86_64
           force-avd-creation: false
           emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
+          # We only run install and test here, because build is already done
           script: |
             export PATH="$PATH:$HOME/.maestro/bin"
             export MAESTRO_PATH="$HOME/.maestro/bin/maestro"
-            bun run android:e2e
+            bun run android:e2e:install
+            bun run android:e2e:test
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
@@ -115,5 +139,5 @@ jobs:
           name: maestro-report
           path: |
             ~/.maestro/tests/
-            mobile/.maestro/reports/
+            .maestro/reports/
           if-no-files-found: warn

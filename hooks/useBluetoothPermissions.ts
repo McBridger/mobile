@@ -36,13 +36,18 @@ export function useBluetoothPermissions() {
   const isMandatoryGranted = useMemo(() => {
     const os = Platform.OS as keyof Config;
     const current = status[os];
+
     if (os === "android") {
+      const isOk = (p: string) =>
+        current[p] === RESULTS.GRANTED || current[p] === RESULTS.UNAVAILABLE;
+
       return (
-        current[PERMISSIONS.ANDROID.BLUETOOTH_SCAN] === RESULTS.GRANTED &&
-        current[PERMISSIONS.ANDROID.BLUETOOTH_CONNECT] === RESULTS.GRANTED &&
-        current[PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION] === RESULTS.GRANTED
+        current[PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION] === RESULTS.GRANTED &&
+        isOk(PERMISSIONS.ANDROID.BLUETOOTH_SCAN) &&
+        isOk(PERMISSIONS.ANDROID.BLUETOOTH_CONNECT)
       );
     }
+
     return current[PERMISSIONS.IOS.BLUETOOTH] === RESULTS.GRANTED;
   }, [status]);
 
@@ -67,11 +72,12 @@ export function useBluetoothPermissions() {
   useEffect(() => {
     updateStatuses().finally(() => setIsLoading(false));
 
-    const subscription = AppState.addEventListener("change", (nextAppState: AppStateStatus) => {
-      if (nextAppState === "active") {
-        updateStatuses();
+    const subscription = AppState.addEventListener(
+      "change", 
+      (nextAppState: AppStateStatus) => { 
+        if (nextAppState === "active")  updateStatuses() 
       }
-    });
+    );
 
     return () => subscription.remove();
   }, [updateStatuses]);

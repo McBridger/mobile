@@ -13,12 +13,7 @@ appId: com.mc.bridger.e2e
     id: "mnemonic-input-1"
 - inputText: "ability"
 
-- runFlow:
-    when:
-      visible: '?123'
-    commands:
-        - hideKeyboard
-
+- hideKeyboard
 
 - tapOn: "Start Magic Sync"
 - waitForAnimationToEnd
