@@ -1,6 +1,6 @@
-import 'tsx/cjs';
 import { ConfigContext, ExpoConfig } from "expo/config";
 import { capitalize } from "lodash";
+import 'tsx/cjs';
 import { z } from "zod";
 
 const Extra = z.object({

@@ -1,6 +1,7 @@
 import { useAppConfig } from "@/hooks/useConfig";
+import { useBluetoothPermissions } from "@/hooks/useBluetoothPermissions";
 import ConnectorModule, { useConnector } from "@/modules/connector";
-import { Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { AppState, AppStateStatus, View } from "react-native";
 import { useShallow } from "zustand/shallow";
@@ -8,6 +9,8 @@ import Header from "../../components/Header";
 
 export default function MainLayout() {
   const { extra } = useAppConfig();
+  const router = useRouter();
+  const { allPermissionsGranted, isLoading: isPermissionsLoading } = useBluetoothPermissions();
 
   const [subscribe, unsubscribe] = useConnector(
     useShallow((state) => [state.subscribe, state.unsubscribe])
@@ -15,7 +18,14 @@ export default function MainLayout() {
   
   const [init, setInit] = useState(false);
 
-  // 1. Subscription Management (Native Events)
+  // 1. Permissions Guard
+  useEffect(() => {
+    if (!isPermissionsLoading && !allPermissionsGranted) {
+      router.replace("/permissions");
+    }
+  }, [allPermissionsGranted, isPermissionsLoading, router]);
+
+  // 2. Subscription Management (Native Events)
   useEffect(() => {
     if (AppState.currentState === "active") subscribe();
 
@@ -67,14 +77,14 @@ export default function MainLayout() {
           name="connection"
           options={{
             title: "Connection",
-            animation: "slide_from_right",
+            animation: "fade",
           }}
         />
         <Stack.Screen
           name="setup"
           options={{
             title: "Setup Mnemonic",
-            animation: "slide_from_bottom",
+            animation: "fade",
           }}
         />
       </Stack>

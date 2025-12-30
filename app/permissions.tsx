@@ -1,51 +1,237 @@
-import { router } from "expo-router";
-import { useEffect } from 'react'; // Import useEffect
-import { Button, Platform, StyleSheet, Text, View } from "react-native";
-import { RESULTS } from 'react-native-permissions';
-import { useBluetoothPermissions } from "../hooks/useBluetoothPermissions";
+import Header from "@/components/Header";
+import { useBluetoothPermissions } from "@/hooks/useBluetoothPermissions";
+import { AppTheme } from "@/theme/CustomTheme";
+import { Ionicons } from "@expo/vector-icons";
+import { router, Stack } from "expo-router";
+import React, { useEffect, useMemo } from "react";
+import { ScrollView, StyleSheet, View } from "react-native";
+import { Avatar, Button, Card, List, Text, useTheme } from "react-native-paper";
+import { PERMISSIONS, RESULTS } from "react-native-permissions";
 
 export default function PermissionsScreen() {
-  const { status, isLoading, request, allPermissionsGranted, showPermissionRationale } = useBluetoothPermissions();
+  const theme = useTheme() as AppTheme;
+  const { status, isLoading, request, showPermissionRationale } =
+    useBluetoothPermissions();
+
+  const permissionsState = useMemo(() => {
+    const android = status.android || {};
+    const btScan = android[PERMISSIONS.ANDROID.BLUETOOTH_SCAN];
+    const btConnect = android[PERMISSIONS.ANDROID.BLUETOOTH_CONNECT];
+    const location = android[PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION];
+    const notifications = android["NOTIFICATIONS"];
+
+    const isBtGranted =
+      btScan === RESULTS.GRANTED && btConnect === RESULTS.GRANTED;
+    const isLocationGranted = location === RESULTS.GRANTED;
+    const isNotificationsGranted = notifications === RESULTS.GRANTED;
+
+    return {
+      isBtGranted,
+      isLocationGranted,
+      isNotificationsGranted,
+      isMandatoryGranted: isBtGranted && isLocationGranted,
+    };
+  }, [status]);
 
   useEffect(() => {
-    if (!isLoading && allPermissionsGranted) router.replace('/');
-  }, [isLoading, allPermissionsGranted]);
+    if (!isLoading && permissionsState.isMandatoryGranted) {
+      // Small delay for smooth transition so user sees the last checkbox checked
+      const timer = setTimeout(() => router.replace("/"), 500);
+      return () => clearTimeout(timer);
+    }
+  }, [isLoading, permissionsState.isMandatoryGranted]);
 
   if (isLoading) {
     return (
-      <View style={styles.container}>
-        <Text>Checking Bluetooth permissions...</Text>
+      <View
+        style={[styles.container, { backgroundColor: theme.colors.background }]}
+      >
+        <Text>Checking permissions...</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Bluetooth Permissions Required</Text>
-      <Text style={styles.description}>
-        This app needs access to Bluetooth to discover and connect to nearby devices.
-        Location permission is also required for Bluetooth scanning on Android.
-        Please grant the necessary permissions to continue.
-      </Text>
+    <View
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
+    >
+      <Stack.Screen options={{ headerShown: false }} />
+      <Header />
 
-      {Platform.OS === 'android' && status.android && Object.entries(status.android).map(([perm, stat]) => (
-        <View key={perm} style={styles.permissionItem}>
-          <Text>{perm}: <Text style={{ color: stat === RESULTS.GRANTED ? 'green' : 'red' }}>{stat}</Text></Text>
-          {stat === RESULTS.DENIED || stat === RESULTS.BLOCKED ? (
-            <Button title="Show Rationale / Open Settings" onPress={() => showPermissionRationale()} />
-          ) : null}
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.hero}>
+          <Avatar.Icon
+            size={56}
+            icon="shield-check-outline"
+            style={{
+              backgroundColor: theme.colors.primaryMuted,
+              marginBottom: 12,
+            }}
+            color={theme.colors.primary}
+          />
+          <Text variant="headlineSmall" style={styles.heroTitle}>
+            Safety First
+          </Text>
+          <Text
+            variant="bodyMedium"
+            style={[
+              styles.heroSubtitle,
+              { color: theme.colors.onSurfaceVariant },
+            ]}
+          >
+            McBridge requires access to some features to ensure a seamless sync
+            between your devices.
+          </Text>
         </View>
-      ))}
 
-      {!allPermissionsGranted && (
-        <View style={styles.buttonContainer}>
-          <Button title="Grant Permissions" onPress={request} />
+        <Card
+          style={[styles.card, { borderColor: theme.colors.cardBorder }]}
+          mode="outlined"
+        >
+          <Card.Content>
+            <List.Section style={styles.listSection}>
+              <List.Subheader style={styles.listSubheader}>Core Connectivity (Mandatory)</List.Subheader>
+
+              <List.Item
+                title="Bluetooth & Discovery"
+                description="Required to find and talk to your Mac."
+                left={(props) => (
+                  <Avatar.Icon
+                    {...props}
+                    size={40}
+                    icon="bluetooth"
+                    style={{
+                      backgroundColor: permissionsState.isBtGranted
+                        ? theme.colors.connected + "20"
+                        : theme.colors.surfaceVariant,
+                    }}
+                    color={
+                      permissionsState.isBtGranted
+                        ? theme.colors.connected
+                        : theme.colors.onSurfaceVariant
+                    }
+                  />
+                )}
+                right={() =>
+                  permissionsState.isBtGranted ? (
+                    <View style={styles.statusIcon}>
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={24}
+                        color={theme.colors.connected}
+                      />
+                    </View>
+                  ) : null
+                }
+              />
+
+              <List.Item
+                title="Location Services"
+                description="Android requirement for Bluetooth scanning."
+                left={(props) => (
+                  <Avatar.Icon
+                    {...props}
+                    size={40}
+                    icon="map-marker-radius"
+                    style={{
+                      backgroundColor: permissionsState.isLocationGranted
+                        ? theme.colors.connected + "20"
+                        : theme.colors.surfaceVariant,
+                    }}
+                    color={
+                      permissionsState.isLocationGranted
+                        ? theme.colors.connected
+                        : theme.colors.onSurfaceVariant
+                    }
+                  />
+                )}
+                right={() =>
+                  permissionsState.isLocationGranted ? (
+                    <View style={styles.statusIcon}>
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={24}
+                        color={theme.colors.connected}
+                      />
+                    </View>
+                  ) : null
+                }
+              />
+            </List.Section>
+          </Card.Content>
+        </Card>
+
+        <Card
+          style={[styles.card, { borderColor: theme.colors.cardBorder }]}
+          mode="outlined"
+        >
+          <Card.Content>
+            <List.Section style={styles.listSection}>
+              <List.Subheader style={styles.listSubheader}>
+                Experience (Recommended)
+              </List.Subheader>
+              <List.Item
+                title="Instant Notifications"
+                description="Stay updated on sync status in real-time."
+                left={(props) => (
+                  <Avatar.Icon
+                    {...props}
+                    size={40}
+                    icon="bell-ring"
+                    style={{
+                      backgroundColor: permissionsState.isNotificationsGranted
+                        ? theme.colors.connected + "20"
+                        : theme.colors.surfaceVariant,
+                    }}
+                    color={
+                      permissionsState.isNotificationsGranted
+                        ? theme.colors.connected
+                        : theme.colors.onSurfaceVariant
+                    }
+                  />
+                )}
+                right={() =>
+                  permissionsState.isNotificationsGranted ? (
+                    <View style={styles.statusIcon}>
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={24}
+                        color={theme.colors.connected}
+                      />
+                    </View>
+                  ) : null
+                }
+              />
+            </List.Section>
+          </Card.Content>
+        </Card>
+
+        <View style={styles.footer}>
+          <Button
+            mode="contained"
+            onPress={request}
+            disabled={permissionsState.isMandatoryGranted}
+            style={[
+              styles.mainButton,
+              permissionsState.isMandatoryGranted && { opacity: 0.5 },
+            ]}
+            contentStyle={styles.buttonContent}
+            labelStyle={styles.buttonLabel}
+          >
+            {permissionsState.isMandatoryGranted
+              ? "Mandatory Granted"
+              : "Grant Access"}
+          </Button>
+
+          <Button
+            mode="text"
+            onPress={showPermissionRationale}
+            textColor={theme.colors.onSurfaceVariant}
+          >
+            Why do I need this?
+          </Button>
         </View>
-      )}
-
-      {allPermissionsGranted && (
-        <Text style={styles.grantedText}>All required Bluetooth permissions granted!</Text>
-      )}
+      </ScrollView>
     </View>
   );
 }
@@ -53,47 +239,55 @@ export default function PermissionsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
+  },
+  scrollContent: {
     padding: 20,
-    backgroundColor: '#f0f0f0',
+    paddingTop: 10,
+    paddingBottom: 20,
   },
-  title: {
-    fontSize: 24,
+  hero: {
+    alignItems: "center",
+    marginVertical: 20,
+  },
+  heroTitle: {
     fontWeight: "bold",
-    marginBottom: 15,
-    textAlign: 'center',
+    marginBottom: 8,
   },
-  description: {
+  heroSubtitle: {
+    textAlign: "center",
+    marginTop: 8,
+    paddingHorizontal: 20,
+  },
+  listSection: {
+    marginVertical: 0,
+  },
+  listSubheader: {
     fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 30,
-    color: '#555',
+    fontWeight: "bold",
   },
-  permissionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    width: '100%',
-    marginBottom: 10,
-    paddingHorizontal: 10,
-    backgroundColor: '#fff',
-    paddingVertical: 10,
-    borderRadius: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1.41,
-    elevation: 2,
+  card: {
+    marginBottom: 16,
+    borderRadius: 16,
+    borderWidth: 1,
   },
-  buttonContainer: {
+  statusIcon: {
+    justifyContent: "center",
+    paddingLeft: 8,
+  },
+  footer: {
     marginTop: 20,
-    // You can add padding or other styles to the container if needed
+    alignItems: "center",
   },
-  grantedText: {
-    marginTop: 20,
-    fontSize: 18,
-    color: 'green',
-    fontWeight: 'bold',
+  mainButton: {
+    width: "100%",
+    borderRadius: 28,
+    marginBottom: 12,
+  },
+  buttonContent: {
+    paddingVertical: 8,
+  },
+  buttonLabel: {
+    fontSize: 16,
+    fontWeight: "bold",
   },
 });

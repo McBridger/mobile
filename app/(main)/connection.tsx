@@ -1,17 +1,15 @@
 import { Item, STATUS, useConnector } from "@/modules/connector";
+import { AppTheme } from "@/theme/CustomTheme";
 import { Redirect } from "expo-router";
 import React, { useMemo } from "react";
-import {
-  FlatList,
-  StyleSheet,
-  Text,
-  View
-} from "react-native";
+import { FlatList, StyleSheet, View } from "react-native";
+import { Card, Text, useTheme } from "react-native-paper";
 
 export default function Connection() {
   const status = useConnector((state) => state.status);
   const isReady = useConnector((state) => state.isReady);
   const isConnected = status === STATUS.CONNECTED;
+  const theme = useTheme() as AppTheme;
 
   const _items = useConnector((state) => state.items);
   const items = useMemo(
@@ -23,30 +21,72 @@ export default function Connection() {
   if (!isReady) return <Redirect href="/setup" />;
 
   const renderItem = ({ item }: { item: Item }) => (
-    <View style={styles.clipboardItem}>
-      <Text style={styles.itemType}>
-        {item.type === "sent" ? "Sent:" : "Received:"}
-      </Text>
-      <Text style={styles.itemContent}>{item.content}</Text>
-      <Text style={styles.itemTimestamp}>
-        {new Date(item.time).toLocaleTimeString()}
-      </Text>
-    </View>
+    <Card
+      style={[styles.logCard, { borderColor: theme.colors.cardBorder }]}
+      mode="elevated"
+      elevation={1}
+    >
+      <Card.Content style={styles.cardContent}>
+        <View style={styles.logInfo}>
+          <View
+            style={[
+              styles.labelBadge,
+              {
+                backgroundColor: theme.dark
+                  ? theme.colors.statusRipple
+                  : theme.colors.statusRippleLight,
+              },
+            ]}
+          >
+            <Text
+              variant="labelSmall"
+              style={[
+                styles.labelText,
+                { color: theme.colors.onSurfaceVariant },
+              ]}
+            >
+              {item.type === "sent" ? "SENT" : "RECEIVED"}
+            </Text>
+          </View>
+          <Text
+            variant="titleMedium"
+            style={{ color: theme.colors.onSurface }}
+          >
+            {item.content}
+          </Text>
+        </View>
+        <View style={styles.logMeta}>
+          <Text
+            variant="labelMedium"
+            style={[styles.timeText, { color: theme.colors.onSurfaceVariant }]}
+          >
+            {new Date(item.time).toLocaleTimeString()}
+          </Text>
+        </View>
+      </Card.Content>
+    </Card>
   );
 
   return (
-    <View style={styles.container}>
+    <View
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
+    >
       <FlatList
         data={items}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
-        style={styles.list}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>
+            <Text
+              variant="titleMedium"
+              style={[
+                styles.emptyText,
+                { color: theme.colors.onSurfaceVariant },
+              ]}
+            >
               {isConnected
-                ? "No data synced yet. Try copying something on your Mac!"
+                ? "No data synced yet. Try copying something on your Mac"
                 : "Waiting for connection to start syncing..."}
             </Text>
           </View>
@@ -59,44 +99,41 @@ export default function Connection() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
-  },
-  list: {
-    flex: 1,
   },
   listContent: {
     padding: 20,
-    paddingBottom: 40,
   },
-  clipboardItem: {
-    backgroundColor: "#fff",
-    padding: 15,
-    borderRadius: 12,
+  logCard: {
+    borderRadius: 20,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: "#eee",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
   },
-  itemType: {
-    fontSize: 12,
-    fontWeight: "bold",
-    color: "#007AFF",
-    marginBottom: 4,
-    textTransform: "uppercase",
+  cardContent: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
   },
-  itemContent: {
-    fontSize: 16,
-    color: "#1a1a1a",
+  logInfo: {
+    flex: 1,
+    marginRight: 10,
+  },
+  labelBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
     marginBottom: 8,
   },
-  itemTimestamp: {
-    fontSize: 11,
-    color: "#bbb",
-    textAlign: "right",
+  labelText: {
+    letterSpacing: 0.5,
+  },
+  logMeta: {
+    alignItems: "flex-end",
+  },
+  timeText: {
+    marginTop: 4,
   },
   emptyContainer: {
     padding: 40,
@@ -104,8 +141,5 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     textAlign: "center",
-    color: "#999",
-    fontSize: 14,
-    lineHeight: 20,
   },
 });
