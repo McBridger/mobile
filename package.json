@@ -1,19 +1,17 @@
 {
   "name": "rn-bridger",
   "main": "expo-router/entry",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
     "android:prebuild": "expo prebuild --clean --platform android",
     "android:check": "bunx expo doctor",
     "android:dev": "expo prebuild --clean --platform android && expo run:android",
-
     "android:e2e:build": "eas build --local --platform android --profile e2e",
     "android:e2e:install": "adb install $(ls -t build-*.apk | head -n 1)",
     "android:e2e:test": "export APP_VARIANT=e2e && bun .maestro/runner.ts",
     "android:e2e": "bun run android:e2e:build && bun run android:e2e:install && bun run android:e2e:test",
-
     "android:build": "dotenvx run -- eas build --local --platform android --profile preview",
     "android:build:prod": "dotenvx run -- eas build --local --platform android --profile prod",
     "android:build:debug": "cd android && ./gradlew assembleDebug",
