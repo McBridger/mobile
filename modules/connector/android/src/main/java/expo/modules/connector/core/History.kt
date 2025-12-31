@@ -3,24 +3,28 @@ package expo.modules.connector.core
 import android.content.Context
 import android.os.Bundle
 import android.util.Log
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import expo.modules.connector.models.Message
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.encodeToString
 import java.io.File
 import java.io.FileReader
 import java.io.FileWriter
 import java.io.IOException
 import java.util.concurrent.ConcurrentLinkedQueue
 
-class History private constructor(private val historyFile: File) {
-    private val gson = Gson()
+class History(context: Context) {
     private val historyQueue = ConcurrentLinkedQueue<String>()
     
     // Scope for IO operations to avoid blocking UI thread
     private val scope = CoroutineScope(Dispatchers.IO)
+    
+    private val historyFile: File by lazy {
+        val packageName = context.packageName
+        File(context.filesDir, "bridger_history_$packageName.json")
+    }
 
     init {
         // Load history in background
@@ -59,14 +63,12 @@ class History private constructor(private val historyFile: File) {
 
         try {
             FileReader(historyFile).use { reader ->
-                val type = object : TypeToken<ConcurrentLinkedQueue<String>>() {}.type
-                val loadedQueue: ConcurrentLinkedQueue<String>? = gson.fromJson(reader, type)
-                if (loadedQueue != null) {
-                    historyQueue.addAll(loadedQueue)
-                }
+                val content = reader.readText()
+                val loadedList: List<String> = Json.decodeFromString(content)
+                historyQueue.addAll(loadedList)
                 Log.d(TAG, "Bridger history loaded from file. Total entries: ${historyQueue.size}")
             }
-        } catch (e: IOException) {
+        } catch (e: Exception) {
             Log.e(TAG, "Error loading history from file: ${e.message}")
             historyFile.delete()
         }
@@ -75,7 +77,8 @@ class History private constructor(private val historyFile: File) {
     private fun saveHistoryToFile() {
         try {
             FileWriter(historyFile).use { writer ->
-                gson.toJson(historyQueue, writer)
+                val jsonContent = Json.encodeToString(historyQueue.toList())
+                writer.write(jsonContent)
                 Log.d(TAG, "Bridger history saved to file.")
             }
         } catch (e: IOException) {
@@ -85,17 +88,5 @@ class History private constructor(private val historyFile: File) {
 
     companion object {
         private const val TAG = "History"
-        @Volatile
-        private var INSTANCE: History? = null
-
-        fun getInstance(context: Context): History {
-            return INSTANCE ?: synchronized(this) {
-                val appContext = context.applicationContext
-                val packageName = appContext.packageName
-                val file = File(appContext.filesDir, "bridger_history_$packageName.json")
-
-                INSTANCE ?: History(file).also { INSTANCE = it }
-            }
-        }
     }
 }

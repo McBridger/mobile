@@ -1,0 +1,1 @@
+export const APP_ID = "com.mc.bridger.e2e";

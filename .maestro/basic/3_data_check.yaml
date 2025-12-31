@@ -1,0 +1,18 @@
+appId: com.mc.bridger.e2e
+---
+- assertVisible: "Maestro"
+- assertVisible: "RECEIVED"
+- tapOn:
+    label: "Settings"
+- tapOn: "Reset Security"
+- tapOn: "Reset"
+- assertVisible: "Setup McBridge"
+
+- longPressOn:
+    id: "mnemonic-input-0"
+- waitForAnimationToEnd
+- tapOn: "Paste"
+
+- assertVisible: "Maestro"
+- takeScreenshot: "maestro-clipboard-verified"
+- stopApp

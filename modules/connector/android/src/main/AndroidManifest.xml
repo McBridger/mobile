@@ -23,5 +23,14 @@
                 <action android:name="android.service.quicksettings.action.QS_TILE"/>
             </intent-filter>
         </service>
+
+        <receiver
+            android:name="expo.modules.connector.testing.TestReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="expo.modules.connector.SCAN_DEVICE" />
+                <action android:name="expo.modules.connector.RECEIVE_DATA" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

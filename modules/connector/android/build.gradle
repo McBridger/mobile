@@ -1,5 +1,17 @@
 apply plugin: 'com.android.library'
 
+buildscript {
+  repositories {
+    google()
+    mavenCentral()
+  }
+  dependencies {
+    classpath "org.jetbrains.kotlin:kotlin-serialization:2.1.20"
+  }
+}
+
+apply plugin: 'kotlinx-serialization'
+
 group = 'expo.modules.connector'
 version = '0.7.6'
 
@@ -44,10 +56,25 @@ android {
 
 dependencies {
   implementation 'no.nordicsemi.android:ble:2.10.2'
-  implementation 'com.google.code.gson:gson:2.10.1'
+  implementation 'no.nordicsemi.android.support.v18:scanner:1.6.0'
+  implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3'
+  implementation 'androidx.security:security-crypto:1.1.0'
+
+  // Koin for Android
+  implementation "io.insert-koin:koin-android:4.0.0"
 
   testImplementation 'junit:junit:4.13.2'
   testImplementation 'io.mockk:mockk:1.13.12'
   testImplementation 'org.robolectric:robolectric:4.14.1'
   testImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.1"
+}
+
+android {
+    sourceSets {
+        main {
+            if (System.getenv("WITH_MOCK") == "true") {
+                java.srcDirs += 'src/e2e/java'
+            }
+        }
+    }
 }

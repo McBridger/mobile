@@ -12,17 +12,15 @@ import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import expo.modules.connector.R
 import expo.modules.connector.core.Broker
-import expo.modules.connector.transports.ble.BleTransport
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
+import org.koin.android.ext.android.inject
+import expo.modules.connector.di.initKoin
 
 class ForegroundService : Service() {
 
     private val scope = CoroutineScope(Dispatchers.Main + Job())
     private lateinit var notificationManager: NotificationManager
+    private val broker: Broker by inject()
 
     companion object {
         private const val TAG = "BridgerService"
@@ -30,30 +28,22 @@ class ForegroundService : Service() {
         private var CHANNEL_ID = "BridgerForegroundServiceChannel"
     }
 
-    override fun onBind(intent: Intent?): IBinder? {
-        Log.d(TAG, "onBind: Service binding.")
-        return null
-    }
+    override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
-        Log.d(TAG, "onCreate: Service created.")
-        
-        // Ensure unique ID per package if multiple apps use this lib (unlikely but safe)
+        Log.d(TAG, "onCreate: Service created. Initializing Koin if needed.")
+        initKoin(this)
+
         SERVICE_NOTIFICATION_ID += applicationContext.packageName.hashCode()
         CHANNEL_ID += applicationContext.packageName
-        
+
         notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         createNotificationChannel()
 
-        // 1. Initialize Broker (Idempotent)
-        Log.d(TAG, "onCreate: Initializing Broker.")
-        Broker.init(applicationContext)
-
-        // 3. Listen to state changes for Notification updates
         scope.launch {
             Log.d(TAG, "onCreate: Starting to collect Broker state changes for notification updates.")
-            Broker.state.collect { state ->
+            broker.state.collect { state ->
                 Log.d(TAG, "onCreate: Broker state changed to $state, updating notification.")
                 updateNotificationForState(state)
             }
@@ -61,29 +51,13 @@ class ForegroundService : Service() {
     }
 
     @RequiresApi(Build.VERSION_CODES.HONEYCOMB)
-    override fun onStartCommand(intent: Intent, flags: Int, startId: Int): Int {
-        Log.d(TAG, "onStartCommand: Service received start command. Start ID: $startId, Intent: $intent")
-        val serviceUuid = intent.extras?.getString("SERVICE_UUID")
-        val characteristicUuid = intent.extras?.getString("CHARACTERISTIC_UUID")
-
-        if (serviceUuid == null || characteristicUuid == null) {
-            Log.e(TAG, "onStartCommand: Missing SERVICE_UUID or CHARACTERISTIC_UUID in intent extras. Stopping service.")
-            stopSelf()
-            return START_NOT_STICKY
-        }
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Log.d(TAG, "onStartCommand: Service received start command.")
 
         Log.d(TAG, "onStartCommand: Starting foreground with notification ID: $SERVICE_NOTIFICATION_ID")
-        startForeground(SERVICE_NOTIFICATION_ID, buildNotification("Bridger Service", "Service Started"))
+        startForeground(SERVICE_NOTIFICATION_ID, buildNotification("Bridger Active", "Initializing..."))
 
-        Log.d(TAG, "onStartCommand: Registering BleTransport with Broker.")
-        Broker.registerBle(
-            BleTransport(
-                applicationContext,
-                serviceUuid,
-                characteristicUuid
-            )
-        )
-        Log.i(TAG, "onStartCommand: Service fully started with UUIDs: $serviceUuid / $characteristicUuid")
+        Log.i(TAG, "onStartCommand: Service is running in foreground.")
         return START_STICKY
     }
 
@@ -100,9 +74,14 @@ class ForegroundService : Service() {
         val (title, text) = when (state) {
             Broker.State.CONNECTED -> "Bridger Connected" to "Ready to sync."
             Broker.State.CONNECTING -> "Bridger Connecting..." to "Looking for bridge."
-            Broker.State.IDLE -> "Bridger Active" to "Waiting for connection."
+            Broker.State.IDLE -> "Bridger Active" to "Waiting for setup."
             Broker.State.DISCONNECTED -> "Bridger Disconnected" to "Connection lost."
             Broker.State.ERROR -> "Bridger Error" to "Check Bluetooth or permissions."
+            Broker.State.ENCRYPTING -> "Bridger Setup" to "Generating secure keys..."
+            Broker.State.KEYS_READY,
+            Broker.State.TRANSPORT_INITIALIZING -> "Bridger Setup" to "Initializing Bluetooth..."
+            Broker.State.READY -> "Bridger Ready" to "Waiting for Mac to appear."
+            Broker.State.DISCOVERING -> "Bridger Scanning" to "Searching for your Mac..."
         }
         Log.d(TAG, "updateNotificationForState: Notification title: \"$title\", text: \"$text\"")
         notificationManager.notify(SERVICE_NOTIFICATION_ID, buildNotification(title, text))

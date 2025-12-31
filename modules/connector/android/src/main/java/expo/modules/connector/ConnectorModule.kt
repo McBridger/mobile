@@ -11,9 +11,16 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import org.koin.android.ext.koin.androidContext
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.get
+import org.koin.core.context.startKoin
+import org.koin.core.error.KoinApplicationAlreadyStartedException
+import expo.modules.connector.di.initKoin
 
-class ConnectorModule : Module() {
-  private val scope = CoroutineScope(Dispatchers.Default)
+class ConnectorModule : Module(), KoinComponent {
+  private val scope = CoroutineScope(Dispatchers.Main)
+  private val broker: Broker by lazy { get<Broker>() }
 
   companion object {
     private const val TAG = "ConnectorModule"
@@ -22,112 +29,74 @@ class ConnectorModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("Connector")
 
-    Events("onConnected", "onDisconnected", "onReceived")
+    Events("onStateChanged", "onReceived")
 
     OnCreate {
-      Log.d(TAG, "OnCreate: Initializing Broker and collecting messages.")
-      val context = appContext.reactContext?.applicationContext ?: run {
-        Log.e(TAG, "OnCreate: Application context is null.")
-        return@OnCreate
-      }
-      Broker.init(context)
+      val context = appContext.reactContext?.applicationContext ?: return@OnCreate
+      initKoin(context)
 
+      // Re-connect the "pipe" to JavaScript using the lazy broker
       scope.launch {
-        Broker.messages.collect { msg ->
-          Log.d(TAG, "onReceived event: ${msg.id}, Type: ${msg.getType()}, Value: ${msg.value}")
-          sendEvent("onReceived", msg.toBundle())
+        broker.state.collect { state ->
+          Log.d(TAG, "Emitting state change to JS: ${state.name}")
+          sendEvent("onStateChanged", mapOf("status" to state.name))
         }
       }
 
       scope.launch {
-        Broker.state.collect { state ->
-          Log.d(TAG, "onStateChange event: Broker state changed to $state")
-
-          when (state) {
-            Broker.State.CONNECTED -> sendEvent("onConnected")
-            Broker.State.DISCONNECTED -> sendEvent("onDisconnected")
-            Broker.State.IDLE -> sendEvent("onDisconnected")
-            else -> {}
-          }
+        broker.messages.collect { message ->
+          Log.d(TAG, "Emitting new message to JS: ${message.id}")
+          sendEvent("onReceived", message.toBundle())
         }
       }
     }
 
     OnDestroy {
-      Log.d(TAG, "OnDestroy: Cancelling scope.")
       scope.cancel()
     }
 
-    AsyncFunction("isConnected") {
-      val isConnected = Broker.state.value == Broker.State.CONNECTED
-      Log.d(TAG, "isConnected: Current state is ${Broker.state.value}, returning $isConnected")
-      return@AsyncFunction isConnected
+    AsyncFunction("setup") { mnemonic: String, salt: String ->
+      broker.setup(mnemonic, salt)
     }
 
-    AsyncFunction("connect") { address: String ->
-      Log.d(TAG, "connect: Attempting to connect to $address")
-      scope.launch {
-        Broker.connect(address)
-        Log.d(TAG, "connect: Broker.connect called for $address")
-      }
-      return@AsyncFunction null
+    Function("isReady") {
+      return@Function broker.state.value != Broker.State.IDLE
     }
 
-    AsyncFunction("disconnect") {
-      Log.d(TAG, "disconnect: Attempting to disconnect")
-      scope.launch {
-        Broker.disconnect()
-        Log.d(TAG, "disconnect: Broker.disconnect called")
-      }
-      return@AsyncFunction null
+    Function("getStatus") {
+      return@Function broker.state.value.name
     }
 
     AsyncFunction("send") { data: String ->
-      Log.d(TAG, "send: Sending clipboard update with data: $data")
-      Broker.clipboardUpdate(data)
+      broker.clipboardUpdate(data)
     }
 
-    AsyncFunction("start") { serviceUuid: String, characteristicUuid: String ->
-      Log.d(TAG, "start: Starting ForegroundService with serviceUuid=$serviceUuid, characteristicUuid=$characteristicUuid")
-      val context = appContext.reactContext?.applicationContext ?: run {
-        Log.e(TAG, "start: Application context is null.")
-        return@AsyncFunction null
-      }
+    AsyncFunction("start") {
+      val context = appContext.reactContext?.applicationContext ?: return@AsyncFunction null
       val intent = Intent(context, ForegroundService::class.java)
-      intent.putExtra("SERVICE_UUID", serviceUuid)
-      intent.putExtra("CHARACTERISTIC_UUID", characteristicUuid)
-
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-          context.startForegroundService(intent)
-          Log.d(TAG, "start: Called startForegroundService for Android O+")
+        context.startForegroundService(intent)
       } else {
-          context.startService(intent)
-          Log.d(TAG, "start: Called startService for Android < O")
+        context.startService(intent)
       }
-
       return@AsyncFunction null
     }
 
-    AsyncFunction("stop") {
-      Log.d(TAG, "stop: Stopping ForegroundService")
-       val context = appContext.reactContext?.applicationContext ?: run {
-         Log.e(TAG, "stop: Application context is null.")
-         return@AsyncFunction null
-       }
-       val intent = Intent(context, ForegroundService::class.java)
-       context.stopService(intent)
-       Log.d(TAG, "stop: Called stopService")
-       return@AsyncFunction null 
-    }
-
     AsyncFunction("getHistory") {
-      Log.d(TAG, "getHistory: Retrieving history")
-      return@AsyncFunction Broker.getHistory().retrieve()
+      return@AsyncFunction broker.getHistory().retrieve()
     }
 
     AsyncFunction("clearHistory") {
-      Log.d(TAG, "clearHistory: Clearing history")
-      Broker.getHistory().clear()
+      broker.getHistory().clear()
+      return@AsyncFunction null
+    }
+
+    Function("getMnemonic") {
+      return@Function broker.getMnemonic()
+    }
+
+    AsyncFunction("reset") {
+      broker.reset()
       return@AsyncFunction null
     }
   }

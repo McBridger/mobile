@@ -3,14 +3,9 @@ import { Redirect } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
 import { useBluetoothPermissions } from "../hooks/useBluetoothPermissions";
 
-// AppRegistry.registerHeadlessTask(
-//   BridgerHeadlessTask.name,
-//   () => BridgerHeadlessTask
-// );
-
 export default function AppEntry() {
   const { isLoading, allPermissionsGranted } = useBluetoothPermissions();
-  const isConnected = useConnector((state) => state.status === "connected");
+  const isReady = useConnector((state) => state.isReady);
 
   if (isLoading) {
     return (
@@ -20,10 +15,14 @@ export default function AppEntry() {
     );
   }
 
+  // 1. Check Permissions
   if (!allPermissionsGranted) return <Redirect href="/permissions" />;
-  if (isConnected) return <Redirect href="/connection" />;
 
-  return <Redirect href="/devices" />;
+  // 2. Check Encryption Setup via Store
+  if (!isReady) return <Redirect href="/setup" />;
+
+  // 3. If ready, go straight to the Magic Sync screen
+  return <Redirect href="/connection" />;
 }
 
 const styles = StyleSheet.create({
@@ -31,6 +30,5 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#fff",
   },
 });

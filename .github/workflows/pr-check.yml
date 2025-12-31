@@ -2,50 +2,38 @@ name: Android PR Check
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [main]
     paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - '.gitignore'
+      - "**.md"
+      - "docs/**"
+      - ".gitignore"
 
 permissions:
   contents: read
   actions: write
 
 env:
-  APP_VARIANT: prod
+  APP_VARIANT: e2e
+  WITH_MOCK: true
+  ENCRYPTION_SALT: 0123456789abcdef
+  MNEMONIC_LENGTH: 2
+  CI: true
+  MAESTRO_CLI_NO_ANALYTICS: 1
 
 jobs:
-  build-and-lint:
+  lint-and-doctor:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          packages: 'platforms;android-34 build-tools;34.0.0'
-
-      - name: Create .env file
-        run: |
-          echo "SERVICE_UUID=93191b22-c437-4348-b10f-f522e69f289c" > .env
-          echo "CHARACTERISTIC_UUID=7569273b-b3e3-4672-867d-b07fc54be79f" >> .env
-          echo "ADVERTISE_UUID=bf13657b-b172-44f2-8c11-1b25a521a28a" >> .env
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@v1
         with:
           bun-version: latest
+          cache: true
 
-      - name: Install Bun dependencies
+      - name: Install dependencies
         run: bun install
 
       - name: Run Linter
@@ -54,14 +42,121 @@ jobs:
       - name: Run Expo Doctor
         run: bunx expo-doctor
 
-      - name: Generate Android project
-        run: bunx expo prebuild --platform android --no-install
+  e2e-android:
+    runs-on: ubuntu-latest
+    needs: lint-and-doctor
+    steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          # keep android for obvious reasons
+          android: false
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+          cache: true
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Setup Expo & EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Cache Maestro
+        id: cache-maestro
+        uses: actions/cache@v4
+        with:
+          path: ~/.maestro
+          key: ${{ runner.os }}-maestro-${{ hashFiles('.maestro/runner.ts') }}
+
+      - name: Setup Maestro
+        if: steps.cache-maestro.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL https://get.maestro.mobile.dev | bash
+      
+      - name: Add Maestro to Path
+        run: |
+          echo "MAESTRO_HOME=$HOME/.maestro" >> $GITHUB_ENV
+          echo "$HOME/.maestro/bin" >> $GITHUB_PATH
+
+      - name: Verify Maestro
+        run: |
+          export PATH="$PATH:$HOME/.maestro/bin"
+          maestro --version
+          export MAESTRO_PATH="$HOME/.maestro/bin/maestro"
+          bun .maestro/runner.ts --help || true
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v5.0.0
         with:
           cache-read-only: false
 
-      - name: Build Debug APK
+      # Build APK BEFORE starting emulator to save time
+      - name: Build E2E APK
+        run: bun run android:e2e:build
+
+      - name: Cleanup Gradle build artifacts
         run: |
-          cd android && ./gradlew assembleDebug
+          # Keep the APK, but delete the heavy build folders to free space for the emulator
+          rm -rf mobile/android/app/build
+          rm -rf mobile/android/build
+
+      - name: Enable KVM group perms
+        run: sudo chmod 666 /dev/kvm
+
+      # Cache Android System Image
+      - name: AVD cache
+        uses: actions/cache@v4
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-30
+
+      - name: Run E2E Tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: default
+          arch: x86_64
+          force-avd-creation: false
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim
+          disable-animations: true
+          # We only run install and test here, because build is already done
+          script: |
+            export PATH="$PATH:$HOME/.maestro/bin"
+            export MAESTRO_PATH="$HOME/.maestro/bin/maestro"
+            bun run android:e2e:install
+            bun run android:e2e:test
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Upload Maestro Reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maestro-report
+          path: |
+            ~/.maestro/tests/
+            .maestro/reports/
+          if-no-files-found: warn

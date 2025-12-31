@@ -1,17 +1,19 @@
 package expo.modules.connector.models
- 
+
 import android.os.Bundle
-import android.util.Log
-import com.google.gson.Gson
-import com.google.gson.annotations.SerializedName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.encodeToString
 import java.util.UUID
- 
+
+@Serializable
 data class Message(
-    @SerializedName("t") val typeId: Int, // JSON -> {"t": 0}
-    @SerializedName("p") val value: String,
-    @SerializedName("a") val address: String? = null,
-    @SerializedName("id") val id: String = UUID.randomUUID().toString(),
-    @SerializedName("ts") val timestamp: Long = System.currentTimeMillis()
+    @SerialName("t") val typeId: Int,
+    @SerialName("p") val value: String,
+    @SerialName("a") val address: String? = null,
+    @SerialName("id") val id: String = UUID.randomUUID().toString(),
+    @SerialName("ts") val timestamp: Long = System.currentTimeMillis()
 ) {
     constructor(
         type: Type,
@@ -29,9 +31,8 @@ data class Message(
     
     fun getType(): Type = Type.entries[typeId]
 
-    fun toJson(): String = gson.toJson(this)
+    fun toJson(): String = Json.encodeToString(this)
 
-    // To JS
     fun toBundle(): Bundle = Bundle().apply {
         putString("type", getType().name)
         putString("value", value)
@@ -41,29 +42,22 @@ data class Message(
     }
 
     companion object {
-        private const val TAG = "Message"
-        private val gson = Gson()
-
         fun fromJson(json: String, address: String? = null): Message? {
             return try {
-                val parsed = gson.fromJson(json, TransferMessage::class.java)
-                Log.d(TAG, "Data parsed from JSON: Type=${parsed.type}, Payload=${parsed.payload}")
-
-                val msg = Message(
-                    type = Type.entries[parsed.type],
-                    value = parsed.payload,
-                    address = address
-                )
-
-                Log.d(TAG, "Data converted to Message: Type=${msg.getType()}, Payload=${msg.value}, Address=${msg.address}, ID=${msg.id}")
-
-                return msg
+                Json.decodeFromString<Message>(json).copy(address = address)
             } catch (e: Exception) {
-                Log.e(TAG, "fromJson: Error parsing JSON message: ${e.message}, JSON: $json")
                 null
             }
         }
     }
 
-    private data class TransferMessage(@SerializedName("t") val type: Int, @SerializedName("p") val payload: String)
+    /**
+     * DTO for transfer over BLE/Network to match iOS structure
+     */
+    @Serializable
+    data class Transfer(
+        @SerialName("t") val type: Int,
+        @SerialName("p") val payload: String,
+        @SerialName("ts") val timestamp: Double? = null
+    )
 }

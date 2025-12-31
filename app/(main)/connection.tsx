@@ -1,26 +1,15 @@
-import { useAppConfig } from "@/hooks/useConfig";
-import { Item, useConnector } from "@/modules/connector";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo } from "react";
-import {
-  FlatList,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
-import { useShallow } from "zustand/react/shallow";
+import { Item, STATUS, useConnector } from "@/modules/connector";
+import { AppTheme } from "@/theme/CustomTheme";
+import { Redirect } from "expo-router";
+import React, { useMemo } from "react";
+import { FlatList, StyleSheet, View } from "react-native";
+import { Card, Text, useTheme } from "react-native-paper";
 
 export default function Connection() {
-  const router = useRouter();
-  const { extra } = useAppConfig();
-
-  const params = useLocalSearchParams<{ address: string; name: string }>();
-  const address = useMemo(() => params.address, [params.address]);
-  const name = useMemo(() => params.name, [params.name]);
-
   const status = useConnector((state) => state.status);
-  const isConnected = useMemo(() => status === "connected", [status]);
+  const isReady = useConnector((state) => state.isReady);
+  const isConnected = status === STATUS.CONNECTED;
+  const theme = useTheme() as AppTheme;
 
   const _items = useConnector((state) => state.items);
   const items = useMemo(
@@ -28,66 +17,81 @@ export default function Connection() {
     [_items]
   );
 
-  const [
-    connect,
-    disconnect,
-    // addRecorded
-  ] = useConnector(
-    useShallow((state) => [
-      state.connect,
-      state.disconnect,
-      // state.addRecorded
-    ])
-  );
-
-  useFocusEffect(
-    useCallback(() => {
-      if (isConnected) return;
-      if (!address) return;
-
-      connect(address, name, extra);
-      // bleRecorder.processEntries().then((entries) => addRecorded(entries));
-    }, [address, connect, extra, isConnected, name])
-  );
-
-  useEffect(() => {
-    const unsub = useConnector.subscribe(
-      (state) => state.status,
-      (status, prevStatus) => {
-        if (prevStatus === "disconnecting" && status === "disconnected")
-          router.push("/devices");
-      }
-    );
-
-    return () => {
-      unsub();
-    };
-  }, [router]);
+  // Guard: If not ready, go to setup
+  if (!isReady) return <Redirect href="/setup" />;
 
   const renderItem = ({ item }: { item: Item }) => (
-    <View style={styles.clipboardItem}>
-      <Text style={styles.itemType}>
-        {item.type === "sent" ? "Sent:" : "Received:"}
-      </Text>
-      <Text style={styles.itemContent}>{item.content}</Text>
-      <Text style={styles.itemTimestamp}>
-        {new Date(item.time).toLocaleTimeString()}
-      </Text>
-    </View>
+    <Card
+      style={[styles.logCard, { borderColor: theme.colors.cardBorder }]}
+      mode="elevated"
+      elevation={1}
+    >
+      <Card.Content style={styles.cardContent}>
+        <View style={styles.logInfo}>
+          <View
+            style={[
+              styles.labelBadge,
+              {
+                backgroundColor: theme.dark
+                  ? theme.colors.statusRipple
+                  : theme.colors.statusRippleLight,
+              },
+            ]}
+          >
+            <Text
+              variant="labelSmall"
+              style={[
+                styles.labelText,
+                { color: theme.colors.onSurfaceVariant },
+              ]}
+            >
+              {item.type === "sent" ? "SENT" : "RECEIVED"}
+            </Text>
+          </View>
+          <Text
+            variant="titleMedium"
+            style={{ color: theme.colors.onSurface }}
+          >
+            {item.content}
+          </Text>
+        </View>
+        <View style={styles.logMeta}>
+          <Text
+            variant="labelMedium"
+            style={[styles.timeText, { color: theme.colors.onSurfaceVariant }]}
+          >
+            {new Date(item.time).toLocaleTimeString()}
+          </Text>
+        </View>
+      </Card.Content>
+    </Card>
   );
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Connection Details</Text>
+    <View
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
+    >
       <FlatList
         data={items}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
-        style={styles.list}
+        contentContainerStyle={styles.listContent}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Text
+              variant="titleMedium"
+              style={[
+                styles.emptyText,
+                { color: theme.colors.onSurfaceVariant },
+              ]}
+            >
+              {isConnected
+                ? "No data synced yet. Try copying something on your Mac"
+                : "Waiting for connection to start syncing..."}
+            </Text>
+          </View>
+        }
       />
-      <TouchableOpacity style={styles.disconnectButton} onPress={disconnect}>
-        <Text style={styles.disconnectButtonText}>Disconnect</Text>
-      </TouchableOpacity>
     </View>
   );
 }
@@ -95,60 +99,47 @@ export default function Connection() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  listContent: {
     padding: 20,
-    backgroundColor: "#f0f0f0",
   },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 20,
-    textAlign: "center",
+  logCard: {
+    borderRadius: 20,
+    marginBottom: 12,
+    borderWidth: 1,
   },
-  clipboardItem: {
-    backgroundColor: "#fff",
-    padding: 15,
-    borderRadius: 8,
-    marginBottom: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1.41,
-    elevation: 2,
+  cardContent: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
   },
-  itemType: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#555",
-    marginBottom: 5,
-  },
-  itemContent: {
-    fontSize: 16,
-    marginBottom: 5,
-  },
-  itemTimestamp: {
-    fontSize: 12,
-    color: "#888",
-    textAlign: "right",
-  },
-  list: {
+  logInfo: {
     flex: 1,
+    marginRight: 10,
   },
-  disconnectButton: {
-    position: "absolute",
-    bottom: 30,
-    right: 30,
-    backgroundColor: "#FF3B30",
-    padding: 15,
-    borderRadius: 30,
-    elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+  labelBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginBottom: 8,
   },
-  disconnectButtonText: {
-    color: "white",
-    fontWeight: "bold",
-    fontSize: 16,
+  labelText: {
+    letterSpacing: 0.5,
+  },
+  logMeta: {
+    alignItems: "flex-end",
+  },
+  timeText: {
+    marginTop: 4,
+  },
+  emptyContainer: {
+    padding: 40,
+    alignItems: "center",
+  },
+  emptyText: {
+    textAlign: "center",
   },
 });

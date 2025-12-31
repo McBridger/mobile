@@ -1,0 +1,20 @@
+appId: com.mc.bridger.e2e
+---
+- launchApp:
+    clearState: true
+- waitForAnimationToEnd
+- assertVisible: "Setup McBridge"
+
+- tapOn:
+    id: "mnemonic-input-0"
+- inputText: "abandon"
+
+- tapOn:
+    id: "mnemonic-input-1"
+- inputText: "ability"
+
+- hideKeyboard
+
+- tapOn: "Start Magic Sync"
+- waitForAnimationToEnd
+- assertVisible: "Waiting for connection to start syncing..."

@@ -1,9 +1,10 @@
-import { AppConfig } from "@/app.config";
 import { SubscriptionManager } from "@/utils";
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 import {
   ConnectorModuleEvents,
+  MessagePayload,
+  STATUS,
 } from "./src/Connector.types";
 import ConnectorModule from "./src/ConnectorModule";
 
@@ -13,12 +14,6 @@ const log = console.log.bind(null, "[useConnector]");
 const error = console.error.bind(null, "[useConnector]");
 
 // --- Types, Constants, and Helpers ---
-
-type ConnectionStatus =
-  | "disconnected"
-  | "connecting"
-  | "connected"
-  | "disconnecting";
 
 export type Item = {
   id: string;
@@ -30,15 +25,13 @@ export type Item = {
 // --- State, Actions, and Store Definition ---
 
 interface ConnectorState {
-  status: ConnectionStatus;
-  address: string | null;
-  name: string | null;
+  status: `${STATUS}`;
+  isReady: boolean;
   items: Map<string, Item>;
 }
 
 interface ConnectorActions {
-  connect: (address: string, name: string, extra: AppConfig["extra"]) => void;
-  disconnect: () => void;
+  setup: (mnemonic: string, salt: string) => Promise<void>;
   send: (data: string) => void;
 
   subscribe: () => void;
@@ -51,38 +44,46 @@ type InternalConnectorStore = ConnectorStore & {
   [SubscriptionManager.KEY]: SubscriptionManager<ConnectorModuleEvents>;
 };
 
+export const WORKING_STATUSES = new Set<`${STATUS}`>([
+  STATUS.READY,
+  STATUS.DISCOVERING,
+  STATUS.CONNECTING,
+  STATUS.CONNECTED,
+  STATUS.DISCONNECTED,
+]);
+
+const getInitialStatus = () => ConnectorModule.getStatus() || STATUS.IDLE;
+const getIsReady = (status: `${STATUS}`) => WORKING_STATUSES.has(status);
+
 const initialState: ConnectorState = {
-  status: "disconnected",
-  address: null,
-  name: null,
+  status: getInitialStatus(),
+  isReady: getIsReady(getInitialStatus()),
   items: new Map(),
-  // connectionError: null,
 };
 
 export const useConnector = create<InternalConnectorStore>()(
   subscribeWithSelector((set, get) => {
     const handlers: ConnectorModuleEvents = {
-      onConnected: () => {
-        log("Native event: connected.");
-        set({ status: "connected" });
-      },
-      onDisconnected: () => {
-        log("Native event: disconnected.");
-        set(initialState);
-      },
       onReceived: (payload) => {
         log(`Native event: data received (ID: ${payload.id}).`);
         set((state) => {
           const newItems = new Map(state.items);
           newItems.set(payload.id, {
-            ...payload,
+            id: payload.id,
             type: "received",
             content: payload.value,
-            time: Date.now(),
+            time: payload.timestamp || Date.now(),
           });
           return { items: newItems };
         });
       },
+      onStateChanged: (payload) => {
+        log(`Native event: state changed from ${get().status} to ${payload.status}.`);
+        set({ 
+          status: payload.status,
+          isReady: getIsReady(payload.status)
+        });
+      }
     };
 
     return {
@@ -93,35 +94,13 @@ export const useConnector = create<InternalConnectorStore>()(
         handlers
       ),
 
-      connect: async (
-        address: string,
-        name: string,
-        extra: AppConfig["extra"]
-      ) => {
-        if (get().status !== "disconnected") {
-          log("Connection in progress, ignoring connect request.");
-          return;
-        }
-
-        set({ status: "connecting", address, name, items: new Map() });
-
+      setup: async (mnemonic: string, salt: string) => {
+        log("Initiating setup via Broker.");
         try {
-          const isConnected = await ConnectorModule.isConnected();
-          if (isConnected) return set({ status: "connected", address, name });
-
-          await ConnectorModule.connect(address);
+          await ConnectorModule.setup(mnemonic, salt);
         } catch (err: any) {
-          error(`Connection failed: ${err.message}`, err);
+          error("Setup failed:", err.message);
         }
-      },
-
-      disconnect: () => {
-        if (get().status !== "connected") return;
-        set({ status: "disconnecting" });
-
-        ConnectorModule.disconnect().catch((err) => {
-          error("Promise disconnect() was rejected.", err);
-        })
       },
 
       send: (data: string) => {
@@ -132,6 +111,13 @@ export const useConnector = create<InternalConnectorStore>()(
 
       subscribe: () => {
         get()[SubscriptionManager.KEY].setup();
+        // Sync initial status from native
+        const currentStatus = ConnectorModule.getStatus();
+        log(`Initial native status: ${currentStatus}`);
+        set({ 
+          status: currentStatus || STATUS.IDLE,
+          isReady: getIsReady(currentStatus || STATUS.IDLE)
+        });
       },
 
       unsubscribe: () => {
@@ -148,7 +134,7 @@ useConnector.subscribe((state, prevState) => {
 export default ConnectorModule;
 
 export const BridgerService = {
-  getHistory: async (): Promise<string[]> => {
+  getHistory: async (): Promise<MessagePayload[]> => {
     try {
       const history = await ConnectorModule.getHistory();
       log(`Retrieved ${history.length} items from history.`);

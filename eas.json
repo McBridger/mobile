@@ -17,6 +17,18 @@
         "APP_VARIANT": "preview"
       }
     },
+    "e2e": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "APP_VARIANT": "e2e",
+        "WITH_MOCK": "true",
+        "ENCRYPTION_SALT": "0123456789abcdef",
+        "MNEMONIC_LENGTH": "2"
+      }
+    },
     "prod": {
       "android": {
         "buildType": "apk"
