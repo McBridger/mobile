@@ -40,7 +40,7 @@ export default ({ config }: ConfigContext): AppConfig => {
         {
           android: {
             minSdkVersion: 25,
-            buildArchs: process.env.CI ? ["x86_64"] : ["arm64-v8a"],
+            buildArchs: extra.APP_VARIANT === "e2e" ? ["x86_64"] : ["arm64-v8a"],
           },
         },
       ],
