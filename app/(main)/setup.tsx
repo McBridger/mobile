@@ -83,9 +83,7 @@ export default function Setup() {
   const isLoading =
     status === STATUS.ENCRYPTING ||
     status === STATUS.KEYS_READY ||
-    status === STATUS.TRANSPORT_INITIALIZING ||
-    status === STATUS.DISCOVERING ||
-    status === STATUS.CONNECTING;
+    status === STATUS.TRANSPORT_INITIALIZING;
 
   return (
     <View
