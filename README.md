@@ -1,15 +1,15 @@
-# McBridge Mobile 🤖
+# McBridger Mobile 🤖
 
 [![Platform: Android](https://img.shields.io/badge/Platform-Android-green.svg)](https://android.com)
 [![Framework: React Native](https://img.shields.io/badge/Framework-React_Native-blue.svg)](https://reactnative.dev)
 [![Expo: SDK 52](https://img.shields.io/badge/Expo-SDK_52-black.svg)](https://expo.dev)
 
-**The Android counterpart of the McBridge ecosystem. Secure, offline-first, and lightning-fast.**
+**The Android counterpart of the McBridger ecosystem. Fast, secure, and truly seamless.**
 
-McBridge Mobile connects to your Mac via Bluetooth Low Energy to synchronize your clipboard. Using a JSI-powered native bridge, it ensures low latency and high security for every piece of data you copy.
+McBridger Mobile brings Apple-like continuity to the Android platform. By connecting to your Mac via BLE and using a high-performance JSI bridge, it enables cross-platform features that feel native to your device.
 
 ## ✨ Features
-- **Deterministic Security:** Your keys are derived from a 6-word mnemonic.
+- **Deterministic Security:** 6-word mnemonic-based key derivation.
 - **Background Service:** Syncs your clipboard even when the app is in the background (requires permissions).
 - **AES-GCM Encryption:** Fully encrypted data transfer over BLE.
 - **Native Performance:** Uses Kotlin for the BLE stack and JSI for high-speed communication with React Native.

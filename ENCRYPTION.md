@@ -1,4 +1,4 @@
-# McBridge Encryption Protocol
+# McBridger Encryption Protocol
 
 ## 🛡 Status: Verified & Operational (Core Cryptography)
 **Last Audit:** 2026-01-05
@@ -18,9 +18,9 @@ We use **HKDF (SHA256)** to derive specific identifiers and keys from the Master
     - **Extract:** Uses a 32-byte zero-salt to derive a Pseudo-Random Key (PRK).
     - **Expand:** Uses context-specific `info` strings to derive final keys/UUIDs.
 - **Derived Identifiers (Deterministic):**
-    - `McBridge_Advertise_UUID` -> Used for BLE Service Discovery.
-    - `McBridge_Service_UUID` -> Primary BLE Service.
-    - `McBridge_Characteristic_UUID` -> Main data transfer characteristic (Read/Write/Notify).
+    - `McBridger_Advertise_UUID` -> Used for BLE Service Discovery.
+    - `McBridger_Service_UUID` -> Primary BLE Service.
+    - `McBridger_Characteristic_UUID` -> Main data transfer characteristic (Read/Write/Notify).
 - **Derived Keys:**
     - `McBridge_Encryption_Domain` -> Used as the `SymmetricKey` for AES-GCM payload encryption.
 
@@ -32,7 +32,7 @@ We use **HKDF (SHA256)** to derive specific identifiers and keys from the Master
 
 ### 4. Replay & Temporal Protection
 - **Timestamping:** Every encrypted payload contains a `ts` (timestamp) field.
-- **TTL (Time-to-Live):** Messages older than 60 seconds are automatically rejected to prevent replay attacks.
+- **TTL (Time-to-Live):** Messages older than 60 seconds are automatically rejected.
 
 ### 5. Secure Storage
 - **Android:** Sensitive material is stored using `SharedPreferences` (transitioning to `EncryptedSharedPreferences`).
@@ -47,7 +47,7 @@ We use **HKDF (SHA256)** to derive specific identifiers and keys from the Master
 - [x] **Cross-Platform Handshake:** Verified sync between Mac and Android clients.
 - [x] **Replay Protection:** Timestamp-based verification implemented.
 - [ ] **Hardware Security:** Migration to Biometric-backed KeyStore/Secure Enclave.
-- [ ] **Perfect Forward Secrecy:** Implementation of Ratchet-based key rotation for long-lived sessions.
+- [ ] **Perfect Forward Secrecy:** Ratchet-based key rotation for long-lived sessions.
 
 ---
 [Organization Profile](https://github.com/McBridger)
