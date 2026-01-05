@@ -33,6 +33,7 @@ interface ConnectorState {
 interface ConnectorActions {
   setup: (mnemonic: string, salt: string) => Promise<void>;
   send: (data: string) => void;
+  reset: () => Promise<void>;
 
   subscribe: () => void;
   unsubscribe: () => void;
@@ -107,6 +108,15 @@ export const useConnector = create<InternalConnectorStore>()(
         ConnectorModule.send(data).catch((err) => {
           error("Promise send() was rejected.", err);
         });
+      },
+
+      reset: async () => {
+        try {
+          await ConnectorModule.reset();
+          set({ items: new Map() });
+        } catch (err: any) {
+          error("Reset failed:", err.message);
+        }
       },
 
       subscribe: () => {
