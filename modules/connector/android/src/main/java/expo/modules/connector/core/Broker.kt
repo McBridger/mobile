@@ -153,6 +153,7 @@ class Broker(
                 }
                 Log.d(TAG, "reset: Clearing encryption keys.")
                 encryptionService.clear()
+                history.clear()
                 _state.value = State.IDLE
                 Log.i(TAG, "reset: Broker is now IDLE.")
             } catch (e: Exception) {
