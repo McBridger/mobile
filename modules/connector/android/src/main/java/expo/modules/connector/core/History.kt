@@ -6,6 +6,7 @@ import android.util.Log
 import expo.modules.connector.models.Message
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
@@ -20,6 +21,7 @@ class History(context: Context) {
     
     // Scope for IO operations to avoid blocking UI thread
     private val scope = CoroutineScope(Dispatchers.IO)
+    private val initializationJob: Job
     
     private val historyFile: File by lazy {
         val packageName = context.packageName
@@ -27,22 +29,30 @@ class History(context: Context) {
     }
 
     init {
-        // Load history in background
-        scope.launch {
+        // Load history in background and keep track of the job
+        initializationJob = scope.launch {
             loadHistoryFromFile()
         }
     }
 
     fun add(message: Message) {
         historyQueue.add(message.toJson())
+        
+        // Limit history size to prevent memory leaks and massive files
+        while (historyQueue.size > MAX_HISTORY_SIZE) {
+            historyQueue.poll()
+        }
+
         // Save async
         scope.launch {
             saveHistoryToFile()
         }
-        Log.d(TAG, "Added message to history: ${message.id}")
+        Log.d(TAG, "Added message to history: ${message.id}. Current size: ${historyQueue.size}")
     }
 
-    fun retrieve(): List<Bundle> {
+    suspend fun retrieve(): List<Bundle> {
+        // Wait for initialization to complete if it hasn't already (non-blocking!)
+        initializationJob.join()
         return historyQueue.mapNotNull { json ->
             Message.fromJson(json)?.toBundle()
         }
@@ -88,5 +98,6 @@ class History(context: Context) {
 
     companion object {
         private const val TAG = "History"
+        private const val MAX_HISTORY_SIZE = 100
     }
 }

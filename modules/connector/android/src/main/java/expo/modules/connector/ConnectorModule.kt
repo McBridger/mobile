@@ -5,6 +5,7 @@ import android.os.Build
 import android.util.Log
 import expo.modules.connector.core.Broker
 import expo.modules.connector.services.ForegroundService
+import expo.modules.kotlin.Promise
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import kotlinx.coroutines.CoroutineScope
@@ -82,8 +83,15 @@ class ConnectorModule : Module(), KoinComponent {
       return@AsyncFunction null
     }
 
-    AsyncFunction("getHistory") {
-      return@AsyncFunction broker.getHistory().retrieve()
+    AsyncFunction("getHistory") { promise: Promise ->
+      scope.launch {
+        try {
+          val history = broker.getHistory().retrieve()
+          promise.resolve(history)
+        } catch (e: Exception) {
+          promise.reject("ERR_HISTORY", e.message, e)
+        }
+      }
     }
 
     AsyncFunction("clearHistory") {

@@ -27,7 +27,9 @@ export default function Setup() {
     useShallow((state) => [state.isReady, state.status])
   );
 
-  const setup = useConnector((state) => state.setup);
+  const [setup, reset] = useConnector(
+    useShallow((state) => [state.setup, state.reset])
+  );
 
   const [mnemonic, setMnemonic] = useState<string | null>(null);
   const [wasReadyOnMount] = useState(isReady);
@@ -66,10 +68,9 @@ export default function Setup() {
           text: "Reset",
           style: "destructive",
           onPress: async () => {
-            await ConnectorModule.reset();
+            await reset();
             setMnemonic(null);
             setWords(Array(extra.MNEMONIC_LENGTH).fill(""));
-            // After reset, brokerStatus becomes 'idle', trigger UI update
           },
         },
       ]
@@ -83,9 +84,7 @@ export default function Setup() {
   const isLoading =
     status === STATUS.ENCRYPTING ||
     status === STATUS.KEYS_READY ||
-    status === STATUS.TRANSPORT_INITIALIZING ||
-    status === STATUS.DISCOVERING ||
-    status === STATUS.CONNECTING;
+    status === STATUS.TRANSPORT_INITIALIZING;
 
   return (
     <View
