@@ -4,9 +4,11 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
@@ -21,6 +23,7 @@ class ForegroundService : Service() {
     private val scope = CoroutineScope(Dispatchers.Main + Job())
     private lateinit var notificationManager: NotificationManager
     private val broker: Broker by inject()
+    private var wakeLock: PowerManager.WakeLock? = null
 
     companion object {
         private const val TAG = "BridgerService"
@@ -40,6 +43,15 @@ class ForegroundService : Service() {
 
         notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         createNotificationChannel()
+
+        // Acquire WakeLock to keep CPU running even if screen is off
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = powerManager
+            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Bridger:SyncWakeLock")
+            .apply {
+                Log.d(TAG, "onCreate: Acquiring PARTIAL_WAKE_LOCK")
+                acquire()
+            }
 
         scope.launch {
             Log.d(TAG, "onCreate: Starting to collect Broker state changes for notification updates.")
@@ -63,8 +75,12 @@ class ForegroundService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        Log.d(TAG, "onDestroy: Service destroyed, cancelling scope.")
+        Log.d(TAG, "onDestroy: Service destroyed, cancelling scope and releasing WakeLock.")
         scope.cancel()
+
+        wakeLock?.let {
+            if (it.isHeld) it.release()
+        }
         // We do NOT disconnect Broker here, because UI might still be alive.
         // Service death != App death.
     }

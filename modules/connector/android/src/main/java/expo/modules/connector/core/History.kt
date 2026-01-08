@@ -16,7 +16,7 @@ import java.io.FileWriter
 import java.io.IOException
 import java.util.concurrent.ConcurrentLinkedQueue
 
-class History(context: Context) {
+class History(context: Context, private val maxHistorySize: Int) {
     private val historyQueue = ConcurrentLinkedQueue<String>()
     
     // Scope for IO operations to avoid blocking UI thread
@@ -39,7 +39,7 @@ class History(context: Context) {
         historyQueue.add(message.toJson())
         
         // Limit history size to prevent memory leaks and massive files
-        while (historyQueue.size > MAX_HISTORY_SIZE) {
+        while (historyQueue.size > maxHistorySize) {
             historyQueue.poll()
         }
 
@@ -98,6 +98,5 @@ class History(context: Context) {
 
     companion object {
         private const val TAG = "History"
-        private const val MAX_HISTORY_SIZE = 100
     }
 }

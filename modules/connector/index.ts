@@ -15,11 +15,20 @@ const error = console.error.bind(null, "[useConnector]");
 
 // --- Types, Constants, and Helpers ---
 
-export type Item = {
+export class Item {
   id: string;
   type: "received" | "sent";
   content: string;
   time: number;
+
+  static transform(payload: MessagePayload): Item  {
+    return {
+      id: payload.id,
+      type: payload.address ? "received" : "sent",
+      content: payload.value,
+      time: payload.timestamp || Date.now(),
+    }
+  }
 };
 
 // --- State, Actions, and Store Definition ---
@@ -35,6 +44,7 @@ interface ConnectorActions {
   send: (data: string) => void;
   reset: () => Promise<void>;
 
+  loadHistory: () => Promise<void>;
   subscribe: () => void;
   unsubscribe: () => void;
 }
@@ -69,12 +79,7 @@ export const useConnector = create<InternalConnectorStore>()(
         log(`Native event: data received (ID: ${payload.id}).`);
         set((state) => {
           const newItems = new Map(state.items);
-          newItems.set(payload.id, {
-            id: payload.id,
-            type: "received",
-            content: payload.value,
-            time: payload.timestamp || Date.now(),
-          });
+          newItems.set(payload.id, Item.transform(payload));
           return { items: newItems };
         });
       },
@@ -104,6 +109,21 @@ export const useConnector = create<InternalConnectorStore>()(
         }
       },
 
+      loadHistory: async () => {
+        try {
+          const history = await ConnectorModule.getHistory();
+          log(`Loaded ${history.length} items from history.`);
+
+          set(() => {
+            return {
+              items: new Map(history.map((p) => [p.id, Item.transform(p)])),
+            };
+          });
+        } catch (err: any) {
+          error("Failed to load history:", err.message);
+        }
+      },
+
       send: (data: string) => {
         ConnectorModule.send(data).catch((err) => {
           error("Promise send() was rejected.", err);
@@ -121,18 +141,21 @@ export const useConnector = create<InternalConnectorStore>()(
 
       subscribe: () => {
         get()[SubscriptionManager.KEY].setup();
-        // Sync initial status from native
+        // Sync initial status and history from native
         const currentStatus = ConnectorModule.getStatus();
         log(`Initial native status: ${currentStatus}`);
-        set({ 
+
+        set({
           status: currentStatus || STATUS.IDLE,
-          isReady: getIsReady(currentStatus || STATUS.IDLE)
+          isReady: getIsReady(currentStatus || STATUS.IDLE),
         });
+
+        get().loadHistory();
       },
 
       unsubscribe: () => {
         get()[SubscriptionManager.KEY].cleanup();
-      }
+      },
     };
   })
 );

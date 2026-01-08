@@ -42,13 +42,12 @@ data class Message(
     }
 
     companion object {
-        fun fromJson(json: String, address: String? = null): Message? {
-            return try {
-                Json.decodeFromString<Message>(json).copy(address = address)
-            } catch (e: Exception) {
-                null
-            }
-        }
+        fun fromJson(json: String, address: String? = null): Message? = runCatching {
+            Json.decodeFromString<Message>(json)
+                .let { msg ->
+                    address?.let { msg.copy(address = it) } ?: msg
+                }
+        }.getOrNull()
     }
 
     /**
