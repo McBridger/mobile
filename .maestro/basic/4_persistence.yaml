@@ -1,0 +1,11 @@
+appId: com.mc.bridger.e2e
+---
+- assertVisible: "RECEIVED"
+- assertVisible: "Message 3"
+- assertVisible: "Message 4"
+- stopApp
+- launchApp
+- waitForAnimationToEnd
+- assertVisible: "RECEIVED"
+- assertNotVisible: "Message 3"
+- assertVisible: "Message 4"

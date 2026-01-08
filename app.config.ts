@@ -26,6 +26,8 @@ export default ({ config }: ConfigContext): AppConfig => {
   const suffix = extra.APP_VARIANT === "prod" ? "" : extra.APP_VARIANT;
   if (suffix) appName.push(suffix);
 
+  const nativeArch = process.arch === 'arm64' ? 'arm64-v8a' : 'x86_64';
+
   return {
     ...config,
     name: `McBridger${capitalize(suffix)}`,
@@ -40,7 +42,7 @@ export default ({ config }: ConfigContext): AppConfig => {
         {
           android: {
             minSdkVersion: 25,
-            buildArchs: extra.APP_VARIANT === "e2e" ? ["x86_64"] : ["arm64-v8a"],
+            buildArchs: extra.APP_VARIANT === "e2e" ? [nativeArch] : ["arm64-v8a"],
           },
         },
       ],

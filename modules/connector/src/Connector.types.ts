@@ -15,6 +15,7 @@ export type MessagePayload = {
   id: string;
   type: number;
   value: string;
+  address?: string;
   timestamp: number;
 };
 

@@ -1,30 +1,36 @@
 package expo.modules.connector.mocks
 
+import android.content.Context
 import expo.modules.connector.interfaces.IEncryptionService
 import java.util.UUID
 import android.util.Log
 
-class MockEncryptionService : IEncryptionService {
+class MockEncryptionService(context: Context) : IEncryptionService {
     private val TAG = "MockEncryptionService"
-    private var isSetup = false
+    private val prefs = context.getSharedPreferences("mock_crypto_prefs", Context.MODE_PRIVATE)
 
-    override fun isReady(): Boolean = isSetup
+    override fun isReady(): Boolean = prefs.getBoolean("is_setup", false)
     
-    override fun getMnemonic(): String? = if (isSetup) "mock mnemonic" else null
+    override fun getMnemonic(): String? = prefs.getString("mnemonic", null)
 
     override fun setup(mnemonic: String, saltHex: String) {
         Log.d(TAG, "Mock setup called with mnemonic: $mnemonic")
-        isSetup = true
+        prefs.edit()
+            .putBoolean("is_setup", true)
+            .putString("mnemonic", mnemonic)
+            .apply()
     }
 
     override fun load(): Boolean {
-        Log.d(TAG, "Mock load called, returning: $isSetup")
-        return isSetup
+        val ready = isReady()
+        Log.d(TAG, "Mock load called, returning: $ready")
+        return ready
     }
 
 
     override fun clear() {
         Log.d(TAG, "Mock clear called")
+        prefs.edit().clear().apply()
     }
 
     override fun derive(info: String, byteCount: Int): ByteArray? {

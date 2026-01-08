@@ -14,6 +14,7 @@ import org.koin.core.context.startKoin
 import org.koin.core.module.dsl.bind
 import org.koin.core.module.dsl.factoryOf
 import org.koin.core.module.dsl.singleOf
+import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
 val connectorModule = module {
@@ -24,7 +25,13 @@ val connectorModule = module {
   singleOf(::EncryptionService) { bind<IEncryptionService>() }
 
   // 3. History (Singleton)
-  singleOf(::History)
+  single(named("MAX_HISTORY_SIZE")) { 20 }
+  single {
+    History(
+      context = get(),
+      maxHistorySize = get(named("MAX_HISTORY_SIZE"))
+    )
+  }
 
   // 4. Broker (Singleton)
   single(createdAtStart = true) {
