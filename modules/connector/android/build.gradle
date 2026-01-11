@@ -7,10 +7,12 @@ buildscript {
   }
   dependencies {
     classpath "org.jetbrains.kotlin:kotlin-serialization:2.1.20"
+    classpath "com.google.devtools.ksp:com.google.devtools.ksp.gradle.plugin:2.1.20-2.0.1"
   }
 }
 
 apply plugin: 'kotlinx-serialization'
+apply plugin: 'com.google.devtools.ksp'
 
 group = 'expo.modules.connector'
 version = '0.7.6'
@@ -45,10 +47,19 @@ if (useManagedAndroidSdkVersions) {
 
 android {
   namespace "expo.modules.connector"
+  compileSdkVersion safeExtGet("compileSdkVersion", 36)
+
   defaultConfig {
     versionCode 1
     versionName "0.7.6"
+    minSdkVersion safeExtGet("minSdkVersion", 24)
+    targetSdkVersion safeExtGet("targetSdkVersion", 36)
   }
+
+  ksp {
+    arg("room.generateKotlin", "true")
+  }
+
   lintOptions {
     abortOnError false
   }
@@ -59,6 +70,12 @@ dependencies {
   implementation 'no.nordicsemi.android.support.v18:scanner:1.6.0'
   implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3'
   implementation 'androidx.security:security-crypto:1.1.0'
+
+  // Room
+  def room_version = "2.6.1"
+  implementation "androidx.room:room-runtime:$room_version"
+  implementation "androidx.room:room-ktx:$room_version"
+  ksp "androidx.room:room-compiler:$room_version"
 
   // Koin for Android
   implementation "io.insert-koin:koin-android:4.0.0"
@@ -75,6 +92,14 @@ android {
             if (System.getenv("WITH_MOCK") == "true") {
                 java.srcDirs += 'src/e2e/java'
             }
+        }
+    }
+}
+
+project.configurations.all {
+    resolutionStrategy.eachDependency { details ->
+        if (details.requested.group == 'com.google.devtools.ksp' && details.requested.name == 'symbol-processing-api') {
+            details.useVersion "2.1.20-2.0.1"
         }
     }
 }
