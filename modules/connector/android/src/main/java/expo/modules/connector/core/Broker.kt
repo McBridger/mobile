@@ -27,6 +27,9 @@ class Broker(
     private val _state = MutableStateFlow(State.IDLE)
     val state = _state.asStateFlow()
 
+    private val _isForeground = MutableStateFlow(true)
+    val isForeground = _isForeground.asStateFlow()
+
     private val _messages = MutableSharedFlow<Message>()
     val messages = _messages.asSharedFlow()
 
@@ -47,6 +50,11 @@ class Broker(
         startDiscoveryLoop()
     }
 
+    fun setForeground(isForeground: Boolean) {
+        Log.i(TAG, "Lifecycle: App focus changed. isForeground=$isForeground")
+        _isForeground.value = isForeground
+    }
+
     private fun setupTransport() {
         Log.d(TAG, "setupTransport: Initializing transport component.")
         try {
@@ -61,61 +69,71 @@ class Broker(
         }
     }
 
-    @OptIn(ExperimentalCoroutinesApi::class)
+    @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
     private fun startDiscoveryLoop() {
-        Log.d(TAG, "startDiscoveryLoop: Starting reactive state observer.")
         discoveryJob?.cancel()
-        discoveryJob = scope.launch {
-            state
-                .map { currentState ->
-                    currentState == State.READY || 
-                    currentState == State.DISCOVERING ||
-                    currentState == State.DISCONNECTED || 
-                    currentState == State.ERROR
-                }
-                .distinctUntilChanged()
-                .flatMapLatest { shouldScan ->
-                    if (!shouldScan) {
-                        Log.d(TAG, "DiscoveryLoop: Scanning deactivated (State: ${state.value})")
-                        return@flatMapLatest flowOf()
-                    }
 
-                    val advertiseUuid = encryptionService.deriveUuid("McBridge_Advertise_UUID") 
-                    if (advertiseUuid == null) {
-                        Log.e(TAG, "DiscoveryLoop: Could not derive UUID, scanning aborted.")
-                        return@flatMapLatest flowOf()
-                    }
-                    
-                    Log.i(TAG, "DiscoveryLoop: STARTING scan for $advertiseUuid")
-                    scanWithWatchdog(advertiseUuid)
+        discoveryJob = scope.launch {
+            combine(state, isForeground) { currentState, isFg ->
+                val shouldScan = currentState == State.READY || 
+                                currentState == State.DISCOVERING ||
+                                currentState == State.DISCONNECTED
+                
+                if (!shouldScan) return@combine null
+                if (isFg) ScanConfig.Aggressive else ScanConfig.Passive
+            }
+            .debounce(500L)
+            .distinctUntilChanged()
+            .flatMapLatest { config ->
+                if (config == null) {
+                    Log.i(TAG, "Discovery: Stopped (App state changed)")
+                    return@flatMapLatest flowOf()
                 }
-                .collect { device ->
-                    Log.i(TAG, "DiscoveryLoop: Device found: ${device.address}. Initiating connection.")
-                    connect(device.address)
+
+                val advertiseUuid = encryptionService.deriveUuid("McBridge_Advertise_UUID") 
+                if (advertiseUuid == null) {
+                    Log.e(TAG, "Discovery: Error deriving UUID")
+                    return@flatMapLatest flowOf()
                 }
+                
+                val modeLabel = if (config is ScanConfig.Aggressive) "Aggressive" else "Passive"
+                Log.i(TAG, "Discovery: Starting $modeLabel session for $advertiseUuid")
+                
+                flow {
+                    emitAll(scanWithWatchdog(advertiseUuid, config))
+                }.flowOn(Dispatchers.Main)
+            }
+            .collect { device ->
+                Log.i(TAG, "Discovery: Hit! ${device.address} (RSSI: ${device.rssi})")
+                connect(device.address)
+            }
         }
     }
 
     @OptIn(FlowPreview::class)
-    private fun scanWithWatchdog(uuid: UUID): Flow<BleDevice> {
-        return scanner.scan(uuid)
+    private fun scanWithWatchdog(uuid: UUID, config: ScanConfig): Flow<BleDevice> {
+        return scanner.scan(uuid, config)
             .onStart { 
-                Log.d(TAG, "Watchdog: Scan started.")
+                Log.v(TAG, "Watchdog: Internal session started (${config.javaClass.simpleName})")
                 _state.value = State.DISCOVERING 
             }
             .filter { it.rssi > -85 }
-            .timeout(15000.milliseconds)
-            .retry { e ->
-                if (e is TimeoutCancellationException) {
-                    Log.d(TAG, "Watchdog: Scan timeout, restarting...")
-                    true
-                } else {
-                    Log.e(TAG, "Watchdog: Fatal error during scan: ${e.message}")
-                    _state.value = State.ERROR
-                    false
-                }
+            .let { flow ->
+                if (config.timeoutMs < Long.MAX_VALUE) {
+                    flow.timeout(config.timeoutMs.milliseconds)
+                        .retry { e ->
+                            if (e is TimeoutCancellationException) {
+                                Log.v(TAG, "Watchdog: Refreshing scan session...")
+                                true
+                            } else {
+                                Log.e(TAG, "Watchdog: Fatal error: ${e.message}")
+                                _state.value = State.ERROR
+                                false
+                            }
+                        }
+                } else flow
             }
-            .catch { Log.e(TAG, "Watchdog: Flow caught exception: ${it.message}") }
+            .catch { Log.e(TAG, "Watchdog: Flow error: ${it.message}") }
     }
 
     fun setup(mnemonic: String, salt: String) {
