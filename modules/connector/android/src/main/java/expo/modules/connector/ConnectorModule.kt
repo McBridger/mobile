@@ -52,6 +52,14 @@ class ConnectorModule : Module(), KoinComponent {
       }
     }
 
+    OnActivityEntersForeground {
+      broker.setForeground(true)
+    }
+
+    OnActivityEntersBackground {
+      broker.setForeground(false)
+    }
+
     OnDestroy {
       scope.cancel()
     }

@@ -5,5 +5,5 @@ import kotlinx.coroutines.flow.Flow
 import java.util.UUID
 
 interface IBleScanner {
-    fun scan(serviceUuid: UUID): Flow<BleDevice>
+    fun scan(serviceUuid: UUID, config: ScanConfig): Flow<BleDevice>
 }
