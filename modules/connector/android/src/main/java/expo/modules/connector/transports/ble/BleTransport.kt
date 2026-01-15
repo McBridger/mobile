@@ -104,7 +104,7 @@ class BleTransport(
         }
     }
 
-    override suspend fun connect(address: String) {
+    override fun connect(address: String) {
         Log.d(TAG, "connect: Attempting to connect to $address")
         try {
             bleManager.connect(address)
@@ -115,7 +115,7 @@ class BleTransport(
         }
     }
 
-    override suspend fun disconnect() {
+    override fun disconnect() {
         Log.d(TAG, "disconnect: Attempting to disconnect.")
         bleManager.disconnect()
     }

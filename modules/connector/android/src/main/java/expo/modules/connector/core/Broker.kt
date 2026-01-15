@@ -15,13 +15,15 @@ import java.util.UUID
 import kotlin.time.Duration.Companion.milliseconds
 
 class Broker(
-    private val context: Context,
+    context: Context,
     private val encryptionService: IEncryptionService,
     private val scanner: IBleScanner,
     private val history: History,
+    private val wakeManager: IWakeManager,
     private val bleFactory: () -> IBleTransport
 ) {
     private val TAG = "Broker"
+    private val context = context.applicationContext
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
     private val _state = MutableStateFlow(State.IDLE)
@@ -99,9 +101,7 @@ class Broker(
                 val modeLabel = if (config is ScanConfig.Aggressive) "Aggressive" else "Passive"
                 Log.i(TAG, "Discovery: Starting $modeLabel session for $advertiseUuid")
                 
-                flow {
-                    emitAll(scanWithWatchdog(advertiseUuid, config))
-                }.flowOn(Dispatchers.Main)
+                scanWithWatchdog(advertiseUuid, config)
             }
             .collect { device ->
                 Log.i(TAG, "Discovery: Hit! ${device.address} (RSSI: ${device.rssi})")
@@ -119,19 +119,16 @@ class Broker(
             }
             .filter { it.rssi > -85 }
             .let { flow ->
-                if (config.timeoutMs < Long.MAX_VALUE) {
-                    flow.timeout(config.timeoutMs.milliseconds)
-                        .retry { e ->
-                            if (e is TimeoutCancellationException) {
-                                Log.v(TAG, "Watchdog: Refreshing scan session...")
-                                true
-                            } else {
-                                Log.e(TAG, "Watchdog: Fatal error: ${e.message}")
-                                _state.value = State.ERROR
-                                false
-                            }
-                        }
-                } else flow
+                if (config.timeoutMs == Long.MAX_VALUE) { return@let flow }
+
+                flow.timeout(config.timeoutMs.milliseconds)
+                    .retry { e ->
+                        if (e is TimeoutCancellationException) { return@retry true }
+
+                        Log.e(TAG, "Watchdog: Fatal error: ${e.message}")
+                        _state.value = State.ERROR
+                        false
+                    }
             }
             .catch { Log.e(TAG, "Watchdog: Flow error: ${it.message}") }
     }
@@ -200,17 +197,27 @@ class Broker(
         }
     }
 
-    suspend fun connect(address: String) {
+    fun connect(address: String) {
         if (state.value == State.CONNECTING || state.value == State.CONNECTED) {
             Log.d(TAG, "connect: Already connected or connecting to $address, ignoring.")
             return
         }
+
+        if (bleTransport == null) {
+            Log.e(TAG, "connect: No transport available.")
+            return
+        }
+        
+        // Lock for the duration of the connection attempt (released via state changes)
+        wakeManager.acquire(15000L)
+        
         Log.i(TAG, "connect: Requesting connection to $address")
         _state.value = State.CONNECTING
-        bleTransport?.connect(address)
+        
+        bleTransport!!.connect(address)
     }
 
-    suspend fun disconnect() {
+    fun disconnect() {
         Log.d(TAG, "disconnect: Manual disconnect requested.")
         bleTransport?.disconnect()
     }
@@ -228,15 +235,21 @@ class Broker(
         }
     } 
 
-    fun onIncomingMessage(message: Message) {
-        Log.i(TAG, "onIncomingMessage: Received message Type: ${message.getType()}")
-        updateSystemClipboard(message.value)
-        history.add(message)
+    suspend fun onIncomingMessage(message: Message) {
+        Log.i(TAG, "onIncomingMessage: Processing message Type: ${message.getType()}")
+        // Sequential processing ensures WakeLock stability
+        wakeManager.withLock(10000L) {
+            updateSystemClipboard(message.value)
+            history.add(message)
+        }
+        
+        // Notify subscribers (UI/JS) asynchronously
+        // We don't want to hold the lock while waiting for JS to wake up
         scope.launch { _messages.emit(message) }
     }
 
-    private fun updateSystemClipboard(text: String) {
-        scope.launch(Dispatchers.Main) {
+    private suspend fun updateSystemClipboard(text: String) {
+        withContext(Dispatchers.Main) {
             try {
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 clipboard.setPrimaryClip(ClipData.newPlainText("Bridger Data", text))
@@ -250,22 +263,29 @@ class Broker(
     private fun onStateChange(state: IBleTransport.ConnectionState) {
         Log.d(TAG, "onStateChange: Transport state changed to $state")
         when (state) {
+            IBleTransport.ConnectionState.CONNECTING -> _state.value = State.CONNECTING
+
             IBleTransport.ConnectionState.READY -> {
                 Log.i(TAG, "onStateChange: Connection is READY. Sending device info.")
                 _state.value = State.CONNECTED
+                wakeManager.release()
                 scope.launch { 
                     bleTransport?.send(Message(type = Message.Type.DEVICE_NAME, value = Build.MODEL)) 
                 }
             }
+            
             IBleTransport.ConnectionState.DISCONNECTED -> {
                 Log.i(TAG, "onStateChange: State changed to DISCONNECTED.")
                 _state.value = State.DISCONNECTED
+                wakeManager.release()
             }
-            IBleTransport.ConnectionState.CONNECTING -> _state.value = State.CONNECTING
+            
             IBleTransport.ConnectionState.POWERED_OFF -> {
                 Log.e(TAG, "onStateChange: Bluetooth is OFF.")
                 _state.value = State.ERROR
+                wakeManager.release()
             }
+
             else -> {}
         }
     }
