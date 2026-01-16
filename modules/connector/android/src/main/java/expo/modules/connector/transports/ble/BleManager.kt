@@ -7,10 +7,10 @@ import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.util.Log
 import expo.modules.connector.interfaces.IBleManager
+import java.util.UUID
 import no.nordicsemi.android.ble.BleManager as NordicBleManager
 import no.nordicsemi.android.ble.data.Data
 import no.nordicsemi.android.ble.observer.ConnectionObserver
-import java.util.UUID
 
 class BleManager(private val context: Context) : NordicBleManager(context), IBleManager {
 
@@ -19,7 +19,7 @@ class BleManager(private val context: Context) : NordicBleManager(context), IBle
     private var characteristicUuid: UUID? = null
 
     override var onDataReceived: ((BluetoothDevice, Data) -> Unit)? = null
-    
+
     override var observer: ConnectionObserver? = null
         set(value) {
             field = value
@@ -43,8 +43,8 @@ class BleManager(private val context: Context) : NordicBleManager(context), IBle
 
         connect(device)
             .retry(3, 100)
-            .useAutoConnect(false)
             .timeout(10000)
+            .useAutoConnect(false)
             .enqueue()
     }
 

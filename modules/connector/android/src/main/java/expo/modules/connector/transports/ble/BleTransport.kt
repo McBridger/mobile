@@ -143,6 +143,8 @@ class BleTransport(
     override fun stop() {
         Log.d(TAG, "stop: Stopping transport and cancelling scope.")
         scope.cancel()
+        bleManager.disconnect()
+        bleManager.close()
     }
 
     companion object {

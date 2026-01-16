@@ -263,12 +263,15 @@ class Broker(
     private fun onStateChange(state: IBleTransport.ConnectionState) {
         Log.d(TAG, "onStateChange: Transport state changed to $state")
         when (state) {
-            IBleTransport.ConnectionState.CONNECTING -> _state.value = State.CONNECTING
+            IBleTransport.ConnectionState.CONNECTING -> { _state.value = State.CONNECTING }
+             // Must record CONNECTING here because we're not READY yet.
+            IBleTransport.ConnectionState.CONNECTED -> { _state.value = State.CONNECTING }
 
             IBleTransport.ConnectionState.READY -> {
                 Log.i(TAG, "onStateChange: Connection is READY. Sending device info.")
                 _state.value = State.CONNECTED
                 wakeManager.release()
+                
                 scope.launch { 
                     bleTransport?.send(Message(type = Message.Type.DEVICE_NAME, value = Build.MODEL)) 
                 }
