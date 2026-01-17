@@ -9,10 +9,14 @@ import expo.modules.connector.crypto.EncryptionService
 import expo.modules.connector.interfaces.*
 import expo.modules.connector.models.Message
 import expo.modules.connector.models.BleDevice
+import expo.modules.connector.models.ClipboardMessage
+import expo.modules.connector.models.FileMessage
+import expo.modules.connector.models.IntroMessage
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.util.UUID
 import kotlin.time.Duration.Companion.milliseconds
+import kotlinx.serialization.Serializable
 
 class Broker(
     context: Context,
@@ -227,7 +231,7 @@ class Broker(
 
     fun clipboardUpdate(content: String) {
         Log.d(TAG, "clipboardUpdate: Sending clipboard update (${content.length} chars)")
-        val message = Message(type = Message.Type.CLIPBOARD, value = content)
+        val message = ClipboardMessage(value = content)
         history.add(message)
         scope.launch {
             bleTransport?.send(message)
@@ -235,16 +239,22 @@ class Broker(
         }
     } 
 
-    suspend fun onIncomingMessage(message: Message) {
+    private suspend fun onIncomingMessage(message: Message) {
         Log.i(TAG, "onIncomingMessage: Processing message Type: ${message.getType()}")
-        // Sequential processing ensures WakeLock stability
-        wakeManager.withLock(10000L) {
-            updateSystemClipboard(message.value)
-            history.add(message)
+
+        history.add(message)
+        when (message) {
+            is ClipboardMessage -> {
+                wakeManager.withLock(10000L) {
+                    updateSystemClipboard(message.value)
+                }
+            }
+            is FileMessage -> {
+                Log.d(TAG, "Incoming file: ${message.name} (${message.size})")
+            }
+            else -> {}
         }
-        
-        // Notify subscribers (UI/JS) asynchronously
-        // We don't want to hold the lock while waiting for JS to wake up
+
         scope.launch { _messages.emit(message) }
     }
 
@@ -273,7 +283,7 @@ class Broker(
                 wakeManager.release()
                 
                 scope.launch { 
-                    bleTransport?.send(Message(type = Message.Type.DEVICE_NAME, value = Build.MODEL)) 
+                    bleTransport?.send(IntroMessage(value = Build.MODEL))
                 }
             }
             

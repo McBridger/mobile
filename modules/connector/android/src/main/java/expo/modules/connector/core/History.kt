@@ -54,7 +54,7 @@ class History(context: Context, private val maxHistorySize: Int) {
         // Wait for initialization to complete if it hasn't already (non-blocking!)
         initializationJob.join()
         return historyQueue.mapNotNull { json ->
-            Message.fromJson(json)?.toBundle()
+            runCatching { Json.decodeFromString<Message>(json) }.getOrNull()?.toBundle()
         }
     }
 

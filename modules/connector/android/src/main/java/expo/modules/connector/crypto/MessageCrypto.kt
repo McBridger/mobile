@@ -13,12 +13,7 @@ private const val ENCRYPTION_DOMAIN = "McBridge_Encryption_Domain"
  */
 fun IEncryptionService.encryptMessage(message: Message): ByteArray? {
     val key = derive(ENCRYPTION_DOMAIN, 32) ?: return null
-    val transferMsg = Message.Transfer(
-        type = message.typeId,
-        payload = message.value,
-        timestamp = message.timestamp / 1000.0
-    )
-    val data = Json.encodeToString(transferMsg).toByteArray(Charsets.UTF_8)
+    val data = Json.encodeToString(message).toByteArray(Charsets.UTF_8)
     return encrypt(data, key)
 }
 
@@ -29,23 +24,15 @@ fun IEncryptionService.decryptMessage(data: ByteArray, address: String? = null):
     return try {
         val key = derive(ENCRYPTION_DOMAIN, 32) ?: return null
         val decrypted = decrypt(data, key) ?: return null
-        
-        val transferMsg = Json.decodeFromString<Message.Transfer>(
-            String(decrypted, Charsets.UTF_8)
-        )
 
-        val msgTs = transferMsg.timestamp ?: (System.currentTimeMillis() / 1000.0)
+        val message = Json.decodeFromString<Message>(String(decrypted, Charsets.UTF_8))
+
         // Security check: message should not be older than 60 seconds
-        if (abs((System.currentTimeMillis() / 1000.0) - msgTs) > 60) {
+        if (abs(System.currentTimeMillis() - message.timestamp) > 60_000L) {
             return null
         }
 
-        Message(
-            typeId = transferMsg.type,
-            value = transferMsg.payload,
-            address = address,
-            timestamp = (msgTs * 1000).toLong()
-        )
+        return if (address != null) message.withAddress(address) else message
     } catch (e: Exception) {
         null
     }
