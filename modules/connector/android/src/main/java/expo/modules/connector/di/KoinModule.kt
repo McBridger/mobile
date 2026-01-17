@@ -3,6 +3,7 @@ package expo.modules.connector.di
 import android.util.Log
 import expo.modules.connector.core.Broker
 import expo.modules.connector.core.History
+import expo.modules.connector.core.WakeManager
 import expo.modules.connector.crypto.EncryptionService
 import expo.modules.connector.interfaces.*
 import expo.modules.connector.transports.ble.BleManager
@@ -23,6 +24,7 @@ val connectorModule = module {
 
   // 2. EncryptionService (Singleton)
   singleOf(::EncryptionService) { bind<IEncryptionService>() }
+  singleOf(::WakeManager) { bind<IWakeManager>() }
 
   // 3. History (Singleton)
   single(named("MAX_HISTORY_SIZE")) { 20 }
@@ -40,6 +42,7 @@ val connectorModule = module {
       encryptionService = get(),
       scanner = get(),
       history = get(),
+      wakeManager = get(),
       bleFactory = { get<IBleTransport>() }
     )
   }

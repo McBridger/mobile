@@ -69,6 +69,10 @@ class MockBleManager(private val context: Context) : IBleManager {
         Log.d(TAG, "Disconnected.")
     }
 
+    override fun close() {
+        Log.d(TAG, "Closed.")
+    }
+
     override fun performWrite(data: Data) {
         val bytes = data.value ?: byteArrayOf()
         val hexString = bytes.joinToString("") { "%02x".format(it) }

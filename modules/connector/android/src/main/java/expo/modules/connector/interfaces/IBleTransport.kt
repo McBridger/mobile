@@ -8,8 +8,8 @@ interface IBleTransport {
     val connectionState: StateFlow<ConnectionState>
     val incomingMessages: Flow<Message>
 
-    suspend fun connect(address: String)
-    suspend fun disconnect()
+    fun connect(address: String)
+    fun disconnect()
 
     suspend fun send(message: Message): Boolean
     fun stop()
