@@ -35,26 +35,39 @@ object MessageSerializer : JsonContentPolymorphicSerializer<Message>(Message::cl
     }
 }
 
+fun nowSeconds(): Double = System.currentTimeMillis() / 1000.0
+
+public val mJson = Json {
+    encodeDefaults = true
+    ignoreUnknownKeys = true
+}
+
 @Serializable(with = MessageSerializer::class)
 sealed class Message {
     abstract val typeId: Int
     abstract val id: String
-    abstract val timestamp: Long
+    abstract val timestamp: Double
     abstract var address: String?
 
     open fun toBundle(): Bundle = Bundle().apply {
         putString("type", getType().name)
         putString("id", id)
         putString("address", address)
-        putLong("timestamp", timestamp)
+        putDouble("timestamp", timestamp)
     }
 
-    fun getType(): MessageType = MessageType.fromId(typeId)?: throw IllegalStateException("Invalid typeId: $typeId")
-    fun toJson(): String = Json.encodeToString(this)
+    fun getType(): MessageType = MessageType.fromId(typeId)?:
+        throw IllegalStateException("Invalid typeId: $typeId")
+    fun toJson(): String = mJson.encodeToString(this)
 
     fun withAddress(address: String): Message {
         this.address = address
         return this
+    }
+
+    companion object {
+        inline fun <reified T> fromJSON(data: String): T = mJson.decodeFromString(data)
+        inline fun <reified T> toJSON(value: T): String = mJson.encodeToString(value)
     }
 }
 
@@ -66,7 +79,7 @@ data class ClipboardMessage(
     // Base fields
     @SerialName("a") override var address: String? = null,
     @SerialName("id") override val id: String = UUID.randomUUID().toString(),
-    @SerialName("ts") override val timestamp: Long = System.currentTimeMillis(),
+    @SerialName("ts") override val timestamp: Double = nowSeconds()
 ) : Message() {
 
     override fun toBundle() = super.toBundle().apply {
@@ -82,7 +95,7 @@ data class IntroMessage(
     // Base fields
     @SerialName("a") override var address: String? = null,
     @SerialName("id") override val id: String = UUID.randomUUID().toString(),
-    @SerialName("ts") override val timestamp: Long = System.currentTimeMillis(),
+    @SerialName("ts") override val timestamp: Double = nowSeconds()
 ) : Message() {
 
     override fun toBundle() = super.toBundle().apply {
@@ -100,7 +113,7 @@ data class FileMessage(
     // Base fields
     @SerialName("a") override var address: String? = null,
     @SerialName("id") override val id: String = UUID.randomUUID().toString(),
-    @SerialName("ts") override val timestamp: Long = System.currentTimeMillis(),
+    @SerialName("ts") override val timestamp: Double = nowSeconds()
 ) : Message() {
 
     override fun toBundle() = super.toBundle().apply {

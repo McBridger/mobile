@@ -8,8 +8,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.encodeToString
 import java.io.File
 import java.io.FileReader
 import java.io.FileWriter
@@ -17,7 +15,7 @@ import java.io.IOException
 import java.util.concurrent.ConcurrentLinkedQueue
 
 class History(context: Context, private val maxHistorySize: Int) {
-    private val historyQueue = ConcurrentLinkedQueue<String>()
+    private val historyQueue = ConcurrentLinkedQueue<Message>()
     
     // Scope for IO operations to avoid blocking UI thread
     private val scope = CoroutineScope(Dispatchers.IO)
@@ -36,7 +34,7 @@ class History(context: Context, private val maxHistorySize: Int) {
     }
 
     fun add(message: Message) {
-        historyQueue.add(message.toJson())
+        historyQueue.add(message)
         
         // Limit history size to prevent memory leaks and massive files
         while (historyQueue.size > maxHistorySize) {
@@ -53,9 +51,7 @@ class History(context: Context, private val maxHistorySize: Int) {
     suspend fun retrieve(): List<Bundle> {
         // Wait for initialization to complete if it hasn't already (non-blocking!)
         initializationJob.join()
-        return historyQueue.mapNotNull { json ->
-            runCatching { Json.decodeFromString<Message>(json) }.getOrNull()?.toBundle()
-        }
+        return historyQueue.map { it.toBundle() }
     }
 
     fun clear() {
@@ -74,7 +70,7 @@ class History(context: Context, private val maxHistorySize: Int) {
         try {
             FileReader(historyFile).use { reader ->
                 val content = reader.readText()
-                val loadedList: List<String> = Json.decodeFromString(content)
+                val loadedList: List<Message> = Message.fromJSON(content)
                 historyQueue.addAll(loadedList)
                 Log.d(TAG, "Bridger history loaded from file. Total entries: ${historyQueue.size}")
             }
@@ -87,7 +83,7 @@ class History(context: Context, private val maxHistorySize: Int) {
     private fun saveHistoryToFile() {
         try {
             FileWriter(historyFile).use { writer ->
-                val jsonContent = Json.encodeToString(historyQueue.toList())
+                val jsonContent = Message.toJSON(historyQueue.toList())
                 writer.write(jsonContent)
                 Log.d(TAG, "Bridger history saved to file.")
             }
