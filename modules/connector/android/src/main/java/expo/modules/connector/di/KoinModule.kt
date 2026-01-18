@@ -1,9 +1,11 @@
 package expo.modules.connector.di
 
 import android.util.Log
+import androidx.room.Room
 import expo.modules.connector.core.Broker
 import expo.modules.connector.core.History
 import expo.modules.connector.core.WakeManager
+import expo.modules.connector.database.AppDatabase
 import expo.modules.connector.crypto.EncryptionService
 import expo.modules.connector.interfaces.*
 import expo.modules.connector.transports.ble.BleManager
@@ -19,6 +21,14 @@ import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
 val connectorModule = module {
+  // 0. Database
+  single {
+    Room.databaseBuilder(get(), AppDatabase::class.java, "bridger_database")
+      .fallbackToDestructiveMigration()
+      .build()
+  }
+  single { get<AppDatabase>().historyDao() }
+
   // 1. Scanner (Singleton)
   singleOf(::BleScanner) { bind<IBleScanner>() }
 
@@ -31,6 +41,8 @@ val connectorModule = module {
   single {
     History(
       context = get(),
+      dao = get(),
+      encryptionService = get(),
       maxHistorySize = get(named("MAX_HISTORY_SIZE"))
     )
   }

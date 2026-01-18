@@ -1,102 +1,122 @@
 package expo.modules.connector.core
-    
+
 import android.content.Context
 import android.os.Bundle
 import android.util.Log
+import expo.modules.connector.database.dao.HistoryDao
+import expo.modules.connector.database.entities.HistoryEntity
+import expo.modules.connector.interfaces.IEncryptionService
 import expo.modules.connector.models.Message
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.encodeToString
+import kotlinx.coroutines.withContext
 import java.io.File
-import java.io.FileReader
-import java.io.FileWriter
-import java.io.IOException
-import java.util.concurrent.ConcurrentLinkedQueue
 
-class History(context: Context, private val maxHistorySize: Int) {
-    private val historyQueue = ConcurrentLinkedQueue<String>()
-    
+class History(
+    context: Context,
+    private val dao: HistoryDao,
+    private val encryptionService: IEncryptionService,
+    private val maxHistorySize: Int
+) {
     // Scope for IO operations to avoid blocking UI thread
     private val scope = CoroutineScope(Dispatchers.IO)
-    private val initializationJob: Job
-    
     private val historyFile: File by lazy {
         val packageName = context.packageName
         File(context.filesDir, "bridger_history_$packageName.json")
     }
 
     init {
-        // Load history in background and keep track of the job
-        initializationJob = scope.launch {
-            loadHistoryFromFile()
+        // Cleanup old JSON history file if it exists
+        scope.launch {
+            if (historyFile.exists()) {
+                if (historyFile.delete()) {
+                    Log.i(TAG, "Legacy JSON history file deleted.")
+                }
+            }
         }
     }
 
     fun add(message: Message) {
-        historyQueue.add(message.toJson())
-        
-        // Limit history size to prevent memory leaks and massive files
-        while (historyQueue.size > maxHistorySize) {
-            historyQueue.poll()
-        }
-
-        // Save async
         scope.launch {
-            saveHistoryToFile()
+            try {
+                if (!encryptionService.isReady()) {
+                    Log.w(TAG, "Encryption service not ready. Skipping history save.")
+                    return@launch
+                }
+
+                val key = encryptionService.derive(HISTORY_DOMAIN, 32) ?: return@launch
+                val encryptedBytes = encryptionService.encrypt(
+                    message.value.toByteArray(Charsets.UTF_8),
+                    key
+                ) ?: return@launch
+
+                val entity = HistoryEntity(
+                    messageId = message.id,
+                    type = message.typeId,
+                    encryptedPayload = bytesToHex(encryptedBytes),
+                    address = message.address,
+                    timestamp = message.timestamp
+                )
+
+                dao.insert(entity)
+                dao.trim(maxHistorySize)
+                Log.d(TAG, "Added message to DB. Message ID: ${message.id}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to save message to history DB: ${e.message}")
+            }
         }
-        Log.d(TAG, "Added message to history: ${message.id}. Current size: ${historyQueue.size}")
     }
 
-    suspend fun retrieve(): List<Bundle> {
-        // Wait for initialization to complete if it hasn't already (non-blocking!)
-        initializationJob.join()
-        return historyQueue.mapNotNull { json ->
-            Message.fromJson(json)?.toBundle()
+    suspend fun retrieve(): List<Bundle> = withContext(Dispatchers.IO) {
+        try {
+            if (!encryptionService.isReady()) return@withContext emptyList<Bundle>()
+            
+            val key = encryptionService.derive(HISTORY_DOMAIN, 32) ?: return@withContext emptyList<Bundle>()
+            val entities = dao.getAll()
+            
+            entities.mapNotNull { entity ->
+                try {
+                    val encryptedBytes = hexToBytes(entity.encryptedPayload)
+                    val decryptedBytes = encryptionService.decrypt(encryptedBytes, key) ?: return@mapNotNull null
+                    val value = String(decryptedBytes, Charsets.UTF_8)
+                    
+                    Message(
+                        typeId = entity.type,
+                        value = value,
+                        address = entity.address,
+                        id = entity.messageId,
+                        timestamp = entity.timestamp
+                    ).toBundle()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to decrypt history entry, skipping.")
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error retrieving history from DB: ${e.message}")
+            emptyList()
         }
     }
 
     fun clear() {
-        historyQueue.clear()
         scope.launch {
-            if (!historyFile.exists()) return@launch
-            if (!historyFile.delete()) return@launch
-
-            Log.d(TAG, "Bridger history file cleared.")
+            dao.deleteAll()
+            Log.d(TAG, "History database cleared.")
         }
     }
 
-    private fun loadHistoryFromFile() {
-        if (!historyFile.exists()) return
+    private fun bytesToHex(bytes: ByteArray): String = bytes.joinToString("") { "%02x".format(it) }
 
-        try {
-            FileReader(historyFile).use { reader ->
-                val content = reader.readText()
-                val loadedList: List<String> = Json.decodeFromString(content)
-                historyQueue.addAll(loadedList)
-                Log.d(TAG, "Bridger history loaded from file. Total entries: ${historyQueue.size}")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error loading history from file: ${e.message}")
-            historyFile.delete()
-        }
-    }
-
-    private fun saveHistoryToFile() {
-        try {
-            FileWriter(historyFile).use { writer ->
-                val jsonContent = Json.encodeToString(historyQueue.toList())
-                writer.write(jsonContent)
-                Log.d(TAG, "Bridger history saved to file.")
-            }
-        } catch (e: IOException) {
-            Log.e(TAG, "Error saving history to file: ${e.message}")
-        }
+    private fun hexToBytes(hex: String): ByteArray {
+        check(hex.length % 2 == 0) { "Must have an even length" }
+        return hex.chunked(2)
+            .map { it.toInt(16).toByte() }
+            .toByteArray()
     }
 
     companion object {
         private const val TAG = "History"
+        private const val HISTORY_DOMAIN = "History_Encryption_Domain"
     }
 }
