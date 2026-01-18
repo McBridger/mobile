@@ -1,5 +1,5 @@
-import { useAppConfig } from "@/hooks/useConfig";
 import { useBluetoothPermissions } from "@/hooks/useBluetoothPermissions";
+import { useAppConfig } from "@/hooks/useConfig";
 import ConnectorModule, { useConnector } from "@/modules/connector";
 import { Stack, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";

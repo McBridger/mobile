@@ -1,10 +1,11 @@
 import { SubscriptionManager } from "@/utils";
+import Value from "typebox/value";
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 import {
   ConnectorModuleEvents,
-  MessagePayload,
-  STATUS,
+  Message,
+  STATUS
 } from "./src/Connector.types";
 import ConnectorModule from "./src/ConnectorModule";
 
@@ -13,30 +14,12 @@ export * from "./src/Connector.types";
 const log = console.log.bind(null, "[useConnector]");
 const error = console.error.bind(null, "[useConnector]");
 
-// --- Types, Constants, and Helpers ---
-
-export class Item {
-  id: string;
-  type: "received" | "sent";
-  content: string;
-  time: number;
-
-  static transform(payload: MessagePayload): Item  {
-    return {
-      id: payload.id,
-      type: payload.address ? "received" : "sent",
-      content: payload.value,
-      time: payload.timestamp || Date.now(),
-    }
-  }
-};
-
 // --- State, Actions, and Store Definition ---
 
 interface ConnectorState {
   status: `${STATUS}`;
   isReady: boolean;
-  items: Map<string, Item>;
+  items: Map<string, Message>;
 }
 
 interface ConnectorActions {
@@ -79,7 +62,7 @@ export const useConnector = create<InternalConnectorStore>()(
         log(`Native event: data received (ID: ${payload.id}).`);
         set((state) => {
           const newItems = new Map(state.items);
-          newItems.set(payload.id, Item.transform(payload));
+          newItems.set(payload.id, Value.Parse(Message, payload));
           return { items: newItems };
         });
       },
@@ -116,7 +99,11 @@ export const useConnector = create<InternalConnectorStore>()(
 
           set(() => {
             return {
-              items: new Map(history.map((p) => [p.id, Item.transform(p)])),
+              items: new Map(
+                history
+                  .map((p) => (Value.Check(Message, p) ? [p.id, p] : undefined))
+                  .filter((p) => p) as [string, Message][]
+              ),
             };
           });
         } catch (err: any) {
@@ -167,7 +154,7 @@ useConnector.subscribe((state, prevState) => {
 export default ConnectorModule;
 
 export const BridgerService = {
-  getHistory: async (): Promise<MessagePayload[]> => {
+  getHistory: async (): Promise<Message[]> => {
     try {
       const history = await ConnectorModule.getHistory();
       log(`Retrieved ${history.length} items from history.`);

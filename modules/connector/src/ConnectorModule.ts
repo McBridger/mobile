@@ -1,6 +1,6 @@
 import { NativeModule, requireNativeModule } from 'expo';
 
-import { ConnectorModuleEvents, MessagePayload, STATUS } from './Connector.types';
+import { ConnectorModuleEvents, Message, STATUS } from './Connector.types';
 
 declare class ConnectorModule extends NativeModule<ConnectorModuleEvents> {
   start(): Promise<void>;
@@ -8,7 +8,7 @@ declare class ConnectorModule extends NativeModule<ConnectorModuleEvents> {
   getStatus(): STATUS;
   send(data: string): Promise<void>;
 
-  getHistory(): Promise<MessagePayload[]>;
+  getHistory(): Promise<Message[]>;
   clearHistory(): Promise<void>;
 
   isReady(): boolean;

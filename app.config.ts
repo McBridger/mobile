@@ -1,21 +1,32 @@
 import { ConfigContext, ExpoConfig } from "expo/config";
 import { capitalize } from "lodash";
 import 'tsx/cjs';
-import { z } from "zod";
+import { Static, Type } from 'typebox';
+import { Value } from 'typebox/value';
 
-const Extra = z.object({
-  APP_VARIANT: z.enum(["dev", "preview", "prod", "e2e"]).default("dev"),
-  ENCRYPTION_SALT: z.string(),
-  MNEMONIC_LENGTH: z.number().default(6),
-  MNEMONIC_LOCAL: z.string().optional(),
-  eas: z.object({
-    projectId: z.uuidv4(),
+// const Extra = z.object({
+//   APP_VARIANT: z.enum(["dev", "preview", "prod", "e2e"]).default("dev"),
+//   ENCRYPTION_SALT: z.string(),
+//   MNEMONIC_LENGTH: z.number().default(6),
+//   MNEMONIC_LOCAL: z.string().optional(),
+//   eas: z.object({
+//     projectId: z.uuidv4(),
+//   }),
+// });
+
+const Extra = Type.Object({
+  APP_VARIANT: Type.Enum(['dev', 'preview', 'prod', 'e2e'], { default: 'dev' }),
+  ENCRYPTION_SALT: Type.String(),
+  MNEMONIC_LENGTH: Type.Number({ default: 6 }),
+  MNEMONIC_LOCAL: Type.String(),
+  eas: Type.Object({
+    projectId: Type.String(),
   }),
-});
+})
 
 export default ({ config }: ConfigContext): AppConfig => {
   const appName = ['com', 'mc', 'bridger'];
-  const extra = Extra.parse({
+  const extra = Value.Parse(Extra, {
     ...config.extra,
     APP_VARIANT: process.env.APP_VARIANT,
     ENCRYPTION_SALT: process.env.ENCRYPTION_SALT,
@@ -73,5 +84,5 @@ export default ({ config }: ConfigContext): AppConfig => {
 };
 
 export interface AppConfig extends ExpoConfig {
-  extra: z.infer<typeof Extra>;
+  extra: Static<typeof Extra>;
 }
