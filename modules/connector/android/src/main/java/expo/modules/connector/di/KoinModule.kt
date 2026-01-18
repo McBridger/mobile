@@ -9,6 +9,7 @@ import expo.modules.connector.interfaces.*
 import expo.modules.connector.transports.ble.BleManager
 import expo.modules.connector.transports.ble.BleScanner
 import expo.modules.connector.transports.ble.BleTransport
+import expo.modules.connector.services.FileTransferService
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.context.GlobalContext
 import org.koin.core.context.startKoin
@@ -25,6 +26,7 @@ val connectorModule = module {
   // 2. EncryptionService (Singleton)
   singleOf(::EncryptionService) { bind<IEncryptionService>() }
   singleOf(::WakeManager) { bind<IWakeManager>() }
+  single { FileTransferService(get()) }
 
   // 3. History (Singleton)
   single(named("MAX_HISTORY_SIZE")) { 20 }
@@ -43,6 +45,7 @@ val connectorModule = module {
       scanner = get(),
       history = get(),
       wakeManager = get(),
+      fileTransferService = get(),
       bleFactory = { get<IBleTransport>() }
     )
   }

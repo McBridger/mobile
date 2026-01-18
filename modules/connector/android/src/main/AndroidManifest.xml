@@ -4,13 +4,17 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <application>
+    <application
+        android:usesCleartextTraffic="true">
         <service
             android:name=".services.ForegroundService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice"
         />
+
+        <receiver android:name=".receivers.DownloadReceiver" android:exported="false" />
 
         <activity android:name=".ui.ClipboardActivity" android:exported="true" android:noHistory="true" android:excludeFromRecents="true" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:launchMode="singleInstance">
             <intent-filter>

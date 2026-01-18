@@ -1,6 +1,6 @@
 import { $ } from "bun";
-import { testRegistry } from "./decorators";
 import { APP_ID } from "./constants";
+import { testRegistry } from "./decorators";
 
 export enum AdbEvent {
   SCAN_DEVICE = "expo.modules.connector.SCAN_DEVICE",
@@ -11,7 +11,7 @@ export abstract class MaestroTest {
   protected abstract name: string;
   protected maestroBin = process.env.MAESTRO_PATH || "maestro";
   protected appId = "com.mc.bridger.e2e";
-  
+
   protected mockMac = {
     address: "MA:ES:TR:00:23:45",
     name: "Maestro-Mac",
@@ -22,7 +22,7 @@ export abstract class MaestroTest {
    */
   async run() {
     console.log(`\n--- 📦 Suite: ${this.name} ---`);
-    
+
     const allTests = testRegistry.get(this.constructor) || [];
     if (allTests.length === 0) {
       console.log("  ⚠️ No tests found in this suite.");
@@ -30,8 +30,8 @@ export abstract class MaestroTest {
     }
 
     const hasOnly = allTests.some(t => t.options.only);
-    const testsToRun = hasOnly 
-      ? allTests.filter(t => t.options.only) 
+    const testsToRun = hasOnly
+      ? allTests.filter(t => t.options.only)
       : allTests.filter(t => !t.options.skip);
 
     for (const test of testsToRun) {
@@ -69,7 +69,7 @@ export abstract class MaestroTest {
     const extraArgs = Object.entries(extras)
       .map(([key, value]) => `--es ${key} "${value}"`) // Note: escaped quotes here are intentional for shell command
       .join(" ");
-    
+
     await $`adb shell am broadcast -a ${event} -p ${APP_ID} ${extraArgs}`;
   }
 
@@ -85,7 +85,7 @@ export abstract class MaestroTest {
     const ts = timestamp ?? Date.now() / 1000;
     const jsonStr = JSON.stringify({ t: type, p: payload, ts });
     const hex = Buffer.from(jsonStr).toString("hex");
-    
+
     await this.broadcast(AdbEvent.RECEIVE_DATA, {
       address,
       data: hex,
@@ -99,5 +99,33 @@ export abstract class MaestroTest {
       data: hexData,
     });
     await Bun.sleep(1000);
+  }
+
+  protected async simulateFile(address: string, name: string, url: string, size: string) {
+    const ts = Date.now() / 1000;
+    // Android FileMessage: t=2, u=url, n=name, s=size
+    const jsonStr = JSON.stringify({ t: 2, u: url, n: name, s: size, ts });
+    const hex = Buffer.from(jsonStr).toString("hex");
+
+    await this.broadcast(AdbEvent.RECEIVE_DATA, { address, data: hex });
+    await Bun.sleep(1000);
+  }
+
+  protected async openNotifications() {
+    await $`adb shell cmd statusbar expand-notifications`;
+    await Bun.sleep(500);
+  }
+
+  protected async cleanupDownloads() {
+    this.log("Cleaning up Downloads/McBridger folder...");
+    await $`adb shell rm -rf /storage/emulated/0/Download/McBridger`;
+  }
+
+  protected async openDownloadsUI() {
+    this.log("Opening Downloads UI...");
+
+    // Intent to open the built-in Android Files/Downloads explorer specifically at Download folder
+    await $`adb shell am start -a android.intent.action.VIEW -d "content://com.android.externalstorage.documents/document/primary:Download"`;
+    await Bun.sleep(2000); // Give it some time to load the UI
   }
 }

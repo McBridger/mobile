@@ -24,6 +24,7 @@ class Broker(
     private val scanner: IBleScanner,
     private val history: History,
     private val wakeManager: IWakeManager,
+    private val fileTransferService: expo.modules.connector.services.FileTransferService,
     private val bleFactory: () -> IBleTransport
 ) {
     private val TAG = "Broker"
@@ -251,6 +252,7 @@ class Broker(
             }
             is FileMessage -> {
                 Log.d(TAG, "Incoming file: ${message.name} (${message.size})")
+                fileTransferService.showOffer(message.name, message.url)
             }
             else -> {}
         }

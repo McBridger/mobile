@@ -1,0 +1,7 @@
+appId: com.mc.bridger.e2e
+---
+- assertVisible: "New file available"
+- assertVisible: "Download"
+- tapOn: "Download"
+- assertNotVisible: "New file available"
+- back

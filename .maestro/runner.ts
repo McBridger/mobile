@@ -1,5 +1,6 @@
 import { BasicTest } from "./basic";
 import { ErrorTest } from "./errors";
+import { FileTest } from "./files";
 import { grantPermissions } from "./permissions";
 
 async function runTest() {
@@ -9,6 +10,9 @@ async function runTest() {
 
     // Run Happy Path
     await new BasicTest().run();
+
+    // Run File Transfers
+    await new FileTest().run();
 
     // Run Error Cases
     await new ErrorTest().run();

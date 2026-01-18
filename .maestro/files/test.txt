@@ -1,0 +1,2 @@
+Hello from McBridger Maestro Test!
+This file was downloaded via BLE simulation.
