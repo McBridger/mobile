@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
 import expo.modules.connector.core.Broker
+import expo.modules.connector.models.FileMetadata
 import org.koin.android.ext.android.inject
 import java.util.Optional
 
@@ -33,29 +34,41 @@ class ClipboardActivity : Activity() {
     }
 
     private fun sendClipboardData() {
-        val dataToSend = getClipboardText()
-        if (dataToSend == null) {
-            Log.w(TAG, "Clipboard is empty or contains non-text data.")
+        val clip = getClipboardManager().primaryClip ?: return
+
+        if (clip.itemCount == 0) {
+            Log.w(TAG, "Clipboard is empty or contains unsupported data.")
             showToast("Clipboard is empty.")
             return
         }
 
-        broker.clipboardUpdate(dataToSend)
-        Log.i(TAG, "Clipboard data sent successfully: $dataToSend")
-        showToast("Clipboard data sent.")
-    }
+        val item = clip.getItemAt(0)
 
-    private fun getClipboardText(): String? {
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        
-        return clipboard.primaryClip?.takeIf { it.itemCount > 0 }
-            ?.getItemAt(0)
-            ?.text
-            ?.toString()
-            ?.takeIf { it.isNotEmpty() }
+        // 1. Priority: File URI
+        if (item.uri != null) {
+            Log.d(TAG, "File URI detected in clipboard: ${item.uri}")
+            val metadata = FileMetadata.fromUri(contentResolver, item.uri)
+            if (metadata != null) {
+                broker.fileUpdate(metadata)
+                showToast("Sharing file: ${metadata.name}")
+                return
+            }
+        }
+
+        // 2. Fallback: Text
+        val text = item.text?.toString()
+        if (!text.isNullOrEmpty()) {
+            broker.clipboardUpdate(text)
+            showToast("Clipboard text sent.")
+            return
+        }
     }
 
     private fun showToast(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun getClipboardManager(): ClipboardManager {
+        return getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     }
 }

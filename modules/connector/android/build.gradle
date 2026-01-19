@@ -63,6 +63,13 @@ dependencies {
   // Koin for Android
   implementation "io.insert-koin:koin-android:4.0.0"
 
+  // Ktor Server for local file sharing and unified transport
+  implementation "io.ktor:ktor-server-core:3.0.3"
+  implementation "io.ktor:ktor-server-cio:3.0.3"
+  implementation "io.ktor:ktor-server-websockets:3.0.3"
+  implementation "io.ktor:ktor-serialization-kotlinx-json:3.0.3"
+  implementation "io.ktor:ktor-server-content-negotiation:3.0.3"
+
   testImplementation 'junit:junit:4.13.2'
   testImplementation 'io.mockk:mockk:1.13.12'
   testImplementation 'org.robolectric:robolectric:4.14.1'

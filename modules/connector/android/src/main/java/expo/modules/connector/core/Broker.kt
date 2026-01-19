@@ -5,7 +5,6 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.os.Build
 import android.util.Log
-import expo.modules.connector.crypto.EncryptionService
 import expo.modules.connector.interfaces.*
 import expo.modules.connector.models.Message
 import expo.modules.connector.models.BleDevice
@@ -14,9 +13,11 @@ import expo.modules.connector.models.FileMessage
 import expo.modules.connector.models.IntroMessage
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import expo.modules.connector.models.FileMetadata
+import expo.modules.connector.services.FileTransferService
+import expo.modules.connector.transports.tcp.TcpTransport
 import java.util.UUID
 import kotlin.time.Duration.Companion.milliseconds
-import kotlinx.serialization.Serializable
 
 class Broker(
     context: Context,
@@ -24,7 +25,8 @@ class Broker(
     private val scanner: IBleScanner,
     private val history: History,
     private val wakeManager: IWakeManager,
-    private val fileTransferService: expo.modules.connector.services.FileTransferService,
+    private val fileTransferService: FileTransferService,
+    private val tcpFactory: () -> ITcpTransport,
     private val bleFactory: () -> IBleTransport
 ) {
     private val TAG = "Broker"
@@ -41,6 +43,7 @@ class Broker(
     val messages = _messages.asSharedFlow()
 
     private var bleTransport: IBleTransport? = null
+    private var tcpTransport: ITcpTransport? = null
     
     private var discoveryJob: Job? = null
     private var setupJob: Job? = null
@@ -66,10 +69,16 @@ class Broker(
         Log.d(TAG, "setupTransport: Initializing transport component.")
         try {
             _state.value = State.TRANSPORT_INITIALIZING
-            val transport = bleFactory()
-            registerBle(transport)
+            
+            val ble = bleFactory()
+            registerBle(ble)
+            
+            tcpTransport?.stop()
+            val tcp = tcpFactory()
+            registerTcp(tcp)
+
             _state.value = State.READY
-            Log.i(TAG, "setupTransport: Transport ready, state changed to READY.")
+            Log.i(TAG, "setupTransport: Transports ready, state changed to READY.")
         } catch (e: Exception) {
             Log.e(TAG, "setupTransport: Failed to setup transport: ${e.message}", e)
             _state.value = State.ERROR
@@ -167,8 +176,12 @@ class Broker(
         scope.launch {
             try {
                 bleTransport?.let {
-                    Log.d(TAG, "reset: Disconnecting and stopping active transport.")
+                    Log.d(TAG, "reset: Disconnecting and stopping active BLE transport.")
                     it.disconnect()
+                    it.stop()
+                }
+                tcpTransport?.let {
+                    Log.d(TAG, "reset: Stopping active TCP transport.")
                     it.stop()
                 }
                 Log.d(TAG, "reset: Clearing encryption keys.")
@@ -182,22 +195,34 @@ class Broker(
         }
     }
 
-    fun registerBle(bleTransport: IBleTransport) {
-        Log.d(TAG, "registerBle: Registering new BLE transport.")
-        transportCollectionJob?.cancel()
-        
-        // Kill the old transport's scope before replacing it
+    fun registerBle(transport: IBleTransport) {
+        Log.d(TAG, "registerBle: Registering BLE transport.")
         this.bleTransport?.stop()
-        
-        this.bleTransport = bleTransport
-        transportCollectionJob = scope.launch {
+        this.bleTransport = transport
+
+        scope.launch {
             launch { 
-                Log.d(TAG, "registerBle: Starting message collection.")
-                bleTransport.incomingMessages.collect { onIncomingMessage(it) } 
+                transport.incomingMessages.collect { onIncomingMessage(it) } 
             }
             launch { 
-                Log.d(TAG, "registerBle: Starting state collection.")
-                bleTransport.connectionState.collect { onStateChange(it) } 
+                transport.connectionState.collect { onBleStateChange(it) } 
+            }
+        }
+    }
+
+    fun registerTcp(transport: ITcpTransport) {
+        Log.d(TAG, "registerTcp: Registering TCP transport.")
+        this.tcpTransport?.stop()
+        this.tcpTransport = transport
+
+        scope.launch {
+            launch { 
+                transport.incomingMessages.collect { onIncomingMessage(it) } 
+            }
+            launch { 
+                transport.connectionState.collect { 
+                    Log.d(TAG, "TCP Transport state: $it")
+                } 
             }
         }
     }
@@ -238,6 +263,32 @@ class Broker(
             bleTransport?.send(message)
             _messages.emit(message)
         }
+    }
+
+    fun fileUpdate(metadata: FileMetadata) {
+        Log.d(TAG, "fileUpdate: Preparing to share file ${metadata.name} (${metadata.size})")
+        
+        val tcp = tcpTransport ?: run {
+            Log.e(TAG, "fileUpdate: TCP transport is not ready")
+            return
+        }
+
+        scope.launch {
+            val downloadUrl = tcp.registerFile(metadata)
+            Log.i(TAG, "File ready for download at $downloadUrl")
+            
+            val message = FileMessage(
+                url = downloadUrl,
+                name = metadata.name,
+                size = metadata.size
+            )
+            
+            history.add(message)
+            // Send via both for redundancy or based on connection
+            bleTransport?.send(message)
+            tcp.send(message)
+            _messages.emit(message)
+        }
     } 
 
     private suspend fun onIncomingMessage(message: Message) {
@@ -272,35 +323,29 @@ class Broker(
         }
     }
 
-    private fun onStateChange(state: IBleTransport.ConnectionState) {
-        Log.d(TAG, "onStateChange: Transport state changed to $state")
+    private fun onBleStateChange(state: IBleTransport.ConnectionState) {
+        Log.d(TAG, "onBleStateChange: BLE state changed to $state")
         when (state) {
             IBleTransport.ConnectionState.CONNECTING -> { _state.value = State.CONNECTING }
-             // Must record CONNECTING here because we're not READY yet.
+            // Must record CONNECTING here because we're not READY yet.
             IBleTransport.ConnectionState.CONNECTED -> { _state.value = State.CONNECTING }
-
+            
             IBleTransport.ConnectionState.READY -> {
-                Log.i(TAG, "onStateChange: Connection is READY. Sending device info.")
+                Log.i(TAG, "onBleStateChange: BLE is READY. Sending device info.")
                 _state.value = State.CONNECTED
                 wakeManager.release()
-                
                 scope.launch { 
                     bleTransport?.send(IntroMessage(value = Build.MODEL))
                 }
             }
-            
             IBleTransport.ConnectionState.DISCONNECTED -> {
-                Log.i(TAG, "onStateChange: State changed to DISCONNECTED.")
                 _state.value = State.DISCONNECTED
                 wakeManager.release()
             }
-            
             IBleTransport.ConnectionState.POWERED_OFF -> {
-                Log.e(TAG, "onStateChange: Bluetooth is OFF.")
                 _state.value = State.ERROR
                 wakeManager.release()
             }
-
             else -> {}
         }
     }

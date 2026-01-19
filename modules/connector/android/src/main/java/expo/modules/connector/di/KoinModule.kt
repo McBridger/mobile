@@ -9,6 +9,9 @@ import expo.modules.connector.interfaces.*
 import expo.modules.connector.transports.ble.BleManager
 import expo.modules.connector.transports.ble.BleScanner
 import expo.modules.connector.transports.ble.BleTransport
+import expo.modules.connector.transports.tcp.TcpTransport
+import expo.modules.connector.core.AndroidFileStreamProvider
+import expo.modules.connector.transports.tcp.TcpFileProvider
 import expo.modules.connector.services.FileTransferService
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.context.GlobalContext
@@ -23,8 +26,9 @@ val connectorModule = module {
   // 1. Scanner (Singleton)
   singleOf(::BleScanner) { bind<IBleScanner>() }
 
-  // 2. EncryptionService (Singleton)
   singleOf(::EncryptionService) { bind<IEncryptionService>() }
+  singleOf(::AndroidFileStreamProvider) { bind<IFileStreamProvider>() }
+  factoryOf(::TcpFileProvider)
   singleOf(::WakeManager) { bind<IWakeManager>() }
   single { FileTransferService(get()) }
 
@@ -46,12 +50,14 @@ val connectorModule = module {
       history = get(),
       wakeManager = get(),
       fileTransferService = get(),
+      tcpFactory = { get<ITcpTransport>() },
       bleFactory = { get<IBleTransport>() }
     )
   }
 
   // 5. Managers and Transports (Factories)
   factoryOf(::BleManager) { bind<IBleManager>() }
+  factory<ITcpTransport> { TcpTransport(get(), get()) }
 
   factory<IBleTransport> {
     BleTransport(
