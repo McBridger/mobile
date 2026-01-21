@@ -27,7 +27,7 @@ class TcpServerManager(
 
     fun start() {
         Log.i(TAG, "Starting server on port $port")
-        server = embeddedServer(CIO, port = port) {
+        server = embeddedServer(CIO, port = port, host = "0.0.0.0") {
             install(WebSockets) {
                 contentConverter = KotlinxWebsocketSerializationConverter(Json)
             }
@@ -37,15 +37,26 @@ class TcpServerManager(
                 // File route
                 get("/files/{id}/{name}") {
                     val id = call.parameters["id"] ?: return@get call.respond(HttpStatusCode.BadRequest)
-                    val metadata = fileProvider.getFile(id) ?: return@get call.respond(HttpStatusCode.NotFound)
+                    Log.d(TAG, "Incoming file request for ID: $id")
+                    
+                    val metadata = fileProvider.getFile(id) ?: run {
+                        Log.w(TAG, "File ID not found: $id")
+                        return@get call.respond(HttpStatusCode.NotFound)
+                    }
                     
                     try {
-                        val stream = fileProvider.openStream(metadata) ?: return@get call.respond(HttpStatusCode.InternalServerError)
+                        Log.d(TAG, "Opening stream for file: ${metadata.name} (${metadata.uri})")
+                        val stream = fileProvider.openStream(metadata) ?: run {
+                            Log.e(TAG, "Could not open stream for ${metadata.uri}")
+                            return@get call.respond(HttpStatusCode.InternalServerError, "Could not open stream")
+                        }
+                        
                         call.respondOutputStream(ContentType.Application.OctetStream) {
-                            stream.use { it.copyTo(this) }
+                            val bytesCopied = stream.use { it.copyTo(this) }
+                            Log.d(TAG, "Served $bytesCopied bytes for $id")
                         }
                     } catch (e: Exception) {
-                        Log.e(TAG, "File serve failed: ${e.message}")
+                        Log.e(TAG, "File serve failed for $id: ${e.message}")
                         call.respond(HttpStatusCode.InternalServerError)
                     }
                 }

@@ -1,0 +1,4 @@
+appId: com.mc.bridger.e2e
+---
+- assertVisible: "maestro_send.txt"
+- assertVisible: "Sent"

@@ -49,4 +49,41 @@ export class FileTest extends MaestroTest {
             this.log("Test server stopped.");
         }
     }
+    @Test("Send and Host File")
+    async testSendFile() {
+        await this.asConnected();
+
+        // 1. Establish the Real Bridge (Simulating a Mac client)
+        const bridge = await this.connectToBridge();
+
+        const localFile = resolve(import.meta.dirname, "test.txt");
+        const originalContent = await Bun.file(localFile).text();
+
+        // Inject file directly into app's private cache via ADB root hop
+        const internalPath = await this.pushFile(localFile, "maestro_send.txt");
+
+        this.log("Triggering file share and intercepting via WebSocket...");
+        // Start waiting BEFORE triggering, to avoid race conditions
+        const messagePromise = this.waitForFileMessage(bridge);
+
+        await this.shareFile(`file://${internalPath}`);
+
+        const fileMsg = await messagePromise;
+        this.log(`Caught FileMessage! URL: ${fileMsg.url}`);
+
+        // Rewrite URL for adb forward loopback
+        const downloadUrl = fileMsg.url.replace(/http:\/\/([0-9.]+):/, "http://localhost:");
+
+        this.log(`Attempting to download from captured URL: ${downloadUrl}`);
+        const response = await fetch(downloadUrl);
+        if (!response.ok) throw new Error(`Download failed: ${response.status}`);
+
+        const downloadedContent = await response.text();
+        if (downloadedContent !== originalContent) {
+            throw new Error("Content integrity check failed!");
+        }
+
+        this.log("✅ End-to-End File Hosting & Delivery verified via Real WebSocket Bridge.");
+        bridge.close();
+    }
 }

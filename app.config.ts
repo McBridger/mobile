@@ -59,6 +59,12 @@ export default ({ config }: ConfigContext): AppConfig => {
       ],
       // @ts-expect-error
       ...config.plugins,
+      [
+        "./plugins/withE2EDebuggable.ts",
+        {
+          enabled: extra.APP_VARIANT === "e2e"
+        }
+      ],
       // [
       //   "./plugins/withGradleSettings.ts",
       //   {

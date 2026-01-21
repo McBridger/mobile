@@ -45,6 +45,14 @@ class TcpTransport(
     init {
         manager.start()
         _connectionState.value = ITcpTransport.ConnectionState.READY
+
+        // Background cleanup for expired files
+        scope.launch {
+            while (isActive) {
+                delay(5 * 60 * 1000L) // Every 5 minutes
+                fileProvider.cleanup()
+            }
+        }
     }
 
     private fun handleSessionEvent(session: DefaultWebSocketServerSession?) {
@@ -72,13 +80,20 @@ class TcpTransport(
     }
 
     override suspend fun send(message: Message): Boolean {
-        val session = activeSession ?: return false
+        val session = activeSession ?: run {
+            Log.w(TAG, "send: No active WebSocket session")
+            return false
+        }
         return try {
-            val encrypted = encryptionService.encryptMessage(message) ?: return false
+            val encrypted = encryptionService.encryptMessage(message) ?: run {
+                Log.e(TAG, "send: Encryption failed")
+                return false
+            }
+            Log.d(TAG, "send: Sending encrypted message (${encrypted.size} bytes)")
             session.send(Frame.Binary(true, encrypted))
             true
         } catch (e: Exception) {
-            Log.e(TAG, "Send failed: ${e.message}")
+            Log.e(TAG, "send: Failed: ${e.message}")
             false
         }
     }

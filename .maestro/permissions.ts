@@ -8,7 +8,7 @@ import { APP_ID } from "./constants";
  */
 export async function grantPermissions() {
   console.log("🔓 Granting permissions via ADB...");
-  
+
   const sdkVersionStr = await $`adb shell getprop ro.build.version.sdk`.text();
   const sdkVersion = parseInt(sdkVersionStr.trim(), 10);
   console.log(`  📱 Detected Android API Level: ${sdkVersion}`);

@@ -128,4 +128,85 @@ export abstract class MaestroTest {
     await $`adb shell am start -a android.intent.action.VIEW -d "content://com.android.externalstorage.documents/document/primary:Download"`;
     await Bun.sleep(2000); // Give it some time to load the UI
   }
+
+  protected async pushFile(localPath: string, fileName: string): Promise<string> {
+    const tmpPath = `/data/local/tmp/${fileName}`;
+    const internalPath = `/data/data/${this.appId}/cache/${fileName}`;
+
+    this.log(`Injecting ${localPath} into app internal storage...`);
+
+    // 1. Push to common temp area accessible by shell
+    await $`adb push ${localPath} ${tmpPath}`;
+
+    // 2. Use run-as to copy it into the app's private area (effectively changing owner/permissions)
+    await $`adb shell run-as ${this.appId} cp ${tmpPath} ${internalPath}`;
+    await $`adb shell run-as ${this.appId} chmod 666 ${internalPath}`;
+    await $`adb shell rm ${tmpPath}`;
+
+    return internalPath;
+  }
+
+  protected async shareFile(contentUri: string) {
+    this.log(`Sharing file via Intent: ${contentUri}`);
+    // Launch ClipboardActivity with DATA uri
+    await $`adb shell am start -a android.intent.action.VIEW -d "${contentUri}" -n ${this.appId}/expo.modules.connector.ui.ClipboardActivity`;
+    await Bun.sleep(2000); // Give it a bit more time for the server to spin up
+  }
+
+  protected async setupForwarding(port: number) {
+    this.log(`Forwarding host port ${port} to device port ${port}...`);
+    await $`adb forward tcp:${port} tcp:${port}`;
+  }
+
+  /**
+   * ESTABLISH REAL BRIDGE: Connect to the Android TCP Server
+   */
+  protected async connectToBridge(port = 49152): Promise<WebSocket> {
+    await this.setupForwarding(port);
+    this.log(`Connecting to McBridger WebSocket at 127.0.0.1:${port}...`);
+
+    return new Promise((resolve, reject) => {
+      const ws = new WebSocket(`ws://127.0.0.1:${port}/bridge`);
+      ws.onopen = () => {
+        this.log("Bridge connected!");
+        resolve(ws);
+      };
+      ws.onerror = (e) => reject(new Error(`WS Connection failed: ${e}`));
+    });
+  }
+
+  protected async waitForFileMessage(ws: WebSocket, timeout = 5000): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("Timeout waiting for FileMessage")), timeout);
+
+      ws.onmessage = async (event) => {
+        try {
+          let dataStr: string;
+
+          if (typeof event.data === "string") {
+            dataStr = event.data;
+          } else if (event.data instanceof Blob) {
+            dataStr = await event.data.text();
+          } else {
+            // Probably ArrayBuffer
+            dataStr = new TextDecoder().decode(event.data);
+          }
+
+          this.log(`Received message: ${dataStr.substring(0, 100)}...`);
+          const msg = JSON.parse(dataStr);
+
+          if (msg.t === 2 && msg.u) { // MessageType.FILE_URL
+            clearTimeout(timer);
+            resolve({
+              url: msg.u,
+              name: msg.n,
+              size: msg.s
+            });
+          }
+        } catch (e) {
+          this.log(`Failed to parse bridge message: ${e}`);
+        }
+      };
+    });
+  }
 }
