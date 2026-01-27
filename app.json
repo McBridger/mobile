@@ -1,11 +1,10 @@
 {
   "expo": {
     "name": "McBridger",
-    "slug": "mc-bridger",
+    "slug": "bridger",
     "version": "0.2.4",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "bridger",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -29,8 +28,7 @@
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION"
-      ],
-      "package": "com.rn.bridger"
+      ]
     },
     "plugins": [
       "expo-font",

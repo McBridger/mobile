@@ -1,8 +1,9 @@
+/* eslint-disable no-unused-expressions */
 import { ConfigContext, ExpoConfig } from "expo/config";
 import { capitalize } from "lodash";
-import 'tsx/cjs';
-import { Static, Type } from 'typebox';
-import { Value } from 'typebox/value';
+import "tsx/cjs";
+import { Static, Type } from "typebox";
+import { Value } from "typebox/value";
 
 // const Extra = z.object({
 //   APP_VARIANT: z.enum(["dev", "preview", "prod", "e2e"]).default("dev"),
@@ -15,37 +16,40 @@ import { Value } from 'typebox/value';
 // });
 
 const Extra = Type.Object({
-  APP_VARIANT: Type.Enum(['dev', 'preview', 'prod', 'e2e'], { default: 'dev' }),
+  APP_VARIANT: Type.Enum(["dev", "preview", "prod", "e2e"], { default: "dev" }),
   ENCRYPTION_SALT: Type.String(),
   MNEMONIC_LENGTH: Type.Number({ default: 6 }),
-  MNEMONIC_LOCAL: Type.String(),
+  MNEMONIC_LOCAL: Type.Optional(Type.String()),
   eas: Type.Object({
     projectId: Type.String(),
   }),
-})
+});
 
 export default ({ config }: ConfigContext): AppConfig => {
-  const appName = ['com', 'mc', 'bridger'];
+  const scheme = ["bridger"];
+  const appName = ["com", "mc", "bridger"];
+
   const extra = Value.Parse(Extra, {
     ...config.extra,
     APP_VARIANT: process.env.APP_VARIANT,
     ENCRYPTION_SALT: process.env.ENCRYPTION_SALT,
     MNEMONIC_LOCAL: process.env.MNEMONIC_LOCAL,
-    MNEMONIC_LENGTH: process.env.MNEMONIC_LENGTH ? parseInt(process.env.MNEMONIC_LENGTH) : undefined,
+    MNEMONIC_LENGTH: process.env.MNEMONIC_LENGTH,
   });
 
   const suffix = extra.APP_VARIANT === "prod" ? "" : extra.APP_VARIANT;
-  if (suffix) appName.push(suffix);
+  if (suffix) (appName.push(suffix), scheme.push(suffix));
 
-  const nativeArch = process.arch === 'arm64' ? 'arm64-v8a' : 'x86_64';
+  const identifier = appName.join(".");
+  const nativeArch = process.arch === "arm64" ? "arm64-v8a" : "x86_64";
 
   return {
     ...config,
     name: `McBridger${capitalize(suffix)}`,
-    slug: 'bridger',
+    scheme: scheme.join("-"),
     android: {
       ...config.android,
-      package: appName.join('.'),
+      package: identifier,
     },
     plugins: [
       [
@@ -53,7 +57,8 @@ export default ({ config }: ConfigContext): AppConfig => {
         {
           android: {
             minSdkVersion: 25,
-            buildArchs: extra.APP_VARIANT === "e2e" ? [nativeArch] : ["arm64-v8a"],
+            buildArchs:
+              extra.APP_VARIANT === "e2e" ? [nativeArch] : ["arm64-v8a"],
           },
         },
       ],
@@ -62,8 +67,17 @@ export default ({ config }: ConfigContext): AppConfig => {
       [
         "./plugins/withE2EDebuggable.ts",
         {
-          enabled: extra.APP_VARIANT === "e2e"
-        }
+          enabled: extra.APP_VARIANT === "e2e",
+        },
+      ],
+      [
+        "./plugins/withManifestMetadata.ts",
+        {
+          "expo.modules.connector.TILE_LABEL":
+            extra.APP_VARIANT === "prod"
+              ? "Send Clipboard"
+              : `Send (${capitalize(extra.APP_VARIANT)})`,
+        },
       ],
       // [
       //   "./plugins/withGradleSettings.ts",
@@ -81,9 +95,9 @@ export default ({ config }: ConfigContext): AppConfig => {
       [
         "./plugins/withGradleProperties.ts",
         {
-          "org.gradle.caching": "true"
-        }
-      ]
+          "org.gradle.caching": "true",
+        },
+      ],
     ],
     extra,
   };

@@ -50,7 +50,10 @@ class ClipboardTileService : TileService() {
     private fun updateTile() {
         val tile = qsTile ?: return
         
-        tile.label = "Send Clipboard"
+        val appInfo = packageManager.getApplicationInfo(packageName, android.content.pm.PackageManager.GET_META_DATA)
+        val label = appInfo.metaData?.getString("expo.modules.connector.TILE_LABEL") ?: "Send Clipboard"
+        
+        tile.label = label
         tile.icon = Icon.createWithResource(this, R.drawable.ic_send_clipboard) // Use R.drawable
         tile.updateTile()        
     }
