@@ -115,5 +115,17 @@ class ConnectorModule : Module(), KoinComponent {
       broker.reset()
       return@AsyncFunction null
     }
+
+    Function("setBool") { key: String, value: Boolean ->
+      val context = appContext.reactContext?.applicationContext ?: return@Function
+      val prefs = context.getSharedPreferences("bridger_settings", android.content.Context.MODE_PRIVATE)
+      prefs.edit().putBoolean(key, value).apply()
+    }
+
+    Function("getBool") { key: String, default: Boolean ->
+      val context = appContext.reactContext?.applicationContext ?: return@Function default
+      val prefs = context.getSharedPreferences("bridger_settings", android.content.Context.MODE_PRIVATE)
+      return@Function prefs.getBoolean(key, default)
+    }
   }
 }

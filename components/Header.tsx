@@ -7,11 +7,18 @@ import { capitalize } from "lodash";
 import React, { useCallback, useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 import { Appbar, Text, useTheme } from "react-native-paper";
+import { TutorialTarget } from "./TutorialTarget";
+
+import { useSettingsStore } from "@/hooks/useSettingsStore";
+import { useTutorialStore } from "@/hooks/useTutorialStore";
 
 const Header = () => {
   const status = useConnector((state) => state.status);
   const theme = useTheme() as AppTheme;
   const { toggleTheme } = useThemeStore();
+  const { setHasSeenTutorial } = useSettingsStore();
+  const { startTutorial } = useTutorialStore();
+
   const router = useRouter();
   const segments = useSegments();
   const currentRouteName = segments[segments.length - 1];
@@ -82,56 +89,62 @@ const Header = () => {
       style={[styles.appbar, { backgroundColor: getBackgroundColor() }]}
       mode="center-aligned"
     >
-      {!isStatusIdle && showBackButton && (
-        <Appbar.Action
-          testID="arrow-back-outline"
-          accessibilityLabel="Back"
-          icon={({ size }) => (
-            <Ionicons
-              name="arrow-back-outline"
-              size={size}
+      {!isStatusIdle && (
+        <View style={{ flexDirection: "row" }}>
+          {showBackButton ? (
+            <Appbar.Action
+              testID="arrow-back-outline"
+              accessibilityLabel="Back"
+              icon={({ size }) => (
+                <Ionicons
+                  name="arrow-back-outline"
+                  size={size}
+                  color={theme.colors.onStatus}
+                />
+              )}
+              onPress={handleBackButtonPress}
               color={theme.colors.onStatus}
+              rippleColor={theme.colors.statusRipple}
             />
+          ) : (
+            <TutorialTarget name="settings">
+              <Appbar.Action
+                testID="settings-outline"
+                accessibilityLabel="Settings"
+                icon={({ size }) => (
+                  <Ionicons
+                    name="settings-outline"
+                    size={size}
+                    color={theme.colors.onStatus}
+                  />
+                )}
+                onPress={handleLeftButtonPress}
+                color={theme.colors.onStatus}
+                rippleColor={theme.colors.statusRipple}
+              />
+            </TutorialTarget>
           )}
-          onPress={handleBackButtonPress}
-          color={theme.colors.onStatus}
-          rippleColor={theme.colors.statusRipple}
-        />
-      )}
-
-      {!isStatusIdle && !showBackButton && (
-        <Appbar.Action
-          testID="settings-outline"
-          accessibilityLabel="Settings"
-          icon={({ size }) => (
-            <Ionicons
-              name="settings-outline"
-              size={size}
-              color={theme.colors.onStatus}
-            />
-          )}
-          onPress={handleLeftButtonPress}
-          color={theme.colors.onStatus}
-          rippleColor={theme.colors.statusRipple}
-        />
+        </View>
       )}
 
       <Appbar.Content
         title={
           <View style={styles.titleContainer}>
-            <View
-              style={[
-                styles.statusBadge,
-                { backgroundColor: theme.colors.statusBadgeBackground },
-              ]}
-            >
-              <Text
-                variant="labelSmall"
-                style={[styles.statusText, { color: theme.colors.onStatus }]}
+            <TutorialTarget name="header">
+              <View
+                style={[
+                  styles.statusBadge,
+                  { backgroundColor: theme.colors.statusBadgeBackground },
+                ]}
               >
-                {getStatusText()}
-              </Text>
-            </View>
+                <Text
+                  variant="labelSmall"
+                  style={[styles.statusText, { color: theme.colors.onStatus }]}
+                >
+                  {getStatusText()}
+                </Text>
+              </View>
+            </TutorialTarget>
             <Text
               testID="title"
               variant="titleLarge"
@@ -142,7 +155,22 @@ const Header = () => {
           </View>
         }
       />
-
+      {/* temp icon that starts tutorial on click */}
+      <Appbar.Action
+        icon={({ size }) => (
+          <Ionicons
+            name="school-outline"
+            size={size}
+            color={theme.colors.onStatus}
+          />
+        )}
+        onPress={() => {
+          setHasSeenTutorial(false);
+          startTutorial();
+        }}
+        color={theme.colors.onStatus}
+        rippleColor={theme.colors.statusRipple}
+      />
       <Appbar.Action
         icon={({ size }) => (
           <Ionicons
@@ -174,17 +202,13 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 20,
     marginBottom: 4,
+    marginTop: 4,
   },
   statusText: {
     fontWeight: "bold",
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
-  buttonWrapper: {
-    width: 40,
-    alignItems: 'center',
-  },
 });
-
 
 export default Header;

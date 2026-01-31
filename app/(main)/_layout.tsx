@@ -1,6 +1,10 @@
-import { useAppConfig } from "@/hooks/useConfig";
+import { TutorialOverlay } from "@/components/TutorialOverlay";
 import { useBluetoothPermissions } from "@/hooks/useBluetoothPermissions";
+import { useAppConfig } from "@/hooks/useConfig";
+import { useSettingsStore } from "@/hooks/useSettingsStore";
+import { useTutorialStore } from "@/hooks/useTutorialStore";
 import ConnectorModule, { useConnector } from "@/modules/connector";
+import { tutorialSteps } from "@/utils/tutorialConstants";
 import { Stack, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { AppState, AppStateStatus, View } from "react-native";
@@ -10,12 +14,20 @@ import Header from "../../components/Header";
 export default function MainLayout() {
   const { extra } = useAppConfig();
   const router = useRouter();
-  const { allPermissionsGranted, isLoading: isPermissionsLoading } = useBluetoothPermissions();
+  const { allPermissionsGranted, isLoading: isPermissionsLoading } =
+    useBluetoothPermissions();
+  const { isTutorialVisible, finishTutorial } = useTutorialStore();
+  const { setHasSeenTutorial } = useSettingsStore();
+
+  const handleFinishTutorial = () => {
+    setHasSeenTutorial(true);
+    finishTutorial();
+  };
 
   const [subscribe, unsubscribe] = useConnector(
-    useShallow((state) => [state.subscribe, state.unsubscribe])
+    useShallow((state) => [state.subscribe, state.unsubscribe]),
   );
-  
+
   const [init, setInit] = useState(false);
 
   // 1. Permissions Guard
@@ -34,7 +46,7 @@ export default function MainLayout() {
       (nextAppState: AppStateStatus) => {
         if (nextAppState === "active") subscribe();
         else unsubscribe();
-      }
+      },
     );
 
     return () => {
@@ -88,6 +100,11 @@ export default function MainLayout() {
           }}
         />
       </Stack>
+      <TutorialOverlay
+        visible={isTutorialVisible}
+        steps={tutorialSteps}
+        onFinish={handleFinishTutorial}
+      />
     </View>
   );
 }
