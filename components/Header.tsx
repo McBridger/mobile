@@ -156,7 +156,7 @@ const Header = () => {
         }
       />
       {/* temp icon that starts tutorial on click */}
-      {/* <Appbar.Action
+      <Appbar.Action
         icon={({ size }) => (
           <Ionicons
             name="school-outline"
@@ -170,7 +170,7 @@ const Header = () => {
         }}
         color={theme.colors.onStatus}
         rippleColor={theme.colors.statusRipple}
-      /> */}
+      />
       <Appbar.Action
         icon={({ size }) => (
           <Ionicons
