@@ -1,7 +1,11 @@
+import { TutorialTarget } from "@/components/TutorialTarget";
+import { useSettingsStore } from "@/hooks/useSettingsStore";
+import { useTutorialStore } from "@/hooks/useTutorialStore";
 import { Item, STATUS, useConnector } from "@/modules/connector";
 import { AppTheme } from "@/theme/CustomTheme";
+import { connectionTutorialItems } from "@/utils/tutorialConstants";
 import { Redirect } from "expo-router";
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo } from "react";
 import { FlatList, StyleSheet, View } from "react-native";
 import { Card, Text, useTheme } from "react-native-paper";
 
@@ -11,13 +15,26 @@ export default function Connection() {
   const isConnected = status === STATUS.CONNECTED;
   const theme = useTheme() as AppTheme;
 
+  const { currentStep, isTutorialVisible, startTutorial } = useTutorialStore();
+  const { hasSeenTutorial } = useSettingsStore();
+
+  const isActivityTutorial = isTutorialVisible && currentStep === 1;
+  const isQuickSendTutorial = isTutorialVisible && currentStep === 2;
+  const isAnyListTutorial = isActivityTutorial || isQuickSendTutorial;
+
+  useEffect(() => {
+    if (!hasSeenTutorial && isReady) {
+      const timer = setTimeout(() => startTutorial(), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [hasSeenTutorial, isReady, startTutorial]);
+
   const _items = useConnector((state) => state.items);
   const items = useMemo(
     () => Array.from(_items.values()).sort((a, b) => b.time - a.time) as Item[],
     [_items]
   );
 
-  // Guard: If not ready, go to setup
   if (!isReady) return <Redirect href="/setup" />;
 
   const renderItem = ({ item }: { item: Item }) => (
@@ -48,10 +65,7 @@ export default function Connection() {
               {item.type === "sent" ? "SENT" : "RECEIVED"}
             </Text>
           </View>
-          <Text
-            variant="titleMedium"
-            style={{ color: theme.colors.onSurface }}
-          >
+          <Text variant="titleMedium" style={{ color: theme.colors.onSurface }}>
             {item.content}
           </Text>
         </View>
@@ -67,29 +81,57 @@ export default function Connection() {
     </Card>
   );
 
+  const TutorialHeader = () => {
+    if (!isAnyListTutorial) return null;
+
+    return (
+      <View style={{ paddingBottom: 12 }}>
+        {isActivityTutorial && (
+          <TutorialTarget name="list">
+            {connectionTutorialItems.map((item) => (
+              <React.Fragment key={item.id}>
+                {renderItem({ item })}
+              </React.Fragment>
+            ))}
+          </TutorialTarget>
+        )}
+
+        {isQuickSendTutorial && (
+          <>
+            {renderItem({ item: connectionTutorialItems[0] })}
+            <TutorialTarget name="list_send">
+              {renderItem({ item: connectionTutorialItems[1] })}
+            </TutorialTarget>
+          </>
+        )}
+      </View>
+    );
+  };
+
   return (
-    <View
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
-    >
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <FlatList
-        data={items}
+        data={isAnyListTutorial ? [] : items}
         renderItem={renderItem}
+        ListHeaderComponent={TutorialHeader}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text
-              variant="titleMedium"
-              style={[
-                styles.emptyText,
-                { color: theme.colors.onSurfaceVariant },
-              ]}
-            >
-              {isConnected
-                ? "No data synced yet. Try copying something on your Mac"
-                : "Waiting for connection to start syncing..."}
-            </Text>
-          </View>
+          !isAnyListTutorial ? (
+            <View style={styles.emptyContainer}>
+              <Text
+                variant="titleMedium"
+                style={[
+                  styles.emptyText,
+                  { color: theme.colors.onSurfaceVariant },
+                ]}
+              >
+                {isConnected
+                  ? "No data synced yet. Try copying something on your Mac"
+                  : "Waiting for connection to start syncing..."}
+              </Text>
+            </View>
+          ) : null
         }
       />
     </View>

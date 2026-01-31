@@ -15,6 +15,9 @@ declare class ConnectorModule extends NativeModule<ConnectorModuleEvents> {
   getMnemonic(): string | null;
   setup(mnemonic: string, salt: string): Promise<void>;
   reset(): Promise<void>;
+
+  setBool(key: string, value: boolean): void;
+  getBool(key: string, defaultValue: boolean): boolean;
 }
 
 // This call loads the native module object from the JSI.
