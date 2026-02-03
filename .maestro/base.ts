@@ -1,3 +1,4 @@
+import { decodeMulti, encode } from "@msgpack/msgpack";
 import { $ } from "bun";
 import { APP_ID } from "./constants";
 import { testRegistry } from "./decorators";
@@ -81,16 +82,27 @@ export abstract class MaestroTest {
     await Bun.sleep(1000);
   }
 
+  private encodePolymorphic(type: number | string, dataObj: any): string {
+    // Kotlin polymorphic MsgPack (esensar) expects sequential: [Type (String)][Data (Map)]
+    // This looks like two separate objects in the MsgPack stream.
+    const encodedType = encode(type.toString());
+    const encodedData = encode(dataObj);
+    return Buffer.concat([Buffer.from(encodedType), Buffer.from(encodedData)]).toString("hex");
+  }
+
   protected async simulateData(address: string, type: number, payload: string, timestamp?: number) {
     const ts = timestamp ?? Date.now() / 1000;
-    const jsonStr = JSON.stringify({ t: type, p: payload, ts });
-    const hex = Buffer.from(jsonStr).toString("hex");
 
-    await this.broadcast(AdbEvent.RECEIVE_DATA, {
-      address,
-      data: hex,
-    });
-    await Bun.sleep(1000);
+    // Kotlin polymorphic MsgPack (default) expects: { "0": { ... properties ... } }
+    const dataObj = {
+      p: payload,
+      ts,
+      id: "msg-" + Math.random().toString(36).substr(2, 9),
+      a: address
+    };
+
+    const hex = this.encodePolymorphic(type, dataObj);
+    await this.simulateRawData(address, hex);
   }
 
   protected async simulateRawData(address: string, hexData: string) {
@@ -103,12 +115,19 @@ export abstract class MaestroTest {
 
   protected async simulateFile(address: string, name: string, url: string, size: string) {
     const ts = Date.now() / 1000;
-    // Android FileMessage: t=2, u=url, n=name, s=size
-    const jsonStr = JSON.stringify({ t: 2, u: url, n: name, s: size, ts });
-    const hex = Buffer.from(jsonStr).toString("hex");
+    const typeKey = "2"; // FILE_URL
 
-    await this.broadcast(AdbEvent.RECEIVE_DATA, { address, data: hex });
-    await Bun.sleep(1000);
+    const dataObj = {
+      u: url,
+      n: name,
+      s: size,
+      ts,
+      id: "file-" + Math.random().toString(36).substr(2, 9),
+      a: address
+    };
+
+    const hex = this.encodePolymorphic(typeKey, dataObj);
+    await this.simulateRawData(address, hex);
   }
 
   protected async openNotifications() {
@@ -181,26 +200,36 @@ export abstract class MaestroTest {
 
       ws.onmessage = async (event) => {
         try {
-          let dataStr: string;
+          let binaryData: Uint8Array;
 
           if (typeof event.data === "string") {
-            dataStr = event.data;
+            binaryData = Buffer.from(event.data);
           } else if (event.data instanceof Blob) {
-            dataStr = await event.data.text();
+            binaryData = new Uint8Array(await event.data.arrayBuffer());
           } else {
-            // Probably ArrayBuffer
-            dataStr = new TextDecoder().decode(event.data);
+            binaryData = new Uint8Array(event.data);
           }
 
-          this.log(`Received message: ${dataStr.substring(0, 100)}...`);
-          const msg = JSON.parse(dataStr);
+          // Since we switched to polymorphic MsgPack, it arrives as a sequence of two objects: 
+          // [Type (String)] and [Data (Map)]
+          let typeStr: any;
+          let body: any;
 
-          if (msg.t === 2 && msg.u) { // MessageType.FILE_URL
+          try {
+            [typeStr, body] = [...decodeMulti(binaryData)]
+          } catch (e) {
+            this.log(`Decode error: ${e}.`);
+            return;
+          }
+
+          this.log(`Received bridge message: type=${typeStr}`);
+
+          if (typeStr === "2" && body.u) { // MessageType.FILE_URL
             clearTimeout(timer);
             resolve({
-              url: msg.u,
-              name: msg.n,
-              size: msg.s
+              url: body.u,
+              name: body.n,
+              size: body.s
             });
           }
         } catch (e) {

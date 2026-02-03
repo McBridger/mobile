@@ -3,7 +3,8 @@ appId: com.mc.bridger.e2e
 - assertVisible: "Maestro"
 - assertVisible: "RECEIVED"
 - tapOn:
-    label: "Settings"
+    id: "settings-outline"
+- waitForAnimationToEnd
 - tapOn: "Reset Security"
 - tapOn: "Reset"
 - assertVisible: "Setup McBridge"
