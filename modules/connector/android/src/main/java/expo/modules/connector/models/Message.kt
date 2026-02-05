@@ -18,7 +18,8 @@ import kotlinx.serialization.modules.subclass
 enum class MessageType(val id: String) {
     CLIPBOARD("0"),
     DEVICE_NAME("1"),
-    FILE_URL("2");
+    FILE_URL("2"),
+    FILE_PART("3");
 
     companion object {
         fun fromId(id: String?) = entries.find { it.id == id }
@@ -32,6 +33,7 @@ private val messageModule = SerializersModule {
         subclass(ClipboardMessage::class)
         subclass(IntroMessage::class)
         subclass(FileMessage::class)
+        subclass(FilePart::class)
     }
 }
 
@@ -119,9 +121,9 @@ data class IntroMessage(
 @Serializable
 @SerialName("2")
 data class FileMessage(
-        @SerialName("u") val url: String,
+        @SerialName("u") val url: String = "",
         @SerialName("n") val name: String,
-        @SerialName("s") val size: String,
+        @SerialName("s") val size: String = "0",
         @Transient override val typeId: String = MessageType.FILE_URL.id,
 
         // Base fields
@@ -137,3 +139,19 @@ data class FileMessage(
                 putString("size", size)
             }
 }
+
+@Serializable
+@SerialName("3")
+data class FilePart(
+        @SerialName("i") val fileId: String,
+        @SerialName("d") val data: ByteArray,
+        @SerialName("o") val offset: Long,
+        @SerialName("n") val total: Long,
+        @Transient override val typeId: String = MessageType.FILE_PART.id,
+
+        // Base fields
+        @SerialName("a") override var address: String? = null,
+        @SerialName("id") override val id: String = UUID.randomUUID().toString(),
+        @SerialName("ts") override val timestamp: Double = nowSeconds()
+) : Message()
+

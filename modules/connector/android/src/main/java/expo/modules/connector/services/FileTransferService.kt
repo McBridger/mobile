@@ -36,22 +36,8 @@ class FileTransferService(private val context: Context) {
         }
     }
 
-    fun showOffer(filename: String, url: String) {
-        // 1. Intent for the "Download" button (BroadcastReceiver)
-        val downloadIntent = Intent(context, DownloadReceiver::class.java).apply {
-            action = ACTION_ACCEPT
-            putExtra("url", url)
-            putExtra("filename", filename)
-        }
-        
-        val downloadPendingIntent: PendingIntent = PendingIntent.getBroadcast(
-            context, 
-            url.hashCode(), 
-            downloadIntent, 
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        // 2. Intent for the main notification tap (Open App)
+    fun showOffer(filename: String, fileId: String) {
+        // Intent for the main notification tap (Open App)
         val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
         val contentPendingIntent: PendingIntent? = launchIntent?.let {
             PendingIntent.getActivity(
@@ -64,14 +50,12 @@ class FileTransferService(private val context: Context) {
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle("New file available")
-            .setContentText("Tap to open app, or use button to receive")
-            .setStyle(NotificationCompat.BigTextStyle().bigText("File: $filename\n\nCloud sync ready. Would you like to download this file now?"))
+            .setContentTitle("Incoming file: $filename")
+            .setContentText("Transfer in progress...")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(contentPendingIntent)
             .setAutoCancel(true)
-            .addAction(android.R.drawable.ic_menu_save, "Download", downloadPendingIntent)
-            .setTimeoutAfter(300000) // 5 minutes
+            .setOngoing(true) // Keep it while transferring
 
         try {
             with(NotificationManagerCompat.from(context)) {
@@ -80,6 +64,22 @@ class FileTransferService(private val context: Context) {
         } catch (e: SecurityException) {
             // Permission not granted
         }
+    }
+
+    fun showFinished(filename: String) {
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_sys_download_done)
+            .setContentTitle("File received")
+            .setContentText(filename)
+            .setSubText("Saved to Downloads/McBridger")
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(true)
+
+        try {
+            with(NotificationManagerCompat.from(context)) {
+                notify(NOTIFICATION_ID, builder.build())
+            }
+        } catch (e: SecurityException) {}
     }
 
     fun dismissOffer() {

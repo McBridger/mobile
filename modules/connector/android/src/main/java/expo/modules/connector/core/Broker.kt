@@ -13,11 +13,13 @@ import expo.modules.connector.models.FileMessage
 import expo.modules.connector.models.IntroMessage
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import expo.modules.connector.models.FileMetadata
+import expo.modules.connector.models.*
 import expo.modules.connector.services.FileTransferService
 import expo.modules.connector.transports.tcp.TcpTransport
+import expo.modules.connector.transports.tcp.TcpFileProvider
 import java.util.UUID
 import kotlin.time.Duration.Companion.milliseconds
+import java.io.RandomAccessFile
 
 class Broker(
     context: Context,
@@ -26,6 +28,7 @@ class Broker(
     private val history: History,
     private val wakeManager: IWakeManager,
     private val fileTransferService: FileTransferService,
+    private val fileProvider: TcpFileProvider,
     private val tcpFactory: () -> ITcpTransport,
     private val bleFactory: () -> IBleTransport
 ) {
@@ -45,6 +48,8 @@ class Broker(
     private var bleTransport: IBleTransport? = null
     private var tcpTransport: ITcpTransport? = null
     
+    private val incomingFiles = mutableMapOf<String, java.io.File>()
+
     private var discoveryJob: Job? = null
     private var setupJob: Job? = null
     private var transportCollectionJob: Job? = null
@@ -273,21 +278,54 @@ class Broker(
             return
         }
 
+        val fileId = UUID.randomUUID().toString()
+        val totalSize = metadata.size.toLongOrNull() ?: 0L
+
         scope.launch {
-            val downloadUrl = tcp.registerFile(metadata)
-            Log.i(TAG, "File ready for download at $downloadUrl")
-            
-            val message = FileMessage(
-                url = downloadUrl,
+            // 1. Send announcement
+            val announcement = FileMessage(
+                id = fileId,
+                url = "", // No URL needed for push protocol
                 name = metadata.name,
                 size = metadata.size
             )
             
-            history.add(message)
-            // Send via both for redundancy or based on connection
-            bleTransport?.send(message)
-            tcp.send(message)
-            _messages.emit(message)
+            history.add(announcement)
+            tcp.send(announcement)
+            bleTransport?.send(announcement)
+            _messages.emit(announcement)
+
+            // 2. Stream parts
+            withContext(Dispatchers.IO) {
+                try {
+                    fileProvider.openStream(metadata.uri.toString())?.use { input ->
+                        val buffer = ByteArray(64 * 1024) // 64KB chunks
+                        var currentOffset = 0L
+                        
+                        while (isActive) {
+                            val read = input.read(buffer)
+                            if (read == -1) break
+                            
+                            val part = FilePart(
+                                fileId = fileId,
+                                data = if (read == buffer.size) buffer else buffer.copyOf(read),
+                                offset = currentOffset,
+                                total = totalSize
+                            )
+                            
+                            if (!tcp.send(part)) {
+                                Log.e(TAG, "Stream interrupted: Send failed")
+                                break
+                            }
+                            
+                            currentOffset += read
+                        }
+                        Log.i(TAG, "Streaming finished: $currentOffset bytes sent for $fileId")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Streaming error: ${e.message}")
+                }
+            }
         }
     } 
 
@@ -303,12 +341,71 @@ class Broker(
             }
             is FileMessage -> {
                 Log.d(TAG, "Incoming file: ${message.name} (${message.size})")
-                fileTransferService.showOffer(message.name, message.url)
+                // Prepare local file in cache
+                val tempFile = java.io.File(context.cacheDir, message.id)
+                incomingFiles[message.id] = tempFile
+                fileTransferService.showOffer(message.name, message.id)
+            }
+            is FilePart -> {
+                handleFilePart(message)
             }
             else -> {}
         }
 
         scope.launch { _messages.emit(message) }
+    }
+
+    private suspend fun handleFilePart(part: FilePart) = withContext(Dispatchers.IO) {
+        val file = incomingFiles[part.fileId] ?: run {
+            val f = java.io.File(context.cacheDir, part.fileId)
+            incomingFiles[part.fileId] = f
+            f
+        }
+
+        try {
+            RandomAccessFile(file, "rw").use { raf ->
+                raf.seek(part.offset)
+                raf.write(part.data)
+            }
+            
+            // Auto-finalize when last byte arrives
+            if (part.offset + part.data.size >= part.total && part.total > 0) {
+                Log.i(TAG, "File ${part.fileId} fully received. Finalizing...")
+                // We need the original filename. Let's get it from history or store it.
+                val historyItem = history.getHistory().find { it is FileMessage && it.id == part.fileId } as? FileMessage
+                val filename = historyItem?.name ?: "received_${System.currentTimeMillis()}"
+                
+                finalizeFile(part.fileId, filename)
+                
+                // Update UI or notification
+                withContext(Dispatchers.Main) {
+                    fileTransferService.showFinished(filename)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to write file part: ${e.message}")
+        }
+    }
+
+    fun finalizeFile(fileId: String, filename: String): Boolean {
+        val tempFile = incomingFiles[fileId] ?: return false
+        if (!tempFile.exists()) return false
+
+        return try {
+            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            val McBridgerDir = java.io.File(downloadsDir, "McBridger")
+            if (!McBridgerDir.exists()) McBridgerDir.mkdirs()
+
+            val destFile = java.io.File(McBridgerDir, filename)
+            tempFile.copyTo(destFile, overwrite = true)
+            tempFile.delete()
+            incomingFiles.remove(fileId)
+            Log.i(TAG, "File finalized and moved to: ${destFile.absolutePath}")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to finalize file: ${e.message}")
+            false
+        }
     }
 
     private suspend fun updateSystemClipboard(text: String) {

@@ -6,7 +6,7 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * SRP: Manages registration and retrieval of shared files.
+ * SRP: Manages registration and stream access for shared files.
  */
 class TcpFileProvider(private val streamProvider: IFileStreamProvider) {
     private data class RegisteredFile(
@@ -18,7 +18,7 @@ class TcpFileProvider(private val streamProvider: IFileStreamProvider) {
     private val FILE_TTL_MS = 10 * 60 * 1000L // 10 minutes
 
     fun registerFile(metadata: FileMetadata): String {
-        val id = java.util.UUID.randomUUID().toString()
+        val id = UUID.randomUUID().toString()
         activeFiles[id] = RegisteredFile(metadata)
         return id
     }
@@ -32,10 +32,13 @@ class TcpFileProvider(private val streamProvider: IFileStreamProvider) {
         return entry.metadata
     }
 
-    fun openStream(metadata: FileMetadata) = streamProvider.openStream(metadata.uri.toString())
+    fun openStream(fileId: String) = getFile(fileId)?.let { 
+        streamProvider.openStream(it.uri.toString()) 
+    }
 
     fun cleanup() {
         val now = System.currentTimeMillis()
         activeFiles.entries.removeIf { now - it.value.createdAt > FILE_TTL_MS }
     }
 }
+
