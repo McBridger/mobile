@@ -12,7 +12,8 @@ import expo.modules.connector.transports.ble.BleTransport
 import expo.modules.connector.transports.tcp.TcpTransport
 import expo.modules.connector.core.AndroidFileStreamProvider
 import expo.modules.connector.transports.tcp.TcpFileProvider
-import expo.modules.connector.services.FileTransferService
+import expo.modules.connector.services.NotificationService
+import expo.modules.connector.core.BlobStorageManager
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.context.GlobalContext
 import org.koin.core.context.startKoin
@@ -23,14 +24,16 @@ import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
 val connectorModule = module {
-  // 1. Scanner (Singleton)
+  // 1. Core Services
   singleOf(::BleScanner) { bind<IBleScanner>() }
-
   singleOf(::EncryptionService) { bind<IEncryptionService>() }
   singleOf(::AndroidFileStreamProvider) { bind<IFileStreamProvider>() }
   factoryOf(::TcpFileProvider)
   singleOf(::WakeManager) { bind<IWakeManager>() }
-  single { FileTransferService(get()) }
+  
+  // 2. New SRP-decomposed services
+  singleOf(::NotificationService)
+  singleOf(::BlobStorageManager)
 
   // 3. History (Singleton)
   single(named("MAX_HISTORY_SIZE")) { 20 }
@@ -49,7 +52,9 @@ val connectorModule = module {
       scanner = get(),
       history = get(),
       wakeManager = get(),
-      fileTransferService = get(),
+      notificationService = get(),
+      blobStorageManager = get(),
+      fileProvider = get(),
       tcpFactory = { get<ITcpTransport>() },
       bleFactory = { get<IBleTransport>() }
     )

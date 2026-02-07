@@ -16,10 +16,9 @@ import kotlinx.serialization.modules.polymorphic
 import kotlinx.serialization.modules.subclass
 
 enum class MessageType(val id: String) {
-    CLIPBOARD("0"),
-    DEVICE_NAME("1"),
-    FILE_URL("2"),
-    FILE_PART("3");
+    TINY("0"),
+    INTRO("1"),
+    BLOB("2");
 
     companion object {
         fun fromId(id: String?) = entries.find { it.id == id }
@@ -30,21 +29,20 @@ fun nowSeconds(): Double = System.currentTimeMillis() / 1000.0
 
 private val messageModule = SerializersModule {
     polymorphic(Message::class) {
-        subclass(ClipboardMessage::class)
+        subclass(TinyMessage::class)
         subclass(IntroMessage::class)
-        subclass(FileMessage::class)
-        subclass(FilePart::class)
+        subclass(BlobMessage::class)
     }
 }
 
-public val mJson = Json {
+val mJson = Json {
     encodeDefaults = true
     ignoreUnknownKeys = true
     serializersModule = messageModule
     classDiscriminator = "t"
 }
 
-public val mMsgPack =
+val mMsgPack =
         MsgPack(MsgPackConfiguration(ignoreUnknownKeys = true), serializersModule = messageModule)
 
 @Serializable
@@ -90,9 +88,9 @@ sealed class Message {
 
 @Serializable
 @SerialName("0")
-data class ClipboardMessage(
+data class TinyMessage(
         @SerialName("p") val value: String,
-        @Transient override val typeId: String = MessageType.CLIPBOARD.id,
+        @Transient override val typeId: String = MessageType.TINY.id,
 
         // Base fields
         @SerialName("a") override var address: String? = null,
@@ -106,8 +104,10 @@ data class ClipboardMessage(
 @Serializable
 @SerialName("1")
 data class IntroMessage(
-        @SerialName("p") val value: String,
-        @Transient override val typeId: String = MessageType.DEVICE_NAME.id,
+        @SerialName("n") val name: String,
+        @SerialName("i") val ip: String,
+        @SerialName("p") val port: Int,
+        @Transient override val typeId: String = MessageType.INTRO.id,
 
         // Base fields
         @SerialName("a") override var address: String? = null,
@@ -115,16 +115,29 @@ data class IntroMessage(
         @SerialName("ts") override val timestamp: Double = nowSeconds()
 ) : Message() {
 
-    override fun toBundle() = super.toBundle().apply { putString("value", value) }
+    override fun toBundle() = super.toBundle().apply {
+        putString("name", name)
+        putString("ip", ip)
+        putInt("port", port)
+    }
 }
 
 @Serializable
+enum class BlobType {
+    FILE, TEXT, IMAGE
+}
+
+/**
+ * If name is empty, it means that Blob payload should be treated as text
+ *
+ */
+@Serializable
 @SerialName("2")
-data class FileMessage(
-        @SerialName("u") val url: String = "",
-        @SerialName("n") val name: String,
-        @SerialName("s") val size: String = "0",
-        @Transient override val typeId: String = MessageType.FILE_URL.id,
+data class BlobMessage(
+        @SerialName("n") val name: String = "",
+        @SerialName("s") val size: Long = 0,
+        @SerialName("bt") val blobType: BlobType = BlobType.FILE,
+        @Transient override val typeId: String = MessageType.BLOB.id,
 
         // Base fields
         @SerialName("a") override var address: String? = null,
@@ -134,24 +147,14 @@ data class FileMessage(
 
     override fun toBundle() =
             super.toBundle().apply {
-                putString("url", url)
                 putString("name", name)
-                putString("size", size)
+                putString("size", size.toString())
             }
 }
 
-@Serializable
-@SerialName("3")
-data class FilePart(
-        @SerialName("i") val fileId: String,
-        @SerialName("d") val data: ByteArray,
-        @SerialName("o") val offset: Long,
-        @SerialName("n") val total: Long,
-        @Transient override val typeId: String = MessageType.FILE_PART.id,
-
-        // Base fields
-        @SerialName("a") override var address: String? = null,
-        @SerialName("id") override val id: String = UUID.randomUUID().toString(),
-        @SerialName("ts") override val timestamp: Double = nowSeconds()
-) : Message()
+data class BinaryChunk(
+    val id: String,
+    val offset: Long,
+    val data: ByteArray
+)
 

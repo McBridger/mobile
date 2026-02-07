@@ -77,7 +77,8 @@ class ConnectorModule : Module(), KoinComponent {
     }
 
     AsyncFunction("send") { data: String ->
-      broker.clipboardUpdate(data)
+      // TODO: Handle more than tiny update
+      broker.tinyUpdate(data)
     }
 
     AsyncFunction("start") {

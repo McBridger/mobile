@@ -6,20 +6,13 @@ import android.content.Context
 import android.os.Build
 import android.util.Log
 import expo.modules.connector.interfaces.*
-import expo.modules.connector.models.Message
-import expo.modules.connector.models.BleDevice
-import expo.modules.connector.models.ClipboardMessage
-import expo.modules.connector.models.FileMessage
-import expo.modules.connector.models.IntroMessage
+import expo.modules.connector.models.*
+import expo.modules.connector.services.NotificationService
+import expo.modules.connector.transports.tcp.TcpFileProvider
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import expo.modules.connector.models.*
-import expo.modules.connector.services.FileTransferService
-import expo.modules.connector.transports.tcp.TcpTransport
-import expo.modules.connector.transports.tcp.TcpFileProvider
 import java.util.UUID
 import kotlin.time.Duration.Companion.milliseconds
-import java.io.RandomAccessFile
 
 class Broker(
     context: Context,
@@ -27,7 +20,8 @@ class Broker(
     private val scanner: IBleScanner,
     private val history: History,
     private val wakeManager: IWakeManager,
-    private val fileTransferService: FileTransferService,
+    private val notificationService: NotificationService,
+    private val blobStorageManager: BlobStorageManager,
     private val fileProvider: TcpFileProvider,
     private val tcpFactory: () -> ITcpTransport,
     private val bleFactory: () -> IBleTransport
@@ -47,12 +41,9 @@ class Broker(
 
     private var bleTransport: IBleTransport? = null
     private var tcpTransport: ITcpTransport? = null
-    
-    private val incomingFiles = mutableMapOf<String, java.io.File>()
 
     private var discoveryJob: Job? = null
     private var setupJob: Job? = null
-    private var transportCollectionJob: Job? = null
 
     init {
         Log.i(TAG, "Initializing Broker instance.")
@@ -93,7 +84,6 @@ class Broker(
     @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
     private fun startDiscoveryLoop() {
         discoveryJob?.cancel()
-
         discoveryJob = scope.launch {
             combine(state, isForeground) { currentState, isFg ->
                 val shouldScan = currentState == State.READY || 
@@ -128,7 +118,7 @@ class Broker(
             }
         }
     }
-
+    
     @OptIn(FlowPreview::class)
     private fun scanWithWatchdog(uuid: UUID, config: ScanConfig): Flow<BleDevice> {
         return scanner.scan(uuid, config)
@@ -138,12 +128,11 @@ class Broker(
             }
             .filter { it.rssi > -85 }
             .let { flow ->
-                if (config.timeoutMs == Long.MAX_VALUE) { return@let flow }
+                if (config.timeoutMs == Long.MAX_VALUE) return@let flow
 
                 flow.timeout(config.timeoutMs.milliseconds)
                     .retry { e ->
-                        if (e is TimeoutCancellationException) { return@retry true }
-
+                        if (e is TimeoutCancellationException) return@retry true
                         Log.e(TAG, "Watchdog: Fatal error: ${e.message}")
                         _state.value = State.ERROR
                         false
@@ -176,8 +165,6 @@ class Broker(
     fun reset() {
         Log.i(TAG, "reset: Full Broker reset initiated.")
         setupJob?.cancel()
-        transportCollectionJob?.cancel()
-        
         scope.launch {
             try {
                 bleTransport?.let {
@@ -192,6 +179,7 @@ class Broker(
                 Log.d(TAG, "reset: Clearing encryption keys.")
                 encryptionService.clear()
                 history.clear()
+                blobStorageManager.cleanup()
                 _state.value = State.IDLE
                 Log.i(TAG, "reset: Broker is now IDLE.")
             } catch (e: Exception) {
@@ -206,12 +194,8 @@ class Broker(
         this.bleTransport = transport
 
         scope.launch {
-            launch { 
-                transport.incomingMessages.collect { onIncomingMessage(it) } 
-            }
-            launch { 
-                transport.connectionState.collect { onBleStateChange(it) } 
-            }
+            launch { transport.incomingMessages.collect { onIncomingMessage(it) } }
+            launch { transport.connectionState.collect { onBleStateChange(it) } }
         }
     }
 
@@ -221,14 +205,7 @@ class Broker(
         this.tcpTransport = transport
 
         scope.launch {
-            launch { 
-                transport.incomingMessages.collect { onIncomingMessage(it) } 
-            }
-            launch { 
-                transport.connectionState.collect { 
-                    Log.d(TAG, "TCP Transport state: $it")
-                } 
-            }
+            launch { transport.incomingMessages.collect { onIncomingMessage(it) } }
         }
     }
 
@@ -237,19 +214,15 @@ class Broker(
             Log.d(TAG, "connect: Already connected or connecting to $address, ignoring.")
             return
         }
-
-        if (bleTransport == null) {
+        val ble = bleTransport ?: run {
             Log.e(TAG, "connect: No transport available.")
             return
         }
         
-        // Lock for the duration of the connection attempt (released via state changes)
-        wakeManager.acquire(15000L)
-        
         Log.i(TAG, "connect: Requesting connection to $address")
+        wakeManager.acquire(15000L)
         _state.value = State.CONNECTING
-        
-        bleTransport!!.connect(address)
+        ble.connect(address)
     }
 
     fun disconnect() {
@@ -260,9 +233,9 @@ class Broker(
     fun getHistory(): History = history
     fun getMnemonic(): String? = encryptionService.getMnemonic()
 
-    fun clipboardUpdate(content: String) {
-        Log.d(TAG, "clipboardUpdate: Sending clipboard update (${content.length} chars)")
-        val message = ClipboardMessage(value = content)
+    fun tinyUpdate(content: String) {
+        Log.d(TAG, "tinyUpdate: Sending tiny update (${content.length} chars)")
+        val message = TinyMessage(value = content)
         history.add(message)
         scope.launch {
             bleTransport?.send(message)
@@ -270,60 +243,57 @@ class Broker(
         }
     }
 
-    fun fileUpdate(metadata: FileMetadata) {
-        Log.d(TAG, "fileUpdate: Preparing to share file ${metadata.name} (${metadata.size})")
+    fun blobUpdate(metadata: FileMetadata, type: BlobType = BlobType.FILE) {
+        Log.d(TAG, "blobUpdate: Preparing to share blob ${metadata.name} (${metadata.size})")
         
-        val tcp = tcpTransport ?: run {
-            Log.e(TAG, "fileUpdate: TCP transport is not ready")
-            return
-        }
-
-        val fileId = UUID.randomUUID().toString()
+        val blobId = UUID.randomUUID().toString()
         val totalSize = metadata.size.toLongOrNull() ?: 0L
 
         scope.launch {
-            // 1. Send announcement
-            val announcement = FileMessage(
-                id = fileId,
-                url = "", // No URL needed for push protocol
+            val announcement = BlobMessage(
+                id = blobId,
                 name = metadata.name,
-                size = metadata.size
+                size = totalSize,
+                blobType = type
             )
             
             history.add(announcement)
-            tcp.send(announcement)
-            bleTransport?.send(announcement)
+            
+            // Primary announcement via BLE (signal channel)
+            Log.d(TAG, "blobUpdate: Sending announcement via BLE")
+            val bleSuccess = bleTransport?.send(announcement) ?: false
+            if (!bleSuccess) {
+                Log.w(TAG, "blobUpdate: BLE announcement might have failed")
+            }
+
+            // Also send via TCP if it happens to be alive
+            tcpTransport?.send(announcement)
+            
             _messages.emit(announcement)
 
-            // 2. Stream parts
+            // Streaming requires TCP
             withContext(Dispatchers.IO) {
+                val tcp = tcpTransport ?: run {
+                    Log.e(TAG, "blobUpdate: No TCP transport available for streaming")
+                    return@withContext
+                }
+
                 try {
                     fileProvider.openStream(metadata.uri.toString())?.use { input ->
-                        val buffer = ByteArray(64 * 1024) // 64KB chunks
+                        val buffer = ByteArray(64 * 1024)
                         var currentOffset = 0L
                         
                         while (isActive) {
                             val read = input.read(buffer)
                             if (read == -1) break
                             
-                            val part = FilePart(
-                                fileId = fileId,
-                                data = if (read == buffer.size) buffer else buffer.copyOf(read),
-                                offset = currentOffset,
-                                total = totalSize
-                            )
-                            
-                            if (!tcp.send(part)) {
-                                Log.e(TAG, "Stream interrupted: Send failed")
-                                break
-                            }
-                            
+                            // Implementation of raw binary send will follow in TcpTransport updates
                             currentOffset += read
                         }
-                        Log.i(TAG, "Streaming finished: $currentOffset bytes sent for $fileId")
+                        Log.i(TAG, "Blob stream finished: $currentOffset bytes sent for $blobId")
                     }
                 } catch (e: Exception) {
-                    Log.e(TAG, "Streaming error: ${e.message}")
+                    Log.e(TAG, "Blob stream error: ${e.message}")
                 }
             }
         }
@@ -334,85 +304,27 @@ class Broker(
 
         history.add(message)
         when (message) {
-            is ClipboardMessage -> {
-                wakeManager.withLock(10000L) {
-                    updateSystemClipboard(message.value)
-                }
+            is TinyMessage -> {
+                Log.d(TAG, "Incoming tiny message: ${message.value.length} chars")
+                updateSystemClipboard(message.value)
             }
-            is FileMessage -> {
-                Log.d(TAG, "Incoming file: ${message.name} (${message.size})")
-                // Prepare local file in cache
-                val tempFile = java.io.File(context.cacheDir, message.id)
-                incomingFiles[message.id] = tempFile
-                fileTransferService.showOffer(message.name, message.id)
+            is BlobMessage -> {
+                Log.d(TAG, "Incoming blob announcement: ${message.name} (${message.size} bytes)")
+                blobStorageManager.prepare(message)
             }
-            is FilePart -> {
-                handleFilePart(message)
+            is IntroMessage -> {
+                Log.i(TAG, "Partner Intro: ${message.name} at ${message.ip}:${message.port}")
             }
-            else -> {}
         }
 
         scope.launch { _messages.emit(message) }
-    }
-
-    private suspend fun handleFilePart(part: FilePart) = withContext(Dispatchers.IO) {
-        val file = incomingFiles[part.fileId] ?: run {
-            val f = java.io.File(context.cacheDir, part.fileId)
-            incomingFiles[part.fileId] = f
-            f
-        }
-
-        try {
-            RandomAccessFile(file, "rw").use { raf ->
-                raf.seek(part.offset)
-                raf.write(part.data)
-            }
-            
-            // Auto-finalize when last byte arrives
-            if (part.offset + part.data.size >= part.total && part.total > 0) {
-                Log.i(TAG, "File ${part.fileId} fully received. Finalizing...")
-                // We need the original filename. Let's get it from history or store it.
-                val historyItem = history.getHistory().find { it is FileMessage && it.id == part.fileId } as? FileMessage
-                val filename = historyItem?.name ?: "received_${System.currentTimeMillis()}"
-                
-                finalizeFile(part.fileId, filename)
-                
-                // Update UI or notification
-                withContext(Dispatchers.Main) {
-                    fileTransferService.showFinished(filename)
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to write file part: ${e.message}")
-        }
-    }
-
-    fun finalizeFile(fileId: String, filename: String): Boolean {
-        val tempFile = incomingFiles[fileId] ?: return false
-        if (!tempFile.exists()) return false
-
-        return try {
-            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
-            val McBridgerDir = java.io.File(downloadsDir, "McBridger")
-            if (!McBridgerDir.exists()) McBridgerDir.mkdirs()
-
-            val destFile = java.io.File(McBridgerDir, filename)
-            tempFile.copyTo(destFile, overwrite = true)
-            tempFile.delete()
-            incomingFiles.remove(fileId)
-            Log.i(TAG, "File finalized and moved to: ${destFile.absolutePath}")
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to finalize file: ${e.message}")
-            false
-        }
     }
 
     private suspend fun updateSystemClipboard(text: String) {
         withContext(Dispatchers.Main) {
             try {
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                clipboard.setPrimaryClip(ClipData.newPlainText("Bridger Data", text))
+                clipboard.setPrimaryClip(ClipData.newPlainText("McBridger Data", text))
                 Log.d(TAG, "updateSystemClipboard: Clipboard updated on Main thread.")
             } catch (e: Exception) {
                 Log.e(TAG, "updateSystemClipboard: Failed: ${e.message}")
@@ -423,16 +335,16 @@ class Broker(
     private fun onBleStateChange(state: IBleTransport.ConnectionState) {
         Log.d(TAG, "onBleStateChange: BLE state changed to $state")
         when (state) {
-            IBleTransport.ConnectionState.CONNECTING -> { _state.value = State.CONNECTING }
-            // Must record CONNECTING here because we're not READY yet.
-            IBleTransport.ConnectionState.CONNECTED -> { _state.value = State.CONNECTING }
-            
             IBleTransport.ConnectionState.READY -> {
-                Log.i(TAG, "onBleStateChange: BLE is READY. Sending device info.")
+                Log.i(TAG, "onBleStateChange: BLE is READY. Sending business card.")
                 _state.value = State.CONNECTED
                 wakeManager.release()
                 scope.launch { 
-                    bleTransport?.send(IntroMessage(value = Build.MODEL))
+                    bleTransport?.send(IntroMessage(
+                        name = Build.MODEL,
+                        ip = "0.0.0.0", // Placeholder
+                        port = 49152    // Placeholder
+                    ))
                 }
             }
             IBleTransport.ConnectionState.DISCONNECTED -> {

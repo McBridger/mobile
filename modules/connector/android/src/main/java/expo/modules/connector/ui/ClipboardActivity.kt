@@ -60,7 +60,7 @@ class ClipboardActivity : Activity() {
         // 3. Fallback: Text
         val text = item.text?.toString()
         if (!text.isNullOrEmpty()) {
-            broker.clipboardUpdate(text)
+            broker.tinyUpdate(text)
             showToast("Clipboard text sent.")
             return
         }
@@ -82,7 +82,7 @@ class ClipboardActivity : Activity() {
 
         val metadata = FileMetadata.fromUri(contentResolver, uri)
         if (metadata != null) {
-            broker.fileUpdate(metadata)
+            broker.blobUpdate(metadata)
             showToast("Sharing file: ${metadata.name}")
         } else {
             showToast("Failed to resolve file.")
