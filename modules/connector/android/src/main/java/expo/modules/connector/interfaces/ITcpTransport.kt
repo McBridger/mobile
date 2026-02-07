@@ -1,5 +1,6 @@
 package expo.modules.connector.interfaces
 
+import expo.modules.connector.models.BlobMessage
 import expo.modules.connector.models.FileMetadata
 import expo.modules.connector.models.Message
 import kotlinx.coroutines.flow.Flow
@@ -9,8 +10,8 @@ interface ITcpTransport {
     val connectionState: StateFlow<ConnectionState>
     val incomingMessages: Flow<Message>
 
-    fun registerFile(metadata: FileMetadata): String
     suspend fun send(message: Message): Boolean
+    suspend fun sendBlob(message: BlobMessage, inputStream: java.io.InputStream, host: String, port: Int): Boolean
     fun stop()
 
     enum class ConnectionState {

@@ -152,9 +152,3 @@ data class BlobMessage(
             }
 }
 
-data class BinaryChunk(
-    val id: String,
-    val offset: Long,
-    val data: ByteArray
-)
-

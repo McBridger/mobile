@@ -5,10 +5,11 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.os.Build
 import android.util.Log
+import expo.modules.connector.core.BlobStorageManager
 import expo.modules.connector.interfaces.*
 import expo.modules.connector.models.*
 import expo.modules.connector.services.NotificationService
-import expo.modules.connector.transports.tcp.TcpFileProvider
+import expo.modules.connector.utils.NetworkUtils
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.util.UUID
@@ -22,7 +23,7 @@ class Broker(
     private val wakeManager: IWakeManager,
     private val notificationService: NotificationService,
     private val blobStorageManager: BlobStorageManager,
-    private val fileProvider: TcpFileProvider,
+    private val fileStreamProvider: IFileStreamProvider,
     private val tcpFactory: () -> ITcpTransport,
     private val bleFactory: () -> IBleTransport
 ) {
@@ -41,6 +42,7 @@ class Broker(
 
     private var bleTransport: IBleTransport? = null
     private var tcpTransport: ITcpTransport? = null
+    private var partnerTcpTarget: Pair<String, Int>? = null
 
     private var discoveryJob: Job? = null
     private var setupJob: Job? = null
@@ -278,22 +280,19 @@ class Broker(
                     return@withContext
                 }
 
+                val (host, port) = partnerTcpTarget ?: run {
+                    Log.e(TAG, "blobUpdate: No partner TCP target known")
+                    return@withContext
+                }
+
                 try {
-                    fileProvider.openStream(metadata.uri.toString())?.use { input ->
-                        val buffer = ByteArray(64 * 1024)
-                        var currentOffset = 0L
-                        
-                        while (isActive) {
-                            val read = input.read(buffer)
-                            if (read == -1) break
-                            
-                            // Implementation of raw binary send will follow in TcpTransport updates
-                            currentOffset += read
-                        }
-                        Log.i(TAG, "Blob stream finished: $currentOffset bytes sent for $blobId")
+                    fileStreamProvider.openStream(metadata.uri.toString())?.use { input ->
+                        Log.d(TAG, "blobUpdate: Starting TCP stream for $blobId to $host:$port")
+                        val success = tcp.sendBlob(announcement, input, host, port)
+                        Log.i(TAG, "blobUpdate: TCP stream finished. Success: $success")
                     }
                 } catch (e: Exception) {
-                    Log.e(TAG, "Blob stream error: ${e.message}")
+                    Log.e(TAG, "blobUpdate: Stream error: ${e.message}")
                 }
             }
         }
@@ -339,11 +338,16 @@ class Broker(
                 Log.i(TAG, "onBleStateChange: BLE is READY. Sending business card.")
                 _state.value = State.CONNECTED
                 wakeManager.release()
+                
+                val localIp = NetworkUtils.getLocalIpAddress() ?: "0.0.0.0"
+                Log.d(TAG, "My IP: $localIp, Port: 49152")
+                
+                // Send our "Business Card" via BLE
                 scope.launch { 
                     bleTransport?.send(IntroMessage(
                         name = Build.MODEL,
-                        ip = "0.0.0.0", // Placeholder
-                        port = 49152    // Placeholder
+                        ip = localIp,
+                        port = 49152
                     ))
                 }
             }

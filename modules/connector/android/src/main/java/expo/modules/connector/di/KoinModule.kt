@@ -11,7 +11,6 @@ import expo.modules.connector.transports.ble.BleScanner
 import expo.modules.connector.transports.ble.BleTransport
 import expo.modules.connector.transports.tcp.TcpTransport
 import expo.modules.connector.core.AndroidFileStreamProvider
-import expo.modules.connector.transports.tcp.TcpFileProvider
 import expo.modules.connector.services.NotificationService
 import expo.modules.connector.core.BlobStorageManager
 import org.koin.android.ext.koin.androidContext
@@ -28,7 +27,6 @@ val connectorModule = module {
   singleOf(::BleScanner) { bind<IBleScanner>() }
   singleOf(::EncryptionService) { bind<IEncryptionService>() }
   singleOf(::AndroidFileStreamProvider) { bind<IFileStreamProvider>() }
-  factoryOf(::TcpFileProvider)
   singleOf(::WakeManager) { bind<IWakeManager>() }
   
   // 2. New SRP-decomposed services
@@ -54,7 +52,7 @@ val connectorModule = module {
       wakeManager = get(),
       notificationService = get(),
       blobStorageManager = get(),
-      fileProvider = get(),
+      fileStreamProvider = get(),
       tcpFactory = { get<ITcpTransport>() },
       bleFactory = { get<IBleTransport>() }
     )
@@ -62,7 +60,7 @@ val connectorModule = module {
 
   // 5. Managers and Transports (Factories)
   factoryOf(::BleManager) { bind<IBleManager>() }
-  factory<ITcpTransport> { TcpTransport(get(), get()) }
+  factory<ITcpTransport> { TcpTransport(get(), get()) } // Passes EncryptionService and BlobStorageManager
 
   factory<IBleTransport> {
     BleTransport(
