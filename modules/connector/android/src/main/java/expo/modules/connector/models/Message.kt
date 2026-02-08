@@ -144,7 +144,9 @@ class BlobMessage(
         writeS(sink, name); sink.writeLong(size); writeS(sink, blobType.name)
     }
     override fun toBundle() = super.toBundle().apply {
-        putString("name", name); putString("size", size.toString()); putString("blobType", blobType.name)
+        putString("name", name)
+        putDouble("size", size.toDouble()) // Match JS Number
+        putString("blobType", blobType.name)
     }
 }
 

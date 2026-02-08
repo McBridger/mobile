@@ -8,7 +8,7 @@ import android.util.Log
 data class FileMetadata(
     val uri: Uri,
     val name: String,
-    val size: String
+    val size: Long
 ) {
     companion object {
         private const val TAG = "FileMetadata"
@@ -26,7 +26,7 @@ data class FileMetadata(
                         return FileMetadata(
                             uri = uri,
                             name = name ?: uri.lastPathSegment ?: "unknown_file",
-                            size = formatSize(sizeBytes)
+                            size = sizeBytes
                         )
                     }
                 }
@@ -36,18 +36,15 @@ data class FileMetadata(
 
             // Fallback for file:// URIs or failed queries
             Log.d(TAG, "Using fallback metadata for $uri")
+            val size = if (uri.scheme == "file") {
+                runCatching { java.io.File(uri.path.orEmpty()).length() }.getOrDefault(0L)
+            } else 0L
+
             return FileMetadata(
                 uri = uri,
                 name = uri.lastPathSegment ?: "file_${System.currentTimeMillis()}",
-                size = "Unknown size"
+                size = size
             )
-        }
-
-        private fun formatSize(bytes: Long): String {
-            if (bytes <= 0) return "0 B"
-            val units = arrayOf("B", "KB", "MB", "GB", "TB")
-            val digitGroups = (Math.log10(bytes.toDouble()) / Math.log10(1024.0)).toInt()
-            return String.format("%.1f %s", bytes / Math.pow(1024.0, digitGroups.toDouble()), units[digitGroups])
         }
     }
 }

@@ -1,89 +1,60 @@
-import { serve } from "bun";
 import { resolve } from "path";
 import { MaestroTest } from "../base";
 import { Test } from "../decorators";
 
 export class FileTest extends MaestroTest {
-    protected name = "File Transfer Operations";
+  protected name = "File Transfer Operations";
 
-    @Test("Receive and Download File")
-    async testFileTransfer() {
-        await this.cleanupDownloads();
-        await this.asConnected();
+  @Test("Receive and Download File (Binary)")
+  async testFileTransfer() {
+    await this.cleanupDownloads();
+    await this.asConnected();
 
-        // Resolve path properly for Bun.file
-        const filePath = resolve(import.meta.dirname, "test.txt");
+    const localFile = resolve(import.meta.dirname, "test.txt");
+    const content = Buffer.from(await Bun.file(localFile).arrayBuffer());
 
-        // Start a temporary HTTP server to serve the file
-        // 10.0.2.2 in emulator connects to 127.0.0.1 on host
-        const server = serve({
-            port: 8080,
-            hostname: "0.0.0.0",
-            async fetch(req) {
-                const url = new URL(req.url);
-                if (url.pathname === "/test.txt") return new Response(Bun.file(filePath));
-                return new Response("Not Found", { status: 404 });
-            },
-        });
+    this.log("Simulating Full Binary File Transfer...");
+    await this.simulateFileTransfer(
+      this.mockMac.address,
+      "maestro_test.txt",
+      content,
+    );
 
-        this.log(`Serving test file at ${server.url}`);
+    this.log("Verifying file arrival in UI...");
+    await this.runFlow(import.meta.resolve("./2_verify_file.yaml"));
+  }
 
-        try {
-            this.log("Simulating File Offer...");
-            await this.simulateFile(
-                this.mockMac.address,
-                "maestro_test.txt",
-                "http://10.0.2.2:8080/test.txt",
-                "1KB"
-            );
+  @Test("Send and Host File (Binary)")
+  async testSendFile() {
+    await this.asConnected();
 
-            this.log("Running Notification & Download flow...");
-            await this.openNotifications();
-            await this.runFlow(import.meta.resolve("./1_transfer.yaml"));
+    // 1. Start TCP Server on Host and tell the App about it
+    const { server, waitForFrame } = await this.startTestServer(49153);
 
-            this.log("Verifying file in System Explorer...");
-            await this.openDownloadsUI();
-            await this.runFlow(import.meta.resolve("./2_verify_file.yaml"));
-        } finally {
-            server.stop();
-            this.log("Test server stopped.");
-        }
+    // Android Emulator host address is 10.0.2.2
+    await this.simulateIntro(this.mockMac.address, "10.0.2.2", 49153);
+
+    const localFile = resolve(import.meta.dirname, "test.txt");
+    const internalPath = await this.pushFile(localFile, "maestro_send.txt");
+
+    this.log("Triggering file share from App...");
+    const blobPromise = waitForFrame(2); // Wait for BLOB announcement
+
+    await this.shareFile(`file://${internalPath}`);
+
+    const blob = await blobPromise;
+    this.log(`Successfully intercepted BLOB: ${blob.name}`);
+
+    if (blob.name !== "maestro_send.txt") {
+      throw new Error(
+        `Filename mismatch: expected maestro_send.txt, got ${blob.name}`,
+      );
     }
-    @Test("Send and Host File")
-    async testSendFile() {
-        await this.asConnected();
 
-        // 1. Establish the Real Bridge (Simulating a Mac client)
-        const bridge = await this.connectToBridge();
+    this.log("Verifying 'Sent' UI card...");
+    await this.runFlow(import.meta.resolve("./3_verify_sent.yaml"));
 
-        const localFile = resolve(import.meta.dirname, "test.txt");
-        const originalContent = await Bun.file(localFile).text();
-
-        // Inject file directly into app's private cache via ADB root hop
-        const internalPath = await this.pushFile(localFile, "maestro_send.txt");
-
-        this.log("Triggering file share and intercepting via WebSocket...");
-        // Start waiting BEFORE triggering, to avoid race conditions
-        const messagePromise = this.waitForFileMessage(bridge);
-
-        await this.shareFile(`file://${internalPath}`);
-
-        const fileMsg = await messagePromise;
-        this.log(`Caught FileMessage! URL: ${fileMsg.url}`);
-
-        // Rewrite URL for adb forward loopback
-        const downloadUrl = fileMsg.url.replace(/http:\/\/([0-9.]+):/, "http://localhost:");
-
-        this.log(`Attempting to download from captured URL: ${downloadUrl}`);
-        const response = await fetch(downloadUrl);
-        if (!response.ok) throw new Error(`Download failed: ${response.status}`);
-
-        const downloadedContent = await response.text();
-        if (downloadedContent !== originalContent) {
-            throw new Error("Content integrity check failed!");
-        }
-
-        this.log("✅ End-to-End File Hosting & Delivery verified via Real WebSocket Bridge.");
-        bridge.close();
-    }
+    server.close();
+    this.log("✅ End-to-End Binary File Hosting verified.");
+  }
 }

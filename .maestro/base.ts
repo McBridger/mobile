@@ -1,45 +1,87 @@
-import { decodeMulti, encode } from "@msgpack/msgpack";
 import { $ } from "bun";
 import { APP_ID } from "./constants";
 import { testRegistry } from "./decorators";
+import { connect, createServer, Socket } from "node:net";
+import { randomUUID } from "node:crypto";
 
 export enum AdbEvent {
   SCAN_DEVICE = "expo.modules.connector.SCAN_DEVICE",
   RECEIVE_DATA = "expo.modules.connector.RECEIVE_DATA",
 }
 
+/**
+ * Binary Encoder matching Kotlin's [1b Type][16b UUID][8b Timestamp][Payload]
+ */
+class BinaryEncoder {
+  private chunks: Buffer[] = [];
+
+  writeByte(v: number) { this.chunks.push(Buffer.from([v])); return this; }
+  
+  writeUUID(uuid: string) {
+    const hex = uuid.replace(/-/g, "");
+    this.chunks.push(Buffer.from(hex, "hex"));
+    return this;
+  }
+
+  writeDouble(v: number) {
+    const buf = Buffer.alloc(8);
+    buf.writeDoubleBE(v);
+    this.chunks.push(buf);
+    return this;
+  }
+
+  writeLong(v: number | bigint) {
+    const buf = Buffer.alloc(8);
+    buf.writeBigInt64BE(BigInt(v));
+    this.chunks.push(buf);
+    return this;
+  }
+
+  writeInt(v: number) {
+    const buf = Buffer.alloc(4);
+    buf.writeInt32BE(v);
+    this.chunks.push(buf);
+    return this;
+  }
+
+  writeString(s: string) {
+    const bytes = Buffer.from(s, "utf-8");
+    this.writeInt(bytes.length);
+    this.chunks.push(bytes);
+    return this;
+  }
+
+  writeRaw(data: Buffer | Uint8Array) {
+    this.chunks.push(Buffer.from(data));
+    return this;
+  }
+
+  build(): Buffer {
+    return Buffer.concat(this.chunks);
+  }
+}
+
 export abstract class MaestroTest {
   protected abstract name: string;
   protected maestroBin = process.env.MAESTRO_PATH || "maestro";
-  protected appId = "com.mc.bridger.e2e";
+  protected appId = APP_ID;
 
   protected mockMac = {
     address: "MA:ES:TR:00:23:45",
     name: "Maestro-Mac",
   };
 
-  /**
-   * Main entry point that executes all registered @Test methods
-   */
   async run() {
     console.log(`\n--- 📦 Suite: ${this.name} ---`);
-
     const allTests = testRegistry.get(this.constructor) || [];
-    if (allTests.length === 0) {
-      console.log("  ⚠️ No tests found in this suite.");
-      return;
-    }
-
-    const hasOnly = allTests.some(t => t.options.only);
-    const testsToRun = hasOnly
+    const testsToRun = allTests.some(t => t.options.only)
       ? allTests.filter(t => t.options.only)
       : allTests.filter(t => !t.options.skip);
 
     for (const test of testsToRun) {
       this.log(`Test: ${test.name}`);
       try {
-        // @ts-ignore - calling dynamic method
-        await this[test.methodName]();
+        await (this as any)[test.methodName]();
         console.log(`  ✅ Passed`);
       } catch (e) {
         console.log(`  ❌ Failed: ${e}`);
@@ -57,9 +99,6 @@ export abstract class MaestroTest {
     await $`${this.maestroBin} test ${localPath}`;
   }
 
-  /**
-   * FIXTURE: Brings the app to a "Connected" state.
-   */
   protected async asConnected() {
     this.log("Fixture: Setting up Connection...");
     await this.runFlow(import.meta.resolve("./basic/1_setup.yaml"));
@@ -68,9 +107,8 @@ export abstract class MaestroTest {
 
   protected async broadcast(event: AdbEvent, extras: Record<string, string>) {
     const extraArgs = Object.entries(extras)
-      .map(([key, value]) => `--es ${key} "${value}"`) // Note: escaped quotes here are intentional for shell command
+      .map(([key, value]) => `--es ${key} "${value}"`)
       .join(" ");
-
     await $`adb shell am broadcast -a ${event} -p ${APP_ID} ${extraArgs}`;
   }
 
@@ -82,52 +120,55 @@ export abstract class MaestroTest {
     await Bun.sleep(1000);
   }
 
-  private encodePolymorphic(type: number | string, dataObj: any): string {
-    // Kotlin polymorphic MsgPack (esensar) expects sequential: [Type (String)][Data (Map)]
-    // This looks like two separate objects in the MsgPack stream.
-    const encodedType = encode(type.toString());
-    const encodedData = encode(dataObj);
-    return Buffer.concat([Buffer.from(encodedType), Buffer.from(encodedData)]).toString("hex");
-  }
-
   protected async simulateData(address: string, type: number, payload: string, timestamp?: number) {
     const ts = timestamp ?? Date.now() / 1000;
-
-    // Kotlin polymorphic MsgPack (default) expects: { "0": { ... properties ... } }
-    const dataObj = {
-      p: payload,
-      ts,
-      id: "msg-" + Math.random().toString(36).substr(2, 9),
-      a: address
-    };
-
-    const hex = this.encodePolymorphic(type, dataObj);
+    const uuid = randomUUID();
+    const hex = new BinaryEncoder().writeByte(type).writeUUID(uuid).writeDouble(ts).writeString(payload).build().toString("hex");
     await this.simulateRawData(address, hex);
   }
 
   protected async simulateRawData(address: string, hexData: string) {
-    await this.broadcast(AdbEvent.RECEIVE_DATA, {
-      address,
-      data: hexData,
-    });
+    await this.broadcast(AdbEvent.RECEIVE_DATA, { address, data: hexData });
     await Bun.sleep(1000);
   }
 
-  protected async simulateFile(address: string, name: string, url: string, size: string) {
+  /**
+   * Simulate full binary file transfer: Announcement + Chunks
+   */
+  protected async simulateFileTransfer(address: string, name: string, content: Buffer) {
     const ts = Date.now() / 1000;
-    const typeKey = "2"; // FILE_URL
+    const blobId = randomUUID();
 
-    const dataObj = {
-      u: url,
-      n: name,
-      s: size,
-      ts,
-      id: "file-" + Math.random().toString(36).substr(2, 9),
-      a: address
-    };
+    // 1. Send BLOB Announcement
+    const announcement = new BinaryEncoder()
+      .writeByte(2) // BLOB
+      .writeUUID(blobId)
+      .writeDouble(ts)
+      .writeString(name)
+      .writeLong(content.length)
+      .writeString("FILE")
+      .build();
+    
+    this.log(`Simulating file announcement: ${name} (${content.length} bytes)`);
+    await this.simulateRawData(address, announcement.toString("hex"));
 
-    const hex = this.encodePolymorphic(typeKey, dataObj);
-    await this.simulateRawData(address, hex);
+    // 2. Send Chunks
+    const chunkSize = 16 * 1024; // Small chunks for ADB stability
+    for (let offset = 0; offset < content.length; offset += chunkSize) {
+      const end = Math.min(offset + chunkSize, content.length);
+      const chunkData = content.slice(offset, end);
+      
+      const chunkMsg = new BinaryEncoder()
+        .writeByte(3) // CHUNK
+        .writeUUID(blobId) // id is blobId
+        .writeDouble(0)    // timestamp 0 for chunks
+        .writeLong(offset)
+        .writeRaw(chunkData)
+        .build();
+      
+      this.log(`  Sending chunk ${offset}/${content.length}`);
+      await this.simulateRawData(address, chunkMsg.toString("hex"));
+    }
   }
 
   protected async openNotifications() {
@@ -136,106 +177,81 @@ export abstract class MaestroTest {
   }
 
   protected async cleanupDownloads() {
-    this.log("Cleaning up Downloads/McBridger folder...");
     await $`adb shell rm -rf /storage/emulated/0/Download/McBridger`;
   }
 
   protected async openDownloadsUI() {
-    this.log("Opening Downloads UI...");
-
-    // Intent to open the built-in Android Files/Downloads explorer specifically at Download folder
     await $`adb shell am start -a android.intent.action.VIEW -d "content://com.android.externalstorage.documents/document/primary:Download"`;
-    await Bun.sleep(2000); // Give it some time to load the UI
+    await Bun.sleep(2000);
   }
 
   protected async pushFile(localPath: string, fileName: string): Promise<string> {
     const tmpPath = `/data/local/tmp/${fileName}`;
     const internalPath = `/data/data/${this.appId}/cache/${fileName}`;
-
-    this.log(`Injecting ${localPath} into app internal storage...`);
-
-    // 1. Push to common temp area accessible by shell
     await $`adb push ${localPath} ${tmpPath}`;
-
-    // 2. Use run-as to copy it into the app's private area (effectively changing owner/permissions)
     await $`adb shell run-as ${this.appId} cp ${tmpPath} ${internalPath}`;
     await $`adb shell run-as ${this.appId} chmod 666 ${internalPath}`;
     await $`adb shell rm ${tmpPath}`;
-
     return internalPath;
   }
 
   protected async shareFile(contentUri: string) {
-    this.log(`Sharing file via Intent: ${contentUri}`);
-    // Launch ClipboardActivity with DATA uri
     await $`adb shell am start -a android.intent.action.VIEW -d "${contentUri}" -n ${this.appId}/expo.modules.connector.ui.ClipboardActivity`;
-    await Bun.sleep(2000); // Give it a bit more time for the server to spin up
-  }
-
-  protected async setupForwarding(port: number) {
-    this.log(`Forwarding host port ${port} to device port ${port}...`);
-    await $`adb forward tcp:${port} tcp:${port}`;
+    await Bun.sleep(2000);
   }
 
   /**
-   * ESTABLISH REAL BRIDGE: Connect to the Android TCP Server
+   * Starts a TCP server to catch outgoing files from the app.
    */
-  protected async connectToBridge(port = 49152): Promise<WebSocket> {
-    await this.setupForwarding(port);
-    this.log(`Connecting to McBridger WebSocket at 127.0.0.1:${port}...`);
+  protected async startTestServer(port = 49153): Promise<{ server: any, waitForFrame: (type: number) => Promise<any> }> {
+    this.log(`Forwarding host port ${port} to device port ${port}...`);
+    await $`adb reverse tcp:${port} tcp:${port}`;
+    
+    let resolveFrame: (data: any) => void;
+    let targetType = -1;
 
-    return new Promise((resolve, reject) => {
-      const ws = new WebSocket(`ws://127.0.0.1:${port}/bridge`);
-      ws.onopen = () => {
-        this.log("Bridge connected!");
-        resolve(ws);
-      };
-      ws.onerror = (e) => reject(new Error(`WS Connection failed: ${e}`));
-    });
+    const server = createServer((socket) => {
+      this.log("App connected to our test server!");
+      let buffer = Buffer.alloc(0);
+      
+      socket.on("data", (chunk) => {
+        buffer = Buffer.concat([buffer, chunk]);
+        while (buffer.length >= 4) {
+          const len = buffer.readInt32BE(0);
+          if (buffer.length < len + 4) break;
+          const frame = buffer.slice(4, len + 4);
+          buffer = buffer.slice(len + 4);
+
+          const type = frame[0];
+          if (type === targetType && resolveFrame) {
+            if (type === 2) { // BLOB
+               const nameLen = frame.readInt32BE(25);
+               const name = frame.slice(29, 29 + nameLen).toString("utf-8");
+               resolveFrame({ name, type });
+            }
+          }
+        }
+      });
+    }).listen(port);
+
+    return {
+      server,
+      waitForFrame: (type: number) => {
+        targetType = type;
+        return new Promise(res => { resolveFrame = res; });
+      }
+    };
   }
 
-  protected async waitForFileMessage(ws: WebSocket, timeout = 5000): Promise<any> {
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error("Timeout waiting for FileMessage")), timeout);
-
-      ws.onmessage = async (event) => {
-        try {
-          let binaryData: Uint8Array;
-
-          if (typeof event.data === "string") {
-            binaryData = Buffer.from(event.data);
-          } else if (event.data instanceof Blob) {
-            binaryData = new Uint8Array(await event.data.arrayBuffer());
-          } else {
-            binaryData = new Uint8Array(event.data);
-          }
-
-          // Since we switched to polymorphic MsgPack, it arrives as a sequence of two objects: 
-          // [Type (String)] and [Data (Map)]
-          let typeStr: any;
-          let body: any;
-
-          try {
-            [typeStr, body] = [...decodeMulti(binaryData)]
-          } catch (e) {
-            this.log(`Decode error: ${e}.`);
-            return;
-          }
-
-          this.log(`Received bridge message: type=${typeStr}`);
-
-          if (typeStr === "2" && body.u) { // MessageType.FILE_URL
-            clearTimeout(timer);
-            resolve({
-              url: body.u,
-              name: body.n,
-              size: body.s
-            });
-          }
-        } catch (e) {
-          this.log(`Failed to parse bridge message: ${e}`);
-        }
-      };
-    });
+  protected async simulateIntro(address: string, ip: string, port: number) {
+    const encoder = new BinaryEncoder()
+      .writeByte(1) // INTRO
+      .writeUUID(randomUUID())
+      .writeDouble(Date.now() / 1000)
+      .writeString("Maestro-Mac")
+      .writeString(ip)
+      .writeInt(port);
+    
+    await this.simulateRawData(address, encoder.build().toString("hex"));
   }
 }

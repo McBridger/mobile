@@ -11,6 +11,7 @@ import expo.modules.connector.models.*
 import expo.modules.connector.services.NotificationService
 import expo.modules.connector.utils.NetworkUtils
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.*
 import java.util.UUID
 import kotlin.time.Duration.Companion.milliseconds
@@ -37,7 +38,11 @@ class Broker(
     private val _isForeground = MutableStateFlow(true)
     val isForeground = _isForeground.asStateFlow()
 
-    private val _messages = MutableSharedFlow<Message>()
+    private val _messages = MutableSharedFlow<Message>(
+        replay = 0,
+        extraBufferCapacity = 64,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
     val messages = _messages.asSharedFlow()
 
     private var bleTransport: IBleTransport? = null
@@ -247,15 +252,13 @@ class Broker(
 
     fun blobUpdate(metadata: FileMetadata, type: BlobType = BlobType.FILE) {
         Log.d(TAG, "blobUpdate: Preparing to share blob ${metadata.name} (${metadata.size})")
-        
-        val blobId = UUID.randomUUID().toString()
-        val totalSize = metadata.size.toLongOrNull() ?: 0L
+        val id = UUID.randomUUID().toString()
 
         scope.launch {
             val announcement = BlobMessage(
-                id = blobId,
+                id = id,
                 name = metadata.name,
-                size = totalSize,
+                size = metadata.size,
                 blobType = type
             )
             
@@ -287,7 +290,7 @@ class Broker(
 
                 try {
                     fileStreamProvider.openStream(metadata.uri.toString())?.use { input ->
-                        Log.d(TAG, "blobUpdate: Starting TCP stream for $blobId to $host:$port")
+                        Log.d(TAG, "blobUpdate: Starting TCP stream for $id to $host:$port")
                         val success = tcp.sendBlob(announcement, input, host, port)
                         Log.i(TAG, "blobUpdate: TCP stream finished. Success: $success")
                     }

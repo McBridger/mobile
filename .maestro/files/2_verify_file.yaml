@@ -1,4 +1,4 @@
 appId: com.mc.bridger.e2e
 ---
-- tapOn: "McBridger"
+- assertVisible: "Received"
 - assertVisible: "maestro_test.txt"

@@ -60,7 +60,7 @@ val connectorModule = module {
 
   // 5. Managers and Transports (Factories)
   factoryOf(::BleManager) { bind<IBleManager>() }
-  factory<ITcpTransport> { TcpTransport(get(), get()) } // Passes EncryptionService and BlobStorageManager
+  factory<ITcpTransport> { TcpTransport(get(), 49152) } 
 
   factory<IBleTransport> {
     BleTransport(

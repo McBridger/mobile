@@ -21,12 +21,12 @@ export class BasicTest extends MaestroTest {
   @Test("History Persistence After Restart (2 items limit)")
   async testPersistence() {
     await this.asConnected();
-    
+
     this.log("Sending 5 messages...");
     for (let i = 0; i < 5; i++) {
       await this.simulateData(this.mockMac.address, 0, `Message ${i + 1}`);
     }
-    
+
     this.log("Restarting app and verifying history...");
     await this.runFlow(import.meta.resolve("./4_persistence.yaml"));
   }
