@@ -17,31 +17,42 @@ export enum STATUS {
 const Base = Type.Object({
   id: Type.String(),
   type: Type.String(),
-  address: Type.Optional(Type.String()),
+  address: Type.Optional(Type.Union([Type.String(), Type.Null()])),
   timestamp: Type.Number(),
 });
 
-export const Clipboard = Type.Intersect([
+export const Tiny = Type.Intersect([
   Base,
   Type.Object({
-    type: Type.Literal("CLIPBOARD"),
+    type: Type.Literal("TINY"),
     value: Type.String(),
   })
 ])
-export type Clipboard = Static<typeof Clipboard>;
+export type Tiny = Static<typeof Tiny>;
 
-export const File = Type.Intersect([
+export const Intro = Type.Intersect([
   Base,
   Type.Object({
-    type: Type.Literal("FILE_URL"),
+    type: Type.Literal("INTRO"),
     name: Type.String(),
-    size: Type.String(),
-    url: Type.String(),
+    ip: Type.String(),
+    port: Type.Number(),
   })
 ])
-export type File = Static<typeof File>;
+export type Intro = Static<typeof Intro>;
 
-export const Message = Type.Union([Clipboard, File]);
+export const Blob = Type.Intersect([
+  Base,
+  Type.Object({
+    type: Type.Literal("BLOB"),
+    name: Type.String(),
+    size: Type.Number(), // Now number (Long in Kotlin)
+    blobType: Type.String(), // FILE, TEXT, IMAGE
+  })
+])
+export type Blob = Static<typeof Blob>;
+
+export const Message = Type.Union([Tiny, Intro, Blob]);
 export type Message = Static<typeof Message>;
 
 export type ConnectorModuleEvents = {

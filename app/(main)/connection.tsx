@@ -23,9 +23,9 @@ export default function Connection() {
 
   const renderItem = ({ item }: { item: Message }) => {
     switch (item.type) {
-      case 'CLIPBOARD':
+      case 'TINY':
         return <ClipboardCard item={item} theme={theme} />;
-      case 'FILE_URL':
+      case 'BLOB':
         return <FileCard item={item} theme={theme} />;
       default:
         return null;

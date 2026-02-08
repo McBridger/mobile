@@ -1,11 +1,11 @@
-import { Clipboard } from "@/modules/connector";
+import { Tiny } from "@/modules/connector";
 import { AppTheme } from "@/theme/CustomTheme";
 import React from "react";
 import { StyleSheet, View } from "react-native";
 import { Avatar, Card, Text } from "react-native-paper";
 import { MessageHeader } from "./MessageHeader";
 
-export const ClipboardCard = ({ item, theme }: { item: Clipboard; theme: AppTheme }) => (
+export const ClipboardCard = ({ item, theme }: { item: Tiny; theme: AppTheme }) => (
     <Card style={[styles.logCard, { borderColor: theme.colors.cardBorder }]} mode="elevated" elevation={1}>
         <Card.Content style={styles.cardContent}>
             <View style={styles.iconContainer}>
