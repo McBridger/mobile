@@ -311,8 +311,12 @@ class Broker(
                 Log.d(TAG, "Incoming blob announcement: ${message.name} (${message.size} bytes)")
                 blobStorageManager.prepare(message)
             }
+            is ChunkMessage -> {
+                blobStorageManager.writeChunk(message)
+            }
             is IntroMessage -> {
                 Log.i(TAG, "Partner Intro: ${message.name} at ${message.ip}:${message.port}")
+                partnerTcpTarget = message.ip to message.port
             }
         }
 

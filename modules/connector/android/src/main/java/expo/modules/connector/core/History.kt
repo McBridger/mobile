@@ -66,7 +66,7 @@ class History(context: Context, private val maxHistorySize: Int) {
         try {
             FileReader(historyFile).use { reader ->
                 val content = reader.readText()
-                val loadedList: List<Message> = Message.fromJSONGeneric(content)
+                val loadedList = Message.fromJSONList(content)
                 historyQueue.addAll(loadedList)
                 Log.d(TAG, "Bridger history loaded from file. Total entries: ${historyQueue.size}")
             }
@@ -79,7 +79,7 @@ class History(context: Context, private val maxHistorySize: Int) {
     private fun saveHistoryToFile() {
         try {
             FileWriter(historyFile).use { writer ->
-                val jsonContent = Message.toJSON(historyQueue.toList())
+                val jsonContent = Message.toJSONList(historyQueue.toList())
                 writer.write(jsonContent)
                 Log.d(TAG, "Bridger history saved to file.")
             }

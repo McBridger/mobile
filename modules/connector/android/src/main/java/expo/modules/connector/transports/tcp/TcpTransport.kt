@@ -1,28 +1,21 @@
 package expo.modules.connector.transports.tcp
 
 import android.util.Log
-import expo.modules.connector.core.BlobStorageManager
 import expo.modules.connector.interfaces.IEncryptionService
 import expo.modules.connector.interfaces.ITcpTransport
-import expo.modules.connector.models.BlobMessage
-import expo.modules.connector.models.FileMetadata
-import expo.modules.connector.models.Message
-import okio.buffer
-import okio.sink
-import okio.source
-import java.net.Socket
+import expo.modules.connector.models.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.net.Socket
 
 /**
- * SRP: Implementation of ITcpTransport using raw one-off streaming sockets.
+ * SRP: Implementation of ITcpTransport using Unified Binary Framing.
  */
 class TcpTransport(
     private val encryptionService: IEncryptionService,
-    private val blobStorageManager: BlobStorageManager,
     private val port: Int = 49152,
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 ) : ITcpTransport {
@@ -35,7 +28,7 @@ class TcpTransport(
 
     private val manager = TcpServerManager(
         port = port,
-        onIncomingStream = ::handleIncomingStream,
+        onMessage = ::handleIncomingFrame,
         scope = scope
     )
 
@@ -44,45 +37,21 @@ class TcpTransport(
         _connectionState.value = ITcpTransport.ConnectionState.READY
     }
 
-    private suspend fun handleIncomingStream(socket: Socket) {
-        val source = socket.source().buffer()
+    private suspend fun handleIncomingFrame(payload: ByteArray, address: String) {
         try {
-            // 1. Read Header (One-off for the whole stream)
-            // Header format: [36 bytes UUID string] + [8 bytes Long Size]
-            val blobId = source.readUtf8(36).trim()
-            val totalSize = source.readLong()
-            
-            Log.i(TAG, "Starting binary stream for Blob: $blobId (Size: $totalSize)")
-
-            // 2. Stream Data to Manager
-            val buffer = ByteArray(64 * 1024)
-            var bytesRead = 0L
-            
-            while (bytesRead < totalSize && !source.exhausted()) {
-                val toRead = minOf(buffer.size.toLong(), totalSize - bytesRead).toInt()
-                val read = source.read(buffer, 0, toRead)
-                if (read == -1) break
-                
-                blobStorageManager.writeChunk(blobId, bytesRead, buffer.copyOf(read))
-                bytesRead += read
-            }
-            
-            Log.i(TAG, "Stream finished. Received $bytesRead of $totalSize bytes.")
-            
+            // In a future step, payload will be decrypted here
+            val message = Message.fromBytes(payload) ?: return
+            _incomingMessages.emit(message.withAddress(address))
         } catch (e: Exception) {
-            Log.e(TAG, "Incoming stream error: ${e.message}")
-        } finally {
-            try { socket.close() } catch (_: Exception) {}
+            Log.e(TAG, "Failed to process frame: ${e.message}")
         }
     }
+
     override suspend fun send(message: Message): Boolean {
-        Log.w(TAG, "send: Legacy send called, ignoring in one-off TCP model")
+        Log.w(TAG, "send: General send not implemented in on-demand TCP model")
         return false
     }
 
-    /**
-     * Sends large content via a dedicated TCP connection.
-     */
     override suspend fun sendBlob(
         message: BlobMessage, 
         inputStream: java.io.InputStream, 
@@ -92,22 +61,23 @@ class TcpTransport(
         val socket = manager.connect(host, port) ?: return@withContext false
         
         return@withContext try {
-            val sink = socket.sink().buffer()
+            // 1. Send Blob Announcement Frame
+            manager.sendFrame(socket, message.toBytes())
             
-            // 1. Send Header: [36 bytes UUID] + [8 bytes Long Size]
-            val paddedId = message.id.padEnd(36)
-            sink.writeUtf8(paddedId)
-            sink.writeLong(message.size)
-            sink.flush()
-
-            Log.i(TAG, "Header sent for ${message.name} to $host:$port, starting payload...")
-
-            // 2. Pump bytes via Okio
-            val source = inputStream.source().buffer()
-            val bytesSent = sink.writeAll(source)
-            sink.flush()
-
-            Log.i(TAG, "Payload sent: $bytesSent bytes for ${message.name}")
+            // 2. Send Data in Chunks
+            val buffer = ByteArray(64 * 1024)
+            var offset = 0L
+            while (isActive) {
+                val read = inputStream.read(buffer)
+                if (read == -1) break
+                
+                val chunk = ChunkMessage(offset, buffer.copyOf(read), message.id)
+                if (!manager.sendFrame(socket, chunk.toBytes())) break
+                
+                offset += read
+            }
+            
+            Log.i(TAG, "Blob send finished: $offset bytes for ${message.name}")
             true
         } catch (e: Exception) {
             Log.e(TAG, "sendBlob failed: ${e.message}")

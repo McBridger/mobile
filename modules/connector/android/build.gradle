@@ -58,7 +58,6 @@ dependencies {
   implementation 'no.nordicsemi.android:ble:2.10.2'
   implementation 'no.nordicsemi.android.support.v18:scanner:1.6.0'
   implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3'
-  implementation 'com.ensarsarajcic.kotlinx:serialization-msgpack:0.6.0'
   implementation 'androidx.security:security-crypto:1.1.0'
   implementation 'com.squareup.okio:okio:3.16.2'
 

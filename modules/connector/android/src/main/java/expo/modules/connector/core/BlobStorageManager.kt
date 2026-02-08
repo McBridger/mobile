@@ -8,6 +8,7 @@ import android.util.Log
 import androidx.core.content.FileProvider
 import expo.modules.connector.models.BlobMessage
 import expo.modules.connector.models.BlobType
+import expo.modules.connector.models.ChunkMessage
 import expo.modules.connector.services.NotificationService
 import okio.FileSystem
 import okio.Path.Companion.toPath
@@ -30,30 +31,30 @@ class BlobStorageManager(
         if (!exists()) mkdirs()
     }
 
-    fun prepare(message: BlobMessage) {
-        val tempFile = File(blobsDir, "blob_${message.id}")
+    fun prepare(msg: BlobMessage) {
+        val tempFile = File(blobsDir, "blob_${msg.id}")
         if (tempFile.exists()) tempFile.delete()
 
-        activeBlobs[message.id] = ActiveBlob(message, tempFile)
-        Log.d(TAG, "Prepared storage for blob: ${message.name}")
+        activeBlobs[msg.id] = ActiveBlob(msg, tempFile)
+        Log.d(TAG, "Prepared storage for blob: ${msg.name}")
     }
 
-    fun writeChunk(id: String, offset: Long, data: ByteArray) {
-        val blob = activeBlobs[id] ?: return
+    fun writeChunk(msg: ChunkMessage) {
+        val blob = activeBlobs[msg.id] ?: return
 
         try {
             // Using Okio for efficient file access
             FileSystem.SYSTEM.openReadWrite(blob.tempFile.absolutePath.toPath()).use { handle ->
-                handle.write(offset, data, 0, data.size)
+                handle.write(msg.offset, msg.data, 0, msg.data.size)
             }
 
-            updateProgress(blob, offset + data.size)
+            updateProgress(blob, msg.offset + msg.data.size)
 
-            if (offset + data.size >= blob.message.size) {
-                finalizeBlob(id)
+            if (msg.offset + msg.data.size >= blob.message.size) {
+                finalizeBlob(msg.id)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to write chunk for $id: ${e.message}")
+            Log.e(TAG, "Failed to write chunk for ${msg.id}: ${e.message}")
         }
     }
 
@@ -103,7 +104,6 @@ class BlobStorageManager(
             val contentUri = FileProvider.getUriForFile(context, authority, finalFile)
             
             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            val mimeType = if (blob.message.blobType == BlobType.IMAGE) "image/*" else "*/*"
             
             val clipData = ClipData.newRawUri("McBridger File", contentUri)
             // Note: Intent is needed to carry URI permissions correctly in some Android versions

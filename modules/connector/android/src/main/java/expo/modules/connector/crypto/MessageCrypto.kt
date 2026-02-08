@@ -10,7 +10,7 @@ private const val ENCRYPTION_DOMAIN = "McBridge_Encryption_Domain"
 /** Extension to encrypt Message using IEncryptionService */
 fun IEncryptionService.encryptMessage(message: Message): ByteArray? {
     val key = derive(ENCRYPTION_DOMAIN, 32) ?: return null
-    val data = message.toMsgPack()
+    val data = message.toBytes() // New binary format
     return encrypt(data, key)
 }
 
@@ -31,7 +31,7 @@ fun IEncryptionService.decryptMessage(data: ByteArray, address: String? = null):
 
         val message =
                 try {
-                    Message.fromMsgPack(decrypted)
+                    Message.fromBytes(decrypted)
                 } catch (e: Exception) {
                     Log.e(
                             "MessageCrypto",
