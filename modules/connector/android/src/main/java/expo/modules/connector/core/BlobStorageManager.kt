@@ -2,14 +2,18 @@ package expo.modules.connector.core
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
+import android.os.Build
+import android.provider.MediaStore
 import android.util.Log
 import androidx.core.content.FileProvider
 import expo.modules.connector.models.BlobMessage
 import expo.modules.connector.models.BlobType
 import expo.modules.connector.models.ChunkMessage
 import expo.modules.connector.services.NotificationService
+import okio.FileHandle
 import okio.FileSystem
 import okio.Path.Companion.toPath
 import java.io.File
@@ -17,7 +21,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * SRP: Manages storage for large payloads (Blobs).
- * Handles temporary assembly in cache and finalization to URI in Clipboard.
+ * Handles temporary assembly in cache, auto-saving to Downloads/McBridger, and Clipboard.
  */
 class BlobStorageManager(
     private val context: Context,
@@ -32,22 +36,30 @@ class BlobStorageManager(
     }
 
     fun prepare(msg: BlobMessage) {
+        if (activeBlobs.containsKey(msg.id)) {
+            Log.d(TAG, "Blob ${msg.id} is already being prepared, skipping re-init.")
+            return
+        }
+
         val tempFile = File(blobsDir, "blob_${msg.id}")
         if (tempFile.exists()) tempFile.delete()
 
-        activeBlobs[msg.id] = ActiveBlob(msg, tempFile)
-        Log.d(TAG, "Prepared storage for blob: ${msg.name}")
+        try {
+            val handle = FileSystem.SYSTEM.openReadWrite(tempFile.absolutePath.toPath())
+            activeBlobs[msg.id] = ActiveBlob(msg, tempFile, handle)
+            Log.d(TAG, "Prepared storage for blob: ${msg.name}")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to open file handle: ${e.message}")
+        }
     }
 
     fun writeChunk(msg: ChunkMessage) {
         val blob = activeBlobs[msg.id] ?: return
 
         try {
-            // Using Okio for efficient file access
-            FileSystem.SYSTEM.openReadWrite(blob.tempFile.absolutePath.toPath()).use { handle ->
-                handle.write(msg.offset, msg.data, 0, msg.data.size)
-            }
-
+            // Write directly using the open handle - MUCH faster
+            blob.fileHandle.write(msg.offset, msg.data, 0, msg.data.size)
+            
             updateProgress(blob, msg.offset + msg.data.size)
 
             if (msg.offset + msg.data.size >= blob.message.size) {
@@ -62,14 +74,28 @@ class BlobStorageManager(
         val now = System.currentTimeMillis()
         if (now - blob.lastProgressUpdate < 500) return
 
+        val durationMs = now - blob.startTime
+        val speedBps = if (durationMs > 0) (currentSize * 1000) / durationMs else 0L
+        
         val progress = if (blob.message.size > 0) ((currentSize * 100) / blob.message.size).toInt() else 0
-        notificationService.showProgress(blob.message.id, blob.message.name, progress)
+        
+        notificationService.showProgress(
+            blobId = blob.message.id,
+            name = blob.message.name,
+            progress = progress,
+            currentSize = currentSize,
+            totalSize = blob.message.size,
+            speedBps = speedBps
+        )
         blob.lastProgressUpdate = now
     }
 
     fun finalizeBlob(id: String) {
         val blob = activeBlobs.remove(id) ?: return
         Log.i(TAG, "Finalizing blob: ${blob.message.name} (Type: ${blob.message.blobType})")
+
+        // CRITICAL: Close the handle before renaming the file!
+        try { blob.fileHandle.close() } catch (_: Exception) {}
 
         when (blob.message.blobType) {
             BlobType.TEXT -> finalizeToText(blob)
@@ -95,26 +121,71 @@ class BlobStorageManager(
 
     private fun finalizeToUri(blob: ActiveBlob) {
         try {
-            // Rename blob file to original name for better UX in target apps
-            val finalFile = File(blobsDir, blob.message.name)
-            if (finalFile.exists()) finalFile.delete()
-            blob.tempFile.renameTo(finalFile)
+            // 1. Save to internal cache for Clipboard access (via FileProvider)
+            val finalName = "${blob.message.id}_${blob.message.name}"
+            val cachedFile = File(blobsDir, finalName)
+            if (cachedFile.exists()) cachedFile.delete()
+            blob.tempFile.renameTo(cachedFile)
 
             val authority = "${context.packageName}.fileprovider"
-            val contentUri = FileProvider.getUriForFile(context, authority, finalFile)
+            val contentUri = FileProvider.getUriForFile(context, authority, cachedFile)
             
             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            
-            val clipData = ClipData.newRawUri("McBridger File", contentUri)
-            // Note: Intent is needed to carry URI permissions correctly in some Android versions
+            val clipData = ClipData.newUri(context.contentResolver, "McBridger Media", contentUri)
             clipboard.setPrimaryClip(clipData)
             
+            // 2. Auto-save to public Downloads/McBridger folder
+            saveToPublicDownloads(blob.message.name, cachedFile)
+
             notificationService.showFinished(blob.message.id, blob.message.name, true)
-            Log.i(TAG, "File blob finalized to URI: $contentUri")
+            Log.i(TAG, "Media blob finalized, saved to Downloads and copied to clipboard")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to finalize URI: ${e.message}")
             notificationService.showFinished(blob.message.id, blob.message.name, false)
         }
+    }
+
+    private fun saveToPublicDownloads(fileName: String, sourceFile: File) {
+        try {
+            val resolver = context.contentResolver
+            val contentValues = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                put(MediaStore.MediaColumns.MIME_TYPE, resolver.getType(getUriForFile(sourceFile)) ?: "*/*")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, "Download/McBridger")
+                    put(MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+            }
+
+            val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                MediaStore.Downloads.EXTERNAL_CONTENT_URI
+            } else {
+                MediaStore.Files.getContentUri("external")
+            }
+
+            val uri = resolver.insert(collection, contentValues)
+            if (uri != null) {
+                resolver.openOutputStream(uri)?.use { output ->
+                    sourceFile.inputStream().use { input ->
+                        input.copyTo(output)
+                    }
+                }
+                
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    contentValues.clear()
+                    contentValues.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                    resolver.update(uri, contentValues, null, null)
+                }
+                Log.d(TAG, "Successfully mirrored file to public Downloads/McBridger")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save to public Downloads: ${e.message}")
+        }
+    }
+
+    fun getUriForFile(file: File): Uri {
+        val authority = "${context.packageName}.fileprovider"
+        return FileProvider.getUriForFile(context, authority, file)
     }
 
     fun cleanup() {
@@ -125,5 +196,7 @@ class BlobStorageManager(
 private data class ActiveBlob(
     val message: BlobMessage,
     val tempFile: File,
-    var lastProgressUpdate: Long = 0
+    val fileHandle: FileHandle,
+    var lastProgressUpdate: Long = 0,
+    val startTime: Long = System.currentTimeMillis()
 )

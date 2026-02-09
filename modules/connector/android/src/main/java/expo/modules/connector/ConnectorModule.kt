@@ -18,6 +18,7 @@ import org.koin.core.component.get
 import org.koin.core.context.startKoin
 import org.koin.core.error.KoinApplicationAlreadyStartedException
 import expo.modules.connector.di.initKoin
+import expo.modules.connector.models.ChunkMessage
 
 class ConnectorModule : Module(), KoinComponent {
   private val scope = CoroutineScope(Dispatchers.Main)
@@ -46,6 +47,7 @@ class ConnectorModule : Module(), KoinComponent {
 
       scope.launch {
         broker.messages.collect { message ->
+          if (message is ChunkMessage) return@collect
           Log.d(TAG, "Emitting new message to JS: ${message.id}")
           sendEvent("onReceived", message.toBundle())
         }

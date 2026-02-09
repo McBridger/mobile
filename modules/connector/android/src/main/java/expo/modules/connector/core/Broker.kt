@@ -304,7 +304,8 @@ class Broker(
     private suspend fun onIncomingMessage(message: Message) {
         Log.i(TAG, "onIncomingMessage: Processing message Type: ${message.getType()}")
 
-        history.add(message)
+        if (message !is ChunkMessage) history.add(message)
+        
         when (message) {
             is TinyMessage -> {
                 Log.d(TAG, "Incoming tiny message: ${message.value.length} chars")
