@@ -8,12 +8,12 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
-import android.os.PowerManager
 import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import expo.modules.connector.R
 import expo.modules.connector.core.Broker
+import expo.modules.connector.models.*
 import kotlinx.coroutines.*
 import org.koin.android.ext.android.inject
 import expo.modules.connector.di.initKoin
@@ -44,7 +44,7 @@ class ForegroundService : Service() {
         createNotificationChannel()
 
         scope.launch {
-            Log.d(TAG, "onCreate: Starting to collect Broker state changes for notification updates.")
+            Log.d(TAG, "onCreate: Starting to collect state changes for notification updates.")
             broker.state.collect { state ->
                 Log.d(TAG, "onCreate: Broker state changed to $state, updating notification.")
                 updateNotificationForState(state)
@@ -72,19 +72,40 @@ class ForegroundService : Service() {
         // Service death != App death.
     }
 
-    private fun updateNotificationForState(state: Broker.State) {
+    private fun updateNotificationForState(state: BrokerState) {
         Log.d(TAG, "updateNotificationForState: Updating notification for state: $state")
-        val (title, text) = when (state) {
-            Broker.State.CONNECTED -> "Bridger Connected" to "Ready to sync."
-            Broker.State.CONNECTING -> "Bridger Connecting..." to "Looking for bridge."
-            Broker.State.IDLE -> "Bridger Active" to "Waiting for setup."
-            Broker.State.DISCONNECTED -> "Bridger Disconnected" to "Connection lost."
-            Broker.State.ERROR -> "Bridger Error" to "Check Bluetooth or permissions."
-            Broker.State.ENCRYPTING -> "Bridger Setup" to "Generating secure keys..."
-            Broker.State.KEYS_READY,
-            Broker.State.TRANSPORT_INITIALIZING -> "Bridger Setup" to "Initializing Bluetooth..."
-            Broker.State.READY -> "Bridger Ready" to "Waiting for Mac to appear."
-            Broker.State.DISCOVERING -> "Bridger Scanning" to "Searching for your Mac..."
+        val title: String
+        val text: String
+
+        when {
+            state.encryption.current == EncryptionState.ERROR -> {
+                title = "Bridger Error (Security)"
+                text = state.encryption.error ?: "Check mnemonic or salt."
+            }
+            state.ble.current == BleState.ERROR -> {
+                title = "Bridger Error (Bluetooth)"
+                text = state.ble.error ?: "Check Bluetooth permissions."
+            }
+            state.tcp.current == TcpState.TRANSFERRING -> {
+                title = "Bridger Connected (Turbo)"
+                text = "Transferring data..."
+            }
+            state.ble.current == BleState.CONNECTED -> {
+                title = "Bridger Connected"
+                text = "Secure link active."
+            }
+            state.ble.current == BleState.SCANNING -> {
+                title = "Bridger Scanning"
+                text = "Searching for nearby devices..."
+            }
+            state.encryption.current == EncryptionState.ENCRYPTING -> {
+                title = "Bridger Setup"
+                text = "Securing transport channel..."
+            }
+            else -> {
+                title = "Bridger Idle"
+                text = "Waiting for setup."
+            }
         }
         Log.d(TAG, "updateNotificationForState: Notification title: \"$title\", text: \"$text\"")
         notificationManager.notify(SERVICE_NOTIFICATION_ID, buildNotification(title, text))
@@ -96,7 +117,7 @@ class ForegroundService : Service() {
             val serviceChannel = NotificationChannel(
                 CHANNEL_ID,
                 "Bridger Background Service",
-                NotificationManager.IMPORTANCE_LOW // Low importance to not annoy user
+                NotificationManager.IMPORTANCE_LOW
             )
             notificationManager.createNotificationChannel(serviceChannel)
             Log.d(TAG, "createNotificationChannel: Notification channel created for Android O+.")

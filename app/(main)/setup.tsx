@@ -1,7 +1,10 @@
 import { MnemonicDisplay } from "@/components/MnemonicDisplay";
 import { MnemonicForm } from "@/components/MnemonicForm";
 import { useAppConfig } from "@/hooks/useConfig";
-import ConnectorModule, { STATUS, useConnector } from "@/modules/connector";
+import ConnectorModule, {
+  EncryptionState,
+  useConnector
+} from "@/modules/connector";
 import { AppTheme } from "@/theme/CustomTheme";
 import { wordlist } from "@scure/bip39/wordlists/english.js";
 import { useRouter } from "expo-router";
@@ -23,22 +26,24 @@ export default function Setup() {
   const { extra } = useAppConfig();
   const theme = useTheme() as AppTheme;
 
-  const [isReady, status] = useConnector(
-    useShallow((state) => [state.isReady, state.status])
-  );
-
-  const [setup, reset] = useConnector(
-    useShallow((state) => [state.setup, state.reset])
+  const [isReady, isLoading, setup, reset] = useConnector(
+    useShallow((v) => [
+      v.isReady,
+      v.state.encryption.current === EncryptionState.ENCRYPTING,
+      v.setup,
+      v.reset,
+    ]),
   );
 
   const [mnemonic, setMnemonic] = useState<string | null>(null);
   const [wasReadyOnMount] = useState(isReady);
   const [words, setWords] = useState<string[]>(
-    Array(extra.MNEMONIC_LENGTH).fill("")
+    Array(extra.MNEMONIC_LENGTH).fill(""),
   );
 
   useEffect(() => {
-    // Auto-navigate to connection ONLY if we finished setup while being here
+    console.log({ isReady, wasReadyOnMount });
+    // Auto-navigate to connection ONLY if we transitioned from setup process to READY
     if (isReady && !wasReadyOnMount) router.replace("/connection");
   }, [isReady, wasReadyOnMount, router]);
 
@@ -73,18 +78,13 @@ export default function Setup() {
             setWords(Array(extra.MNEMONIC_LENGTH).fill(""));
           },
         },
-      ]
+      ],
     );
   };
 
   const isComplete = words.every(
-    (word) => word.length > 0 && wordlist.includes(word)
+    (word) => word.length > 0 && wordlist.includes(word),
   );
-
-  const isLoading =
-    status === STATUS.ENCRYPTING ||
-    status === STATUS.KEYS_READY ||
-    status === STATUS.TRANSPORT_INITIALIZING;
 
   return (
     <View

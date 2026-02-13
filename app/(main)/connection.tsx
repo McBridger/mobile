@@ -1,6 +1,6 @@
 import { ClipboardCard } from "@/components/log/ClipboardCard";
 import { FileCard } from "@/components/log/FileCard";
-import { Message, STATUS, useConnector } from "@/modules/connector";
+import { BleState, Message, useConnector } from "@/modules/connector";
 import { AppTheme } from "@/theme/CustomTheme";
 import { Redirect } from "expo-router";
 import React, { useMemo } from "react";
@@ -8,24 +8,28 @@ import { FlatList, StyleSheet, View } from "react-native";
 import { Text, useTheme } from "react-native-paper";
 
 export default function Connection() {
-  const status = useConnector((state) => state.status);
-  const isReady = useConnector((state) => state.isReady);
-  const isConnected = status === STATUS.CONNECTED;
+  const isReady = useConnector((v) => v.isReady);
+  const isConnected = useConnector(
+    (v) => v.state.ble.current === BleState.CONNECTED,
+  );
   const theme = useTheme() as AppTheme;
 
   const _items = useConnector((state) => state.items);
   const items = useMemo(
-    () => Array.from(_items.values()).sort((a, b) => b.timestamp - a.timestamp) as Message[],
-    [_items]
+    () =>
+      Array.from(_items.values()).sort(
+        (a, b) => b.timestamp - a.timestamp,
+      ) as Message[],
+    [_items],
   );
 
   if (!isReady) return <Redirect href="/setup" />;
 
   const renderItem = ({ item }: { item: Message }) => {
     switch (item.type) {
-      case 'TINY':
+      case "TINY":
         return <ClipboardCard item={item} theme={theme} />;
-      case 'BLOB':
+      case "BLOB":
         return <FileCard item={item} theme={theme} />;
       default:
         return null;
@@ -33,7 +37,9 @@ export default function Connection() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <View
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
+    >
       <FlatList
         data={items}
         renderItem={renderItem}
@@ -41,7 +47,13 @@ export default function Connection() {
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text variant="titleMedium" style={[styles.emptyText, { color: theme.colors.onSurfaceVariant }]}>
+            <Text
+              variant="titleMedium"
+              style={[
+                styles.emptyText,
+                { color: theme.colors.onSurfaceVariant },
+              ]}
+            >
               {isConnected
                 ? "No data synced yet. Try copying something on your Mac"
                 : "Waiting for connection to start syncing..."}

@@ -1,15 +1,26 @@
 import { useThemeStore } from "@/hooks/useThemeStore";
-import { STATUS, useConnector } from "@/modules/connector";
+import {
+  BleState,
+  EncryptionState,
+  TcpState,
+  useConnector,
+} from "@/modules/connector";
 import { AppTheme } from "@/theme/CustomTheme";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useSegments } from "expo-router";
-import { capitalize } from "lodash";
 import React, { useCallback, useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 import { Appbar, Text, useTheme } from "react-native-paper";
+import { useShallow } from "zustand/shallow";
 
 const Header = () => {
-  const status = useConnector((state) => state.status);
+  const [ble, tcp, encryption] = useConnector(
+    useShallow((curr) => [
+      curr.state.ble.current,
+      curr.state.tcp.current,
+      curr.state.encryption.current,
+    ]),
+  );
   const theme = useTheme() as AppTheme;
   const { toggleTheme } = useThemeStore();
   const router = useRouter();
@@ -17,41 +28,24 @@ const Header = () => {
   const currentRouteName = segments[segments.length - 1];
 
   const getBackgroundColor = useCallback(() => {
-    switch (status) {
-      case STATUS.CONNECTED:
-        return theme.colors.connected;
-      case STATUS.CONNECTING:
-      case STATUS.DISCOVERING:
-        return theme.colors.connecting;
-      case STATUS.ENCRYPTING:
-      case STATUS.KEYS_READY:
-      case STATUS.TRANSPORT_INITIALIZING:
-        return theme.colors.connecting;
-      case STATUS.ERROR:
-        return theme.colors.statusError;
-      default:
-        return theme.colors.connecting;
+    if (ble === BleState.ERROR || encryption === EncryptionState.ERROR) {
+      return theme.colors.statusError;
     }
-  }, [status, theme]);
+    if (tcp === TcpState.TRANSFERRING) return theme.colors.connected;
+    if (ble === BleState.CONNECTED) return theme.colors.connected;
+    return theme.colors.connecting;
+  }, [ble, tcp, encryption, theme]);
 
   const getStatusText = useCallback(() => {
-    switch (status) {
-      case STATUS.CONNECTED:
-        return "Connected";
-      case STATUS.CONNECTING:
-        return "Connecting";
-      case STATUS.DISCOVERING:
-        return "Searching for Mac";
-      case STATUS.ENCRYPTING:
-        return "Encrypting";
-      case STATUS.READY:
-        return "Ready to sync";
-      case STATUS.ERROR:
-        return "Connection error";
-      default:
-        return capitalize(status.toLowerCase());
-    }
-  }, [status]);
+    if (encryption === EncryptionState.ERROR) return "Security Error";
+    if (ble === BleState.ERROR) return "Link Error";
+    if (tcp === TcpState.TRANSFERRING) return "Turbo Active";
+    if (ble === BleState.CONNECTED) return "Secure Link";
+    if (ble === BleState.SCANNING) return "Searching...";
+    if (encryption === EncryptionState.ENCRYPTING) return "Securing...";
+
+    return "Idle";
+  }, [encryption, ble, tcp]);
 
   const getTitle = useMemo(() => {
     switch (currentRouteName) {
@@ -75,14 +69,14 @@ const Header = () => {
   }, [currentRouteName, router]);
 
   const showBackButton = currentRouteName !== "connection";
-  const isStatusIdle = status === STATUS.IDLE;
+  const isIdle = encryption === EncryptionState.IDLE && ble === BleState.IDLE;
 
   return (
     <Appbar.Header
       style={[styles.appbar, { backgroundColor: getBackgroundColor() }]}
       mode="center-aligned"
     >
-      {!isStatusIdle && showBackButton && (
+      {!isIdle && showBackButton && (
         <Appbar.Action
           testID="arrow-back-outline"
           accessibilityLabel="Back"
@@ -99,7 +93,7 @@ const Header = () => {
         />
       )}
 
-      {!isStatusIdle && !showBackButton && (
+      {!isIdle && !showBackButton && (
         <Appbar.Action
           testID="settings-outline"
           accessibilityLabel="Settings"
@@ -125,12 +119,22 @@ const Header = () => {
                 { backgroundColor: theme.colors.statusBadgeBackground },
               ]}
             >
-              <Text
-                variant="labelSmall"
-                style={[styles.statusText, { color: theme.colors.onStatus }]}
-              >
-                {getStatusText()}
-              </Text>
+              <View style={styles.badgeRow}>
+                {tcp === TcpState.TRANSFERRING && (
+                  <Ionicons
+                    name="flash"
+                    size={12}
+                    color={theme.colors.onStatus}
+                    style={{ marginRight: 4 }}
+                  />
+                )}
+                <Text
+                  variant="labelSmall"
+                  style={[styles.statusText, { color: theme.colors.onStatus }]}
+                >
+                  {getStatusText()}
+                </Text>
+              </View>
             </View>
             <Text
               testID="title"
@@ -175,6 +179,10 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     marginBottom: 4,
   },
+  badgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
   statusText: {
     fontWeight: "bold",
     textTransform: "uppercase",
@@ -182,9 +190,8 @@ const styles = StyleSheet.create({
   },
   buttonWrapper: {
     width: 40,
-    alignItems: 'center',
+    alignItems: "center",
   },
 });
-
 
 export default Header;

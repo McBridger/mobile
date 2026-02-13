@@ -10,12 +10,13 @@ import Header from "../../components/Header";
 export default function MainLayout() {
   const { extra } = useAppConfig();
   const router = useRouter();
-  const { allPermissionsGranted, isLoading: isPermissionsLoading } = useBluetoothPermissions();
+  const { allPermissionsGranted, isLoading: isPermissionsLoading } =
+    useBluetoothPermissions();
 
   const [subscribe, unsubscribe] = useConnector(
-    useShallow((state) => [state.subscribe, state.unsubscribe])
+    useShallow((state) => [state.subscribe, state.unsubscribe]),
   );
-  
+
   const [init, setInit] = useState(false);
 
   // 1. Permissions Guard
@@ -34,7 +35,7 @@ export default function MainLayout() {
       (nextAppState: AppStateStatus) => {
         if (nextAppState === "active") subscribe();
         else unsubscribe();
-      }
+      },
     );
 
     return () => {
@@ -45,7 +46,6 @@ export default function MainLayout() {
 
   const initialize = useCallback(async () => {
     const { isReady, setup } = useConnector.getState();
-
     // 1. Perform auto-setup for dev/test mode if mnemonic is provided in env
     if (!isReady && extra.MNEMONIC_LOCAL && extra.ENCRYPTION_SALT) {
       console.log("Found test mnemonic in env, performing auto-setup.");

@@ -12,6 +12,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.*
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
@@ -19,6 +20,8 @@ import org.koin.core.context.startKoin
 import org.koin.core.error.KoinApplicationAlreadyStartedException
 import expo.modules.connector.di.initKoin
 import expo.modules.connector.models.ChunkMessage
+import expo.modules.connector.models.BrokerState
+import expo.modules.connector.models.EncryptionState
 
 class ConnectorModule : Module(), KoinComponent {
   private val scope = CoroutineScope(Dispatchers.Main)
@@ -37,11 +40,11 @@ class ConnectorModule : Module(), KoinComponent {
       val context = appContext.reactContext?.applicationContext ?: return@OnCreate
       initKoin(context)
 
-      // Re-connect the "pipe" to JavaScript using the lazy broker
+      // Emit full state updates
       scope.launch {
         broker.state.collect { state ->
-          Log.d(TAG, "Emitting state change to JS: ${state.name}")
-          sendEvent("onStateChanged", mapOf("status" to state.name))
+          Log.d(TAG, "Emitting BrokerState to JS: ${state.encryption.current}")
+          sendEvent("onStateChanged", state.toBundle())
         }
       }
 
@@ -71,15 +74,14 @@ class ConnectorModule : Module(), KoinComponent {
     }
 
     Function("isReady") {
-      return@Function broker.state.value != Broker.State.IDLE
+      return@Function broker.state.value.encryption.current == EncryptionState.KEYS_READY
     }
 
-    Function("getStatus") {
-      return@Function broker.state.value.name
+    Function("getBrokerState") {
+      return@Function broker.state.value.toBundle()
     }
 
     AsyncFunction("send") { data: String ->
-      // TODO: Handle more than tiny update
       broker.tinyUpdate(data)
     }
 

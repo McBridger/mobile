@@ -3,9 +3,10 @@ import Value from "typebox/value";
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 import {
+  BrokerState,
   ConnectorModuleEvents,
+  EncryptionState,
   Message,
-  STATUS
 } from "./src/Connector.types";
 import ConnectorModule from "./src/ConnectorModule";
 
@@ -17,7 +18,7 @@ const error = console.error.bind(null, "[useConnector]");
 // --- State, Actions, and Store Definition ---
 
 interface ConnectorState {
-  status: `${STATUS}`;
+  state: BrokerState;
   isReady: boolean;
   items: Map<string, Message>;
 }
@@ -38,50 +39,46 @@ type InternalConnectorStore = ConnectorStore & {
   [SubscriptionManager.KEY]: SubscriptionManager<ConnectorModuleEvents>;
 };
 
-export const WORKING_STATUSES = new Set<`${STATUS}`>([
-  STATUS.READY,
-  STATUS.DISCOVERING,
-  STATUS.CONNECTING,
-  STATUS.CONNECTED,
-  STATUS.DISCONNECTED,
-]);
-
-const getInitialStatus = () => ConnectorModule.getStatus() || STATUS.IDLE;
-const getIsReady = (status: `${STATUS}`) => WORKING_STATUSES.has(status);
-
 const initialState: ConnectorState = {
-  status: getInitialStatus(),
-  isReady: getIsReady(getInitialStatus()),
+  state: Value.Create(BrokerState),
+  isReady: false,
   items: new Map(),
 };
 
 export const useConnector = create<InternalConnectorStore>()(
   subscribeWithSelector((set, get) => {
-    const handlers: ConnectorModuleEvents = {
-      onReceived: (payload) => {
-        log(`Native event: data received (ID: ${payload.id}).`);
-        set((state) => {
-          const newItems = new Map(state.items);
-          newItems.set(payload.id, Value.Parse(Message, payload));
-          return { items: newItems };
-        });
-      },
-      onStateChanged: (payload) => {
-        log(`Native event: state changed from ${get().status} to ${payload.status}.`);
-        set({ 
-          status: payload.status,
-          isReady: getIsReady(payload.status)
-        });
-      }
+    // Event Handlers
+    const onReceived: ConnectorModuleEvents["onReceived"] = (payload) => {
+      log(`Native event: data received (ID: ${payload.id}).`);
+      set((state) => {
+        const newItems = new Map(state.items);
+        newItems.set(payload.id, Value.Parse(Message, payload));
+
+        return { items: newItems };
+      });
+    };
+
+    const onStateChanged: ConnectorModuleEvents["onStateChanged"] = (
+      payload,
+    ) => {
+      log(
+        `Native event: broker state updated. ${Object.entries(payload)
+          .map(([k, v]) => `${k}: ${v.error ? `ERROR: ${v.error}` : v.current}`)
+          .join(", ")}`,
+      );
+      set({
+        state: payload,
+        isReady: payload.encryption.current === EncryptionState.KEYS_READY,
+      });
     };
 
     return {
       ...initialState,
 
-      [SubscriptionManager.KEY]: new SubscriptionManager(
-        ConnectorModule,
-        handlers
-      ),
+      [SubscriptionManager.KEY]: new SubscriptionManager(ConnectorModule, {
+        onReceived,
+        onStateChanged,
+      }),
 
       setup: async (mnemonic: string, salt: string) => {
         log("Initiating setup via Broker.");
@@ -102,7 +99,7 @@ export const useConnector = create<InternalConnectorStore>()(
               items: new Map(
                 history
                   .map((p) => (Value.Check(Message, p) ? [p.id, p] : undefined))
-                  .filter((p) => p) as [string, Message][]
+                  .filter((p) => p) as [string, Message][],
               ),
             };
           });
@@ -120,7 +117,7 @@ export const useConnector = create<InternalConnectorStore>()(
       reset: async () => {
         try {
           await ConnectorModule.reset();
-          set({ items: new Map() });
+          set({ ...initialState });
         } catch (err: any) {
           error("Reset failed:", err.message);
         }
@@ -128,14 +125,18 @@ export const useConnector = create<InternalConnectorStore>()(
 
       subscribe: () => {
         get()[SubscriptionManager.KEY].setup();
-        // Sync initial status and history from native
-        const currentStatus = ConnectorModule.getStatus();
-        log(`Initial native status: ${currentStatus}`);
 
-        set({
-          status: currentStatus || STATUS.IDLE,
-          isReady: getIsReady(currentStatus || STATUS.IDLE),
-        });
+        // Sync initial state from native
+        try {
+          const nativeState = ConnectorModule.getBrokerState();
+          set({ 
+            state: nativeState,
+            isReady: nativeState.encryption.current === EncryptionState.KEYS_READY
+          });
+          log("Initial native BrokerState synced.");
+        } catch {
+          error("Failed to sync initial BrokerState");
+        }
 
         get().loadHistory();
       },
@@ -144,12 +145,8 @@ export const useConnector = create<InternalConnectorStore>()(
         get()[SubscriptionManager.KEY].cleanup();
       },
     };
-  })
+  }),
 );
-
-useConnector.subscribe((state, prevState) => {
-  console.debug("[BleStore] State changed:", JSON.stringify(state, null, 2));
-});
 
 export default ConnectorModule;
 
