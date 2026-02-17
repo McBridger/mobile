@@ -19,14 +19,6 @@ enum class MessageType(val id: Int) {
     }
 }
 
-@Serializable
-enum class BlobType {
-    FILE, TEXT, IMAGE;
-    companion object {
-        fun fromString(s: String) = values().find { it.name == s } ?: FILE
-    }
-}
-
 val messageModule = SerializersModule {
     polymorphic(Message::class) {
         subclass(TinyMessage::class)
@@ -81,7 +73,7 @@ sealed class Message {
             return when (MessageType.fromInt(typeId)) {
                 MessageType.TINY -> TinyMessage(id, ts, b.readStr())
                 MessageType.INTRO -> IntroMessage(id, ts, b.readStr(), b.readStr(), b.readInt())
-                MessageType.BLOB -> BlobMessage(id, ts, b.readStr(), b.readLong(), BlobType.fromString(b.readStr()))
+                MessageType.BLOB -> BlobMessage(id, ts, b.readStr(), b.readLong(), BridgerType.valueOf(b.readStr()))
                 MessageType.CHUNK -> ChunkMessage(b.readLong(), b.readByteArray(), id)
             }
         }
@@ -136,17 +128,17 @@ class BlobMessage(
     override val timestamp: Double = System.currentTimeMillis() / 1000.0,
     val name: String,
     val size: Long,
-    val blobType: BlobType,
+    val dataType: BridgerType,
     override var address: String? = null
 ) : Message() {
     override fun getType() = MessageType.BLOB
     override fun writePayload(sink: BufferedSink) {
-        writeS(sink, name); sink.writeLong(size); writeS(sink, blobType.name)
+        writeS(sink, name); sink.writeLong(size); writeS(sink, dataType.name)
     }
     override fun toBundle() = super.toBundle().apply {
         putString("name", name)
-        putDouble("size", size.toDouble()) // Match JS Number
-        putString("blobType", blobType.name)
+        putDouble("size", size.toDouble())
+        putString("dataType", dataType.name)
     }
 }
 

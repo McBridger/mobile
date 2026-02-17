@@ -1,7 +1,5 @@
 package expo.modules.connector.core
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
@@ -10,148 +8,77 @@ import android.provider.MediaStore
 import android.util.Log
 import androidx.core.content.FileProvider
 import expo.modules.connector.models.BlobMessage
-import expo.modules.connector.models.BlobType
-import expo.modules.connector.models.ChunkMessage
-import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
+import expo.modules.connector.models.BridgerType
 import okio.FileHandle
 import okio.FileSystem
 import okio.Path.Companion.toPath
 import java.io.File
-import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Handles temporary assembly in cache, auto-saving to Downloads/McBridger, and Clipboard.
+ * Stateless storage toolkit. 
+ * Creates sessions that must be managed by the caller (Broker).
  */
 class BlobStorageManager(
     private val context: Context
 ) {
     private val TAG = "BlobStorageManager"
-    private val activeBlobs = ConcurrentHashMap<String, ActiveBlob>()
-    
-    private val _events = MutableSharedFlow<TransferEvent>(
-        replay = 0,
-        extraBufferCapacity = 32,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST
-    )
-    val events = _events.asSharedFlow()
 
-    sealed class TransferEvent {
-        data class Progress(
-            val blobId: String,
-            val name: String,
-            val progress: Int,
-            val currentSize: Long,
-            val totalSize: Long,
-            val speedBps: Long
-        ) : TransferEvent()
-        data class Finished(val blobId: String, val name: String, val success: Boolean) : TransferEvent()
-    }
-
-    // Directory within cache for sharing files via FileProvider
     private val blobsDir = File(context.cacheDir, "mcbridger_blobs").apply {
         if (!exists()) mkdirs()
     }
 
-    fun prepare(msg: BlobMessage) {
-        if (activeBlobs.containsKey(msg.id)) {
-            Log.d(TAG, "Blob ${msg.id} is already being prepared, skipping re-init.")
-            return
+    /**
+     * Represents an active file assembly session.
+     * Must be closed by the owner!
+     */
+    inner class BlobSession(
+        val id: String,
+        val name: String,
+        val type: BridgerType,
+        val totalSize: Long,
+        private val tempFile: File,
+        private val fileHandle: FileHandle
+    ) {
+        fun write(offset: Long, data: ByteArray) {
+            fileHandle.write(offset, data, 0, data.size)
         }
+
+        fun finalize(): String? {
+            try { fileHandle.close() } catch (_: Exception) {}
+            
+            return try {
+                val finalName = "${id}_${name}"
+                val cachedFile = File(blobsDir, finalName)
+                if (cachedFile.exists()) cachedFile.delete()
+                tempFile.renameTo(cachedFile)
+
+                saveToPublicDownloads(name, cachedFile)
+                
+                val authority = "${context.packageName}.fileprovider"
+                FileProvider.getUriForFile(context, authority, cachedFile).toString()
+            } catch (e: Exception) {
+                Log.e(TAG, "Finalization failed for $name: ${e.message}")
+                null
+            }
+        }
+
+        fun close() {
+            try { fileHandle.close() } catch (_: Exception) {}
+            if (tempFile.exists()) tempFile.delete()
+        }
+    }
+
+    fun openSession(msg: BlobMessage): BlobSession? {
         val tempFile = File(context.cacheDir, "${msg.id}.tmp")
         if (tempFile.exists()) tempFile.delete()
 
-        try {
+        return try {
             val handle = FileSystem.SYSTEM.openReadWrite(tempFile.absolutePath.toPath())
-            activeBlobs[msg.id] = ActiveBlob(msg, tempFile, handle)
-            Log.d(TAG, "Prepared storage for blob: ${msg.name}")
+            BlobSession(msg.id, msg.name, msg.dataType, msg.size, tempFile, handle)
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to open file handle: ${e.message}")
+            Log.e(TAG, "Failed to open session: ${e.message}")
+            null
         }
-    }
-
-    fun writeChunk(chunk: ChunkMessage) {
-        val blob = activeBlobs[chunk.id] ?: return
-        
-        try {
-            blob.fileHandle.write(chunk.offset, chunk.data, 0, chunk.data.size)
-            
-            val currentSize = chunk.offset + chunk.data.size
-            if (currentSize >= blob.message.size) {
-                finalizeBlob(blob)
-                activeBlobs.remove(chunk.id)
-            } else {
-                throttleProgressUpdate(blob, currentSize)
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to write chunk at ${chunk.offset} for ${blob.message.name}: ${e.message}")
-        }
-    }
-
-    private fun throttleProgressUpdate(blob: ActiveBlob, currentSize: Long) {
-        val now = System.currentTimeMillis()
-        if (now - blob.lastProgressUpdate < 500) return
-        
-        val durationMs = now - blob.startTime
-        val speedBps = if (durationMs > 0) (currentSize * 1000) / durationMs else 0L
-        val progressPercent = if (blob.message.size > 0) ((currentSize * 100) / blob.message.size).toInt() else 0
-        
-        _events.tryEmit(TransferEvent.Progress(
-            blobId = blob.message.id,
-            name = blob.message.name,
-            progress = progressPercent,
-            currentSize = currentSize,
-            totalSize = blob.message.size,
-            speedBps = speedBps
-        ))
-        blob.lastProgressUpdate = now
-    }
-
-    private fun finalizeBlob(blob: ActiveBlob) {
-        Log.i(TAG, "Finalizing blob: ${blob.message.name} (Type: ${blob.message.blobType})")
-
-        // CRITICAL: Close the handle before renaming the file!
-        try { blob.fileHandle.close() } catch (_: Exception) {}
-
-        var success = false
-        try {
-            when (blob.message.blobType) {
-                BlobType.TEXT -> finalizeToText(blob)
-                BlobType.FILE, BlobType.IMAGE -> finalizeToUri(blob)
-            }
-            success = true
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to finalize blob ${blob.message.name}: ${e.message}")
-        } finally {
-            _events.tryEmit(TransferEvent.Finished(blob.message.id, blob.message.name, success))
-        }
-    }
-
-    private fun finalizeToText(blob: ActiveBlob) {
-        val text = FileSystem.SYSTEM.read(blob.tempFile.absolutePath.toPath()) { readUtf8() }
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clipData = ClipData.newPlainText("McBridger Text", text)
-        clipboard.setPrimaryClip(clipData)
-        blob.tempFile.delete()
-        Log.i(TAG, "Text blob finalized to clipboard")
-    }
-
-    private fun finalizeToUri(blob: ActiveBlob) {
-        val finalName = "${blob.message.id}_${blob.message.name}"
-        val cachedFile = File(blobsDir, finalName)
-        if (cachedFile.exists()) cachedFile.delete()
-        blob.tempFile.renameTo(cachedFile)
-
-        val authority = "${context.packageName}.fileprovider"
-        val contentUri = FileProvider.getUriForFile(context, authority, cachedFile)
-        
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clipData = ClipData.newUri(context.contentResolver, "McBridger Media", contentUri)
-        clipboard.setPrimaryClip(clipData)
-        
-        saveToPublicDownloads(blob.message.name, cachedFile)
-        Log.i(TAG, "Media blob finalized, saved to Downloads and copied to clipboard")
     }
 
     private fun saveToPublicDownloads(fileName: String, sourceFile: File) {
@@ -185,10 +112,9 @@ class BlobStorageManager(
                     contentValues.put(MediaStore.MediaColumns.IS_PENDING, 0)
                     resolver.update(uri, contentValues, null, null)
                 }
-                Log.d(TAG, "Successfully mirrored file to public Downloads/McBridger")
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to save to public Downloads: ${e.message}")
+            Log.e(TAG, "Mirror to Downloads failed: ${e.message}")
         }
     }
 
@@ -198,19 +124,6 @@ class BlobStorageManager(
     }
 
     fun cleanup() {
-        activeBlobs.values.forEach { 
-            try { it.fileHandle.close() } catch (_: Exception) {}
-            it.tempFile.delete()
-        }
-        activeBlobs.clear()
         blobsDir.listFiles()?.forEach { it.delete() }
     }
 }
-
-private data class ActiveBlob(
-    val message: BlobMessage,
-    val tempFile: File,
-    val fileHandle: FileHandle,
-    var lastProgressUpdate: Long = 0,
-    val startTime: Long = System.currentTimeMillis()
-)

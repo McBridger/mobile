@@ -4,16 +4,18 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.os.Build
+import android.os.Bundle
 import android.util.Log
-import expo.modules.connector.core.BlobStorageManager
 import expo.modules.connector.interfaces.*
 import expo.modules.connector.models.*
 import expo.modules.connector.services.NotificationService
 import expo.modules.connector.utils.NetworkUtils
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Duration.Companion.milliseconds
 
 class Broker(
@@ -38,12 +40,17 @@ class Broker(
     private val _isForeground = MutableStateFlow(true)
     val isForeground = _isForeground.asStateFlow()
 
-    private val _messages = MutableSharedFlow<Message>(
+    private val _porterUpdates = MutableSharedFlow<Bundle>(
         replay = 0,
         extraBufferCapacity = 64,
         onBufferOverflow = BufferOverflow.DROP_OLDEST
     )
-    val messages = _messages.asSharedFlow()
+    val porterUpdates = _porterUpdates.asSharedFlow()
+
+    // --- New Infrastructure ---
+    private val _activePorters = MutableStateFlow<Map<String, Porter>>(emptyMap())
+    val activePorters = _activePorters.asStateFlow()
+    private val incomingChannels = ConcurrentHashMap<String, Channel<ChunkMessage>>()
 
     private var bleTransport: IBleTransport? = null
     private var tcpTransport: ITcpTransport? = null
@@ -54,7 +61,6 @@ class Broker(
 
     init {
         Log.i(TAG, "Initializing Broker instance.")
-        observeBlobManager()
         if (encryptionService.load()) {
             Log.i(TAG, "Credentials loaded automatically.")
             setState(EncryptionState.KEYS_READY)
@@ -64,30 +70,6 @@ class Broker(
             setState(EncryptionState.IDLE)
         }
         startDiscoveryLoop()
-    }
-
-    private fun observeBlobManager() {
-        scope.launch {
-            blobStorageManager.events.collect { event ->
-                when (event) {
-                    is BlobStorageManager.TransferEvent.Progress -> {
-                        // TODO: Update Porter when implemented
-                        notificationService.showProgress(
-                            blobId = event.blobId,
-                            name = event.name,
-                            progress = event.progress,
-                            currentSize = event.currentSize,
-                            totalSize = event.totalSize,
-                            speedBps = event.speedBps
-                        )
-                    }
-                    is BlobStorageManager.TransferEvent.Finished -> {
-                        // TODO: Finalize Porter when implemented
-                        notificationService.showFinished(event.blobId, event.name, event.success)
-                    }
-                }
-            }
-        }
     }
 
     fun setForeground(isForeground: Boolean) {
@@ -133,10 +115,7 @@ class Broker(
             .debounce(500L)
             .distinctUntilChanged()
             .flatMapLatest { config ->
-                if (config == null) {
-                    Log.i(TAG, "Discovery: Stopped (App state changed)")
-                    return@flatMapLatest flowOf()
-                }
+                if (config == null) return@flatMapLatest flowOf()
 
                 val advertiseUuid = encryptionService.deriveUuid("McBridge_Advertise_UUID") 
                 if (advertiseUuid == null) {
@@ -216,6 +195,9 @@ class Broker(
                 history.clear()
                 blobStorageManager.cleanup()
                 _state.update { BrokerState() }
+                _activePorters.value = emptyMap()
+                incomingChannels.values.forEach { it.close() }
+                incomingChannels.clear()
                 Log.i(TAG, "reset: Broker is now IDLE.")
             } catch (e: Exception) {
                 Log.e(TAG, "Reset error: ${e.message}")
@@ -227,7 +209,6 @@ class Broker(
         Log.d(TAG, "registerBle: Registering BLE transport.")
         this.bleTransport?.stop()
         this.bleTransport = transport
-
         scope.launch {
             launch { transport.incomingMessages.collect { onIncomingMessage(it) } }
             launch { transport.connectionState.collect { onBleStateChange(it) } }
@@ -238,7 +219,6 @@ class Broker(
         Log.d(TAG, "registerTcp: Registering TCP transport.")
         this.tcpTransport?.stop()
         this.tcpTransport = transport
-
         scope.launch {
             launch { transport.incomingMessages.collect { onIncomingMessage(it) } }
         }
@@ -253,8 +233,8 @@ class Broker(
         }
         
         Log.i(TAG, "connect: Requesting connection to $address")
-        wakeManager.acquire(15000L)
         setState(BleState.CONNECTING)
+        wakeManager.acquire(15000L)
         ble.connect(address)
     }
 
@@ -269,52 +249,70 @@ class Broker(
     fun tinyUpdate(content: String) {
         Log.d(TAG, "tinyUpdate: Sending tiny update (${content.length} chars)")
         val message = TinyMessage(value = content)
-        history.add(message)
+        
+        // Instant Erfolg -> History
+        val porter = Porter(
+            id = message.id,
+            timestamp = message.timestamp,
+            isOutgoing = true,
+            status = Porter.Status.COMPLETED,
+            name = "Clipboard Sync",
+            type = BridgerType.TEXT,
+            totalSize = content.length.toLong(),
+            data = content
+        )
+        history.add(porter)
+
         scope.launch {
             bleTransport?.send(message)
-            _messages.emit(message)
         }
     }
 
-    fun blobUpdate(metadata: FileMetadata, type: BlobType = BlobType.FILE) {
-        Log.d(TAG, "blobUpdate: Preparing to share blob ${metadata.name} (${metadata.size})")
+    fun blobUpdate(metadata: FileMetadata, type: BridgerType = BridgerType.FILE) {
+        Log.d(TAG, "blobUpdate: Preparing to share ${metadata.name} (${metadata.size})")
         val id = UUID.randomUUID().toString()
+        val porter = Porter(
+            id = id,
+            isOutgoing = true,
+            status = Porter.Status.PENDING,
+            name = metadata.name,
+            totalSize = metadata.size,
+            type = type,
+            data = metadata.uri.toString()
+        )
+        
+        _activePorters.update { it + (id to porter) }
+        
+        val announcement = BlobMessage(
+            id = id,
+            name = metadata.name,
+            size = metadata.size,
+            dataType = type
+        )
 
         scope.launch {
-            val announcement = BlobMessage(
-                id = id,
-                name = metadata.name,
-                size = metadata.size,
-                blobType = type
-            )
-            
-            history.add(announcement)
-            
-            Log.d(TAG, "blobUpdate: Sending announcement via BLE")
+            Log.d(TAG, "blobUpdate: Sending announcement")
             bleTransport?.send(announcement)
             tcpTransport?.send(announcement)
-            
-            _messages.emit(announcement)
 
             withContext(Dispatchers.IO) {
                 val tcp = tcpTransport ?: run {
-                    Log.e(TAG, "blobUpdate: No TCP transport available for streaming")
+                    handleTransferError(id, "No TCP transport")
                     return@withContext
                 }
-
                 val (host, port) = partnerTcpTarget ?: run {
-                    Log.e(TAG, "blobUpdate: No partner TCP target known")
+                    handleTransferError(id, "No partner target")
                     return@withContext
                 }
-
                 try {
                     fileStreamProvider.openStream(metadata.uri.toString())?.use { input ->
-                        Log.d(TAG, "blobUpdate: Starting TCP stream for $id to $host:$port")
-                        val success = tcp.sendBlob(announcement, input, host, port)
-                        Log.i(TAG, "blobUpdate: TCP stream finished. Success: $success")
+                        Log.d(TAG, "blobUpdate: Starting TCP stream")
+                        tcp.sendBlob(announcement, input, host, port)
+                        finishPorter(id, true, data = metadata.uri.toString())
                     }
                 } catch (e: Exception) {
-                    Log.e(TAG, "Stream error: ${e.message}")
+                    Log.e(TAG, "blobUpdate stream error: ${e.message}")
+                    handleTransferError(id, e.message ?: "Stream error")
                 }
             }
         }
@@ -334,43 +332,6 @@ class Broker(
         _state.update { it.copy(encryption = Status(current, error)) }
     }
 
-    private suspend fun onIncomingMessage(message: Message) {
-        Log.i(TAG, "onIncomingMessage: Processing message Type: ${message.getType()}")
-        if (message !is ChunkMessage) history.add(message)
-        when (message) {
-            is TinyMessage -> {
-                Log.d(TAG, "Incoming tiny message: ${message.value.length} chars")
-                updateSystemClipboard(message.value)
-            }
-            is BlobMessage -> {
-                Log.d(TAG, "Incoming blob announcement: ${message.name} (${message.size} bytes)")
-                blobStorageManager.prepare(message)
-            }
-            is ChunkMessage -> {
-                setState(TcpState.TRANSFERRING)
-                blobStorageManager.writeChunk(message)
-            }
-            is IntroMessage -> {
-                Log.i(TAG, "Partner Intro: ${message.name} at ${message.ip}:${message.port}")
-                partnerTcpTarget = message.ip to message.port
-                setState(TcpState.PINGING)
-            }
-        }
-        scope.launch { _messages.emit(message) }
-    }
-
-    private suspend fun updateSystemClipboard(text: String) {
-        withContext(Dispatchers.Main) {
-            try {
-                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                clipboard.setPrimaryClip(ClipData.newPlainText("McBridger Data", text))
-                Log.d(TAG, "updateSystemClipboard: Clipboard updated on Main thread.")
-            } catch (e: Exception) {
-                Log.e(TAG, "updateSystemClipboard: Failed: ${e.message}")
-            }
-        }
-    }
-
     private fun onBleStateChange(state: IBleTransport.ConnectionState) {
         Log.d(TAG, "onBleStateChange: BLE state changed to $state")
         when (state) {
@@ -378,9 +339,7 @@ class Broker(
                 Log.i(TAG, "onBleStateChange: BLE is READY. Sending business card.")
                 setState(BleState.CONNECTED)
                 wakeManager.release()
-                
                 val localIp = NetworkUtils.getLocalIpAddress() ?: "0.0.0.0"
-                Log.d(TAG, "My IP: $localIp, Port: 49152")
                 scope.launch { 
                     bleTransport?.send(IntroMessage(
                         id = UUID.randomUUID().toString(),
@@ -403,6 +362,190 @@ class Broker(
                 wakeManager.release()
             }
             else -> {}
+        }
+    }
+
+    private suspend fun onIncomingMessage(message: Message) {
+        Log.v(TAG, "onIncomingMessage: ${message.getType()}")
+        when (message) {
+            is TinyMessage -> handleTinyMessage(message)
+            is BlobMessage -> handleBlobAnnouncement(message)
+            is ChunkMessage -> handleChunk(message)
+            is IntroMessage -> handleIntro(message)
+        }
+    }
+
+    // --- Private Ingestor Logic ---
+
+    private fun handleTinyMessage(msg: TinyMessage) {
+        Log.d(TAG, "Incoming tiny message: ${msg.value.length} chars")
+        val porter = Porter(
+            id = msg.id,
+            timestamp = msg.timestamp,
+            isOutgoing = false,
+            status = Porter.Status.COMPLETED,
+            name = "Clipboard Sync",
+            type = BridgerType.TEXT,
+            totalSize = msg.value.length.toLong(),
+            data = msg.value
+        )
+        history.add(porter)
+        scope.launch { updateSystemClipboard(msg.value) }
+    }
+
+    private fun handleBlobAnnouncement(msg: BlobMessage) {
+        Log.d(TAG, "Incoming blob announcement: ${msg.name} (${msg.size} bytes)")
+        val porter = Porter(
+            id = msg.id,
+            timestamp = msg.timestamp,
+            isOutgoing = false,
+            status = Porter.Status.ACTIVE,
+            name = msg.name,
+            totalSize = msg.size,
+            type = msg.dataType
+        )
+        _activePorters.update { it + (msg.id to porter) }
+        
+        val channel = Channel<ChunkMessage>(capacity = 64)
+        incomingChannels[msg.id] = channel
+        
+        scope.launch {
+            if (msg.dataType == BridgerType.TEXT) {
+                executeTextWorker(msg.id, channel)
+            } else {
+                executeFileWorker(msg, channel)
+            }
+        }
+    }
+
+    private fun handleChunk(chunk: ChunkMessage) {
+        if (state.value.tcp.current != TcpState.TRANSFERRING) {
+            setState(TcpState.TRANSFERRING)
+        }
+        incomingChannels[chunk.id]?.trySend(chunk)
+    }
+
+    private fun handleIntro(msg: IntroMessage) {
+        Log.i(TAG, "Partner Intro: ${msg.name} at ${msg.ip}:${msg.port}")
+        partnerTcpTarget = msg.ip to msg.port
+        setState(TcpState.PINGING)
+    }
+
+    // --- Workers ---
+
+    private suspend fun executeTextWorker(id: String, channel: Channel<ChunkMessage>) {
+        val buffer = StringBuilder()
+        var received = 0L
+        try {
+            for (chunk in channel) {
+                buffer.append(String(chunk.data))
+                received += chunk.data.size
+                notifyProgress(id, received)
+                if (received >= (_activePorters.value[id]?.totalSize ?: 0)) break
+            }
+            finishPorter(id, true, data = buffer.toString())
+        } catch (e: Exception) {
+            Log.e(TAG, "Text worker error: ${e.message}")
+            finishPorter(id, false, error = e.message)
+        }
+    }
+
+    private suspend fun executeFileWorker(msg: BlobMessage, channel: Channel<ChunkMessage>) {
+        blobStorageManager.prepare(msg)
+        val session = blobStorageManager.openSession(msg) ?: run {
+            finishPorter(msg.id, false, error = "Failed to open storage session")
+            return
+        }
+        
+        var received = 0L
+        try {
+            for (chunk in channel) {
+                session.write(chunk.offset, chunk.data)
+                received += chunk.data.size
+                notifyProgress(msg.id, received)
+                if (received >= msg.size) break
+            }
+            val uri = session.finalize()
+            finishPorter(msg.id, uri != null, data = uri)
+        } catch (e: Exception) {
+            Log.e(TAG, "File worker error: ${e.message}")
+            session.close()
+            finishPorter(msg.id, false, error = e.message)
+        }
+    }
+
+    // --- Progress & Finalization Helpers ---
+
+    private suspend fun notifyProgress(id: String, currentSize: Long) {
+        val porter = _activePorters.value[id] ?: return
+        
+        updateActivePorter(id) { 
+            val progress = if (it.totalSize > 0) ((currentSize * 100) / it.totalSize).toInt() else 0
+            it.copy(status = Porter.Status.ACTIVE, currentSize = currentSize, progress = progress)
+        }
+
+        val bundle = Bundle().apply {
+            putString("id", id)
+            putInt("progress", if (porter.totalSize > 0) (currentSize * 100 / porter.totalSize).toInt() else 0)
+            putDouble("currentSize", currentSize.toDouble())
+        }
+        _porterUpdates.emit(bundle)
+        
+        notificationService.showProgress(
+            blobId = id,
+            name = porter.name,
+            progress = if (porter.totalSize > 0) (currentSize * 100 / porter.totalSize).toInt() else 0,
+            currentSize = currentSize,
+            totalSize = porter.totalSize,
+            speedBps = 0 
+        )
+    }
+
+    private suspend fun finishPorter(id: String, success: Boolean, data: String? = null, error: String? = null) {
+        val active = _activePorters.value[id] ?: return
+        val finalPorter = active.copy(
+            status = if (success) Porter.Status.COMPLETED else Porter.Status.ERROR,
+            data = data,
+            error = error
+        )
+        
+        history.add(finalPorter)
+        _activePorters.update { it - id }
+        incomingChannels.remove(id)?.close()
+        
+        notificationService.showFinished(id, active.name, success)
+        if (success && finalPorter.type == BridgerType.TEXT && data != null) {
+            updateSystemClipboard(data)
+        }
+        
+        if (state.value.tcp.current == TcpState.TRANSFERRING) {
+            setState(TcpState.IDLE)
+        }
+    }
+
+    private suspend fun handleTransferError(id: String, error: String) {
+        val active = _activePorters.value[id] ?: return
+        val finalPorter = active.copy(status = Porter.Status.ERROR, error = error)
+        history.add(finalPorter)
+        _activePorters.update { it - id }
+    }
+
+    private fun updateActivePorter(id: String, transform: (Porter) -> Porter) {
+        _activePorters.update { current ->
+            val porter = current[id] ?: return@update current
+            current + (id to transform(porter))
+        }
+    }
+
+    private suspend fun updateSystemClipboard(text: String) {
+        withContext(Dispatchers.Main) {
+            try {
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("McBridger Data", text))
+                Log.d(TAG, "updateSystemClipboard: Clipboard updated on Main thread.")
+            } catch (e: Exception) {
+                Log.e(TAG, "updateSystemClipboard: Failed: ${e.message}")
+            }
         }
     }
 }

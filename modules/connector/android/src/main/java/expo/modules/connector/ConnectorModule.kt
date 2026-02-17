@@ -34,7 +34,7 @@ class ConnectorModule : Module(), KoinComponent {
   override fun definition() = ModuleDefinition {
     Name("Connector")
 
-    Events("onStateChanged", "onReceived")
+    Events("onStateChanged", "onHistoryChanged", "onPorterUpdated")
 
     OnCreate {
       val context = appContext.reactContext?.applicationContext ?: return@OnCreate
@@ -43,16 +43,22 @@ class ConnectorModule : Module(), KoinComponent {
       // Emit full state updates
       scope.launch {
         broker.state.collect { state ->
-          Log.d(TAG, "Emitting BrokerState to JS: ${state.encryption.current}")
           sendEvent("onStateChanged", state.toBundle())
         }
       }
 
+      // Emit history updates
       scope.launch {
-        broker.messages.collect { message ->
-          if (message is ChunkMessage) return@collect
-          Log.d(TAG, "Emitting new message to JS: ${message.id}")
-          sendEvent("onReceived", message.toBundle())
+        broker.getHistory().items.collect { items ->
+          val bundles = items.map { it.toBundle() }
+          sendEvent("onHistoryChanged", mapOf("items" to bundles))
+        }
+      }
+
+      // Emit porter delta updates
+      scope.launch {
+        broker.porterUpdates.collect { update ->
+          sendEvent("onPorterUpdated", update)
         }
       }
     }
