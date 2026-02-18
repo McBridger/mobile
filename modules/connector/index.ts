@@ -6,7 +6,7 @@ import {
   BrokerState,
   ConnectorModuleEvents,
   EncryptionState,
-  Message,
+  Porter,
 } from "./src/Connector.types";
 import ConnectorModule from "./src/ConnectorModule";
 
@@ -20,7 +20,7 @@ const error = console.error.bind(null, "[useConnector]");
 interface ConnectorState {
   state: BrokerState;
   isReady: boolean;
-  items: Map<string, Message>;
+  items: Map<string, Porter>;
 }
 
 interface ConnectorActions {
@@ -48,11 +48,31 @@ const initialState: ConnectorState = {
 export const useConnector = create<InternalConnectorStore>()(
   subscribeWithSelector((set, get) => {
     // Event Handlers
-    const onReceived: ConnectorModuleEvents["onReceived"] = (payload) => {
-      log(`Native event: data received (ID: ${payload.id}).`);
+    
+    // Total history refresh (triggered on add/remove/status change)
+    const onHistoryChanged: ConnectorModuleEvents["onHistoryChanged"] = ({ items }) => {
+      log(`Native event: history changed. Total items: ${items.length}`);
+      set(() => {
+        const newItems = new Map<string, Porter>();
+        items.forEach(p => {
+          if (Value.Check(Porter, p)) newItems.set(p.id, p);
+        });
+        return { items: newItems };
+      });
+    };
+
+    // Hot delta update (progress/size/speed)
+    const onPorterUpdated: ConnectorModuleEvents["onPorterUpdated"] = (payload) => {
       set((state) => {
+        const porter = state.items.get(payload.id);
+        if (!porter) return state; // Ignore updates for items not in current list
+
         const newItems = new Map(state.items);
-        newItems.set(payload.id, Value.Parse(Message, payload));
+        newItems.set(payload.id, {
+          ...porter,
+          progress: payload.progress,
+          currentSize: payload.currentSize,
+        });
 
         return { items: newItems };
       });
@@ -76,7 +96,8 @@ export const useConnector = create<InternalConnectorStore>()(
       ...initialState,
 
       [SubscriptionManager.KEY]: new SubscriptionManager(ConnectorModule, {
-        onReceived,
+        onHistoryChanged,
+        onPorterUpdated,
         onStateChanged,
       }),
 
@@ -95,13 +116,11 @@ export const useConnector = create<InternalConnectorStore>()(
           log(`Loaded ${history.length} items from history.`);
 
           set(() => {
-            return {
-              items: new Map(
-                history
-                  .map((p) => (Value.Check(Message, p) ? [p.id, p] : undefined))
-                  .filter((p) => p) as [string, Message][],
-              ),
-            };
+            const newItems = new Map<string, Porter>();
+            history.forEach(p => {
+              if (Value.Check(Porter, p)) newItems.set(p.id, p);
+            });
+            return { items: newItems };
           });
         } catch (err: any) {
           error("Failed to load history:", err.message);
@@ -151,7 +170,7 @@ export const useConnector = create<InternalConnectorStore>()(
 export default ConnectorModule;
 
 export const BridgerService = {
-  getHistory: async (): Promise<Message[]> => {
+  getHistory: async (): Promise<Porter[]> => {
     try {
       const history = await ConnectorModule.getHistory();
       log(`Retrieved ${history.length} items from history.`);

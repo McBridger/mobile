@@ -11,7 +11,7 @@ interface IBleTransport {
     fun connect(address: String)
     fun disconnect()
 
-    suspend fun send(message: Message): Boolean
+    suspend fun send(message: Message)
     fun stop()
 
     enum class ConnectionState {

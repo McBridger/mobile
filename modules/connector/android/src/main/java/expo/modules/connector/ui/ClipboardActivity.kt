@@ -7,9 +7,10 @@ import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
 import expo.modules.connector.core.Broker
+import expo.modules.connector.models.BridgerType
 import expo.modules.connector.models.FileMetadata
+import expo.modules.connector.models.Porter
 import org.koin.android.ext.android.inject
-import java.util.Optional
 
 class ClipboardActivity : Activity() {
     private val TAG = "ClipboardActivity"
@@ -60,7 +61,14 @@ class ClipboardActivity : Activity() {
         // 3. Fallback: Text
         val text = item.text?.toString()
         if (!text.isNullOrEmpty()) {
-            broker.tinyUpdate(text)
+            val porter = Porter(
+                isOutgoing = true,
+                name = "Clipboard Text",
+                type = BridgerType.TEXT,
+                totalSize = text.length.toLong(),
+                data = text
+            )
+            broker.handleOutgoing(porter)
             showToast("Clipboard text sent.")
             return
         }
@@ -82,7 +90,14 @@ class ClipboardActivity : Activity() {
 
         val metadata = FileMetadata.fromUri(contentResolver, uri)
         if (metadata != null) {
-            broker.blobUpdate(metadata)
+            val porter = Porter(
+                isOutgoing = true,
+                name = metadata.name,
+                type = BridgerType.FILE,
+                totalSize = metadata.size,
+                data = uri.toString()
+            )
+            broker.handleOutgoing(porter)
             showToast("Sharing file: ${metadata.name}")
         } else {
             showToast("Failed to resolve file.")

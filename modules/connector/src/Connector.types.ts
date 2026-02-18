@@ -23,6 +23,19 @@ export enum EncryptionState {
   ERROR = "ERROR",
 }
 
+export enum BridgerType {
+  TEXT = "TEXT",
+  FILE = "FILE",
+  IMAGE = "IMAGE",
+}
+
+export enum PorterStatus {
+  PENDING = "PENDING",
+  ACTIVE = "ACTIVE",
+  COMPLETED = "COMPLETED",
+  ERROR = "ERROR",
+}
+
 export const Status = <T extends string>(EnumType: Record<string, T>) =>
   Type.Object({
     current: Type.Enum(EnumType),
@@ -36,37 +49,32 @@ export const BrokerState = Type.Object({
 });
 export type BrokerState = Static<typeof BrokerState>;
 
-const Base = Type.Object({
+export const Porter = Type.Object({
   id: Type.String(),
-  type: Type.String(),
   timestamp: Type.Number(),
   isOutgoing: Type.Boolean(),
+  status: Type.Enum(PorterStatus),
+  name: Type.String(),
+  type: Type.Enum(BridgerType),
+  totalSize: Type.Number(),
+  currentSize: Type.Number(),
+  progress: Type.Number(),
+  data: Type.Union([Type.String(), Type.Null()]),
+  error: Type.Union([Type.String(), Type.Null()]),
+  isTruncated: Type.Boolean(),
 });
+export type Porter = Static<typeof Porter>;
 
-export const Tiny = Type.Intersect([
-  Base,
-  Type.Object({
-    type: Type.Literal("TINY"),
-    value: Type.String(),
-  }),
-]);
-export type Tiny = Static<typeof Tiny>;
-
-export const Blob = Type.Intersect([
-  Base,
-  Type.Object({
-    type: Type.Literal("BLOB"),
-    name: Type.String(),
-    size: Type.Number(),
-    blobType: Type.String(), // FILE, TEXT, IMAGE
-  }),
-]);
-export type Blob = Static<typeof Blob>;
-
-export const Message = Type.Union([Tiny, Blob]);
-export type Message = Static<typeof Message>;
+export const PorterUpdate = Type.Object({
+  id: Type.String(),
+  progress: Type.Number(),
+  currentSize: Type.Number(),
+  speed: Type.Optional(Type.Number()), // For future speed calculation
+});
+export type PorterUpdate = Static<typeof PorterUpdate>;
 
 export type ConnectorModuleEvents = {
-  onReceived: (payload: Message) => void;
   onStateChanged: (payload: BrokerState) => void;
+  onHistoryChanged: (payload: { items: Porter[] }) => void;
+  onPorterUpdated: (payload: PorterUpdate) => void;
 };

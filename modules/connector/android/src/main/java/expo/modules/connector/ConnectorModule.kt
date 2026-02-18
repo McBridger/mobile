@@ -13,15 +13,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.*
-import org.koin.android.ext.koin.androidContext
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
-import org.koin.core.context.startKoin
-import org.koin.core.error.KoinApplicationAlreadyStartedException
 import expo.modules.connector.di.initKoin
-import expo.modules.connector.models.ChunkMessage
-import expo.modules.connector.models.BrokerState
-import expo.modules.connector.models.EncryptionState
+import expo.modules.connector.models.*
 
 class ConnectorModule : Module(), KoinComponent {
   private val scope = CoroutineScope(Dispatchers.Main)
@@ -88,7 +83,14 @@ class ConnectorModule : Module(), KoinComponent {
     }
 
     AsyncFunction("send") { data: String ->
-      broker.tinyUpdate(data)
+      val porter = Porter(
+        isOutgoing = true,
+        name = "Manual Send",
+        type = BridgerType.TEXT,
+        totalSize = data.length.toLong(),
+        data = data
+      )
+      broker.handleOutgoing(porter)
     }
 
     AsyncFunction("start") {
@@ -105,7 +107,7 @@ class ConnectorModule : Module(), KoinComponent {
     AsyncFunction("getHistory") { promise: Promise ->
       scope.launch {
         try {
-          val history = broker.getHistory().retrieve()
+          val history = broker.getHistory().retrieveBundles()
           promise.resolve(history)
         } catch (e: Exception) {
           promise.reject("ERR_HISTORY", e.message, e)

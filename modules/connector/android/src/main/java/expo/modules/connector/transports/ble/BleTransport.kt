@@ -120,24 +120,30 @@ class BleTransport(
         bleManager.disconnect()
     }
 
-    override suspend fun send(message: Message): Boolean {
+    override suspend fun send(message: Message) {
         Log.d(TAG, "send: Attempting to send message ID: ${message.id}")
         if (_connectionState.value != IBleTransport.ConnectionState.READY) {
-            Log.e(TAG, "send: Not ready. Current state: ${_connectionState.value}")
-            return false
+            val error = "BLE transport not ready (State: ${_connectionState.value})"
+            Log.e(TAG, "send: $error")
+            throw IllegalStateException(error)
         }
 
         val encryptedData = encryptionService.encryptMessage(message)
         if (encryptedData == null) {
-            Log.e(TAG, "send: Encryption failed for message ID: ${message.id}")
-            return false
+            val error = "Encryption failed for message ID: ${message.id}"
+            Log.e(TAG, "send: $error")
+            throw java.io.IOException(error)
         }
 
         Log.d(TAG, "send: Sending encrypted data (${encryptedData.size} bytes)")
-        bleManager.performWrite(Data(encryptedData))
-        Log.i(TAG, "send: Message ID: ${message.id} sent successfully.")
-
-        return true
+        try {
+            bleManager.performWrite(Data(encryptedData))
+            Log.i(TAG, "send: Message ID: ${message.id} handed to BleManager.")
+        } catch (e: Exception) {
+            val error = "BLE Write failed: ${e.message}"
+            Log.e(TAG, "send: $error")
+            throw java.io.IOException(error, e)
+        }
     }
 
     override fun stop() {

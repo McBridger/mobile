@@ -246,74 +246,81 @@ class Broker(
     fun getHistory(): History = history
     fun getMnemonic(): String? = encryptionService.getMnemonic()
 
-    fun tinyUpdate(content: String) {
-        Log.d(TAG, "tinyUpdate: Sending tiny update (${content.length} chars)")
-        val message = TinyMessage(value = content)
+    // --- Outgoing Engine ---
+
+    fun handleOutgoing(porter: Porter) {
+        Log.d(TAG, "handleOutgoing: ${porter.name} (${porter.totalSize} bytes)")
         
-        // Instant Erfolg -> History
-        val porter = Porter(
-            id = message.id,
-            timestamp = message.timestamp,
-            isOutgoing = true,
-            status = Porter.Status.COMPLETED,
-            name = "Clipboard Sync",
-            type = BridgerType.TEXT,
-            totalSize = content.length.toLong(),
-            data = content
-        )
+        // 1. Persist task intent immediately
         history.add(porter)
 
-        scope.launch {
-            bleTransport?.send(message)
+        // 2. Decide strategy
+        // Threshold reduced to 500 bytes to fit into a single BLE MTU packet safely.
+        if (porter.type == BridgerType.TEXT && porter.totalSize < 500) {
+            sendTiny(porter)
+        } else {
+            sendBlob(porter)
         }
     }
 
-    fun blobUpdate(metadata: FileMetadata, type: BridgerType = BridgerType.FILE) {
-        Log.d(TAG, "blobUpdate: Preparing to share ${metadata.name} (${metadata.size})")
-        val id = UUID.randomUUID().toString()
-        val porter = Porter(
-            id = id,
-            isOutgoing = true,
-            status = Porter.Status.PENDING,
-            name = metadata.name,
-            totalSize = metadata.size,
-            type = type,
-            data = metadata.uri.toString()
-        )
+    private fun sendTiny(porter: Porter) {
+        Log.d(TAG, "sendTiny: Instant sync for ${porter.id}")
+        val message = TinyMessage(id = porter.id, value = porter.data ?: "")
+
+        scope.launch {
+            try {
+                bleTransport?.send(message) ?: throw IllegalStateException("BLE transport not initialized")
+                history.updatePorter(porter.id) { it.copy(status = Porter.Status.COMPLETED) }
+            } catch (e: Exception) {
+                Log.e(TAG, "sendTiny: Failed to send message ID: ${porter.id}, Error: ${e.message}")
+                handleTransferError(porter.id, e.message ?: "Unknown transport failure")
+            }
+        }
+    }
+
+    private fun sendBlob(porter: Porter) {
+        Log.d(TAG, "sendBlob: Starting stream for ${porter.id}")
+        val id = porter.id
         
-        _activePorters.update { it + (id to porter) }
+        // Add to active registry for progress tracking
+        _activePorters.update { it + (id to porter.copy(status = Porter.Status.ACTIVE)) }
+        history.updatePorter(id) { it.copy(status = Porter.Status.ACTIVE) }
         
         val announcement = BlobMessage(
             id = id,
-            name = metadata.name,
-            size = metadata.size,
-            dataType = type
+            name = porter.name,
+            size = porter.totalSize,
+            dataType = porter.type
         )
 
         scope.launch {
-            Log.d(TAG, "blobUpdate: Sending announcement")
-            bleTransport?.send(announcement)
-            tcpTransport?.send(announcement)
+            try {
+                Log.d(TAG, "sendBlob: Sending announcement")
+                bleTransport?.send(announcement) ?: throw IllegalStateException("BLE transport not initialized")
+                
+                // TCP announcement is optional if already in session, but protocol requires it here
+                try { tcpTransport?.send(announcement) } catch (_: Exception) {}
 
-            withContext(Dispatchers.IO) {
-                val tcp = tcpTransport ?: run {
-                    handleTransferError(id, "No TCP transport")
-                    return@withContext
-                }
-                val (host, port) = partnerTcpTarget ?: run {
-                    handleTransferError(id, "No partner target")
-                    return@withContext
-                }
-                try {
-                    fileStreamProvider.openStream(metadata.uri.toString())?.use { input ->
-                        Log.d(TAG, "blobUpdate: Starting TCP stream")
-                        tcp.sendBlob(announcement, input, host, port)
-                        finishPorter(id, true, data = metadata.uri.toString())
+                withContext(Dispatchers.IO) {
+                    val tcp = tcpTransport ?: throw IllegalStateException("No TCP transport")
+                    val (host, port) = partnerTcpTarget ?: throw IllegalStateException("No partner target")
+                    
+                    val streamUri = porter.data ?: ""
+                    val stream = if (porter.type == BridgerType.TEXT) {
+                        porter.data?.byteInputStream()
+                    } else {
+                        fileStreamProvider.openStream(streamUri)
                     }
-                } catch (e: Exception) {
-                    Log.e(TAG, "blobUpdate stream error: ${e.message}")
-                    handleTransferError(id, e.message ?: "Stream error")
+
+                    stream?.use { input ->
+                        Log.d(TAG, "sendBlob: Starting TCP stream")
+                        tcp.sendBlob(announcement, input, host, port)
+                        finishPorter(id, true, data = streamUri)
+                    } ?: throw java.io.IOException("Could not open stream for $streamUri")
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "sendBlob failure: ${e.message}")
+                handleTransferError(id, e.message ?: "Stream failure")
             }
         }
     }
@@ -341,14 +348,19 @@ class Broker(
                 wakeManager.release()
                 val localIp = NetworkUtils.getLocalIpAddress() ?: "0.0.0.0"
                 scope.launch { 
-                    bleTransport?.send(IntroMessage(
-                        id = UUID.randomUUID().toString(),
-                        timestamp = System.currentTimeMillis() / 1000.0,
-                        name = Build.MODEL,
-                        ip = localIp,
-                        port = 49152,
-                        address = null
-                    ))
+                    try {
+                        bleTransport?.send(IntroMessage(
+                            id = UUID.randomUUID().toString(),
+                            timestamp = System.currentTimeMillis() / 1000.0,
+                            name = Build.MODEL,
+                            ip = localIp,
+                            port = 49152,
+                            address = null
+                        ))
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to send Intro: ${e.message}")
+                        // TODO: Handle this case
+                    }
                 }
             }
             IBleTransport.ConnectionState.DISCONNECTED -> {

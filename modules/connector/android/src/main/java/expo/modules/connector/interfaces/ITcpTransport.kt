@@ -10,8 +10,8 @@ interface ITcpTransport {
     val connectionState: StateFlow<ConnectionState>
     val incomingMessages: Flow<Message>
 
-    suspend fun send(message: Message): Boolean
-    suspend fun sendBlob(message: BlobMessage, inputStream: java.io.InputStream, host: String, port: Int): Boolean
+    suspend fun send(message: Message)
+    suspend fun sendBlob(message: BlobMessage, inputStream: java.io.InputStream, host: String, port: Int)
     fun stop()
 
     enum class ConnectionState {

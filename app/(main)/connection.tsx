@@ -1,6 +1,5 @@
-import { ClipboardCard } from "@/components/log/ClipboardCard";
-import { FileCard } from "@/components/log/FileCard";
-import { BleState, Message, useConnector } from "@/modules/connector";
+import { PorterCard } from "@/components/log/PorterCard";
+import { BleState, Porter, useConnector } from "@/modules/connector";
 import { AppTheme } from "@/theme/CustomTheme";
 import { Redirect } from "expo-router";
 import React, { useMemo } from "react";
@@ -19,22 +18,11 @@ export default function Connection() {
     () =>
       Array.from(_items.values()).sort(
         (a, b) => b.timestamp - a.timestamp,
-      ) as Message[],
+      ) as Porter[],
     [_items],
   );
 
   if (!isReady) return <Redirect href="/setup" />;
-
-  const renderItem = ({ item }: { item: Message }) => {
-    switch (item.type) {
-      case "TINY":
-        return <ClipboardCard item={item} theme={theme} />;
-      case "BLOB":
-        return <FileCard item={item} theme={theme} />;
-      default:
-        return null;
-    }
-  };
 
   return (
     <View
@@ -42,7 +30,7 @@ export default function Connection() {
     >
       <FlatList
         data={items}
-        renderItem={renderItem}
+        renderItem={({ item }) => <PorterCard item={item} theme={theme} />}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={

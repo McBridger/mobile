@@ -47,9 +47,8 @@ class TcpTransport(
         }
     }
 
-    override suspend fun send(message: Message): Boolean {
-        Log.w(TAG, "send: General send not implemented in on-demand TCP model")
-        return false
+    override suspend fun send(message: Message) {
+        throw UnsupportedOperationException("General send not implemented in on-demand TCP model")
     }
 
     override suspend fun sendBlob(
@@ -57,10 +56,10 @@ class TcpTransport(
         inputStream: java.io.InputStream, 
         host: String, 
         port: Int
-    ): Boolean = withContext(Dispatchers.IO) {
-        val socket = manager.connect(host, port) ?: return@withContext false
+    ) = withContext(Dispatchers.IO) {
+        val socket = manager.connect(host, port) ?: throw java.io.IOException("Could not connect to $host:$port")
         
-        return@withContext try {
+        try {
             // 1. Send Blob Announcement Frame
             manager.sendFrame(socket, message.toBytes())
             
@@ -72,16 +71,15 @@ class TcpTransport(
                 if (read == -1) break
                 
                 val chunk = ChunkMessage(offset, buffer.copyOf(read), message.id)
-                if (!manager.sendFrame(socket, chunk.toBytes())) break
+                manager.sendFrame(socket, chunk.toBytes())
                 
                 offset += read
             }
             
             Log.i(TAG, "Blob send finished: $offset bytes for ${message.name}")
-            true
         } catch (e: Exception) {
             Log.e(TAG, "sendBlob failed: ${e.message}")
-            false
+            throw java.io.IOException("TCP Stream error: ${e.message}", e)
         } finally {
             try { socket.close() } catch (_: Exception) {}
         }
