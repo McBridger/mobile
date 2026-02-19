@@ -56,32 +56,34 @@ class TcpTransport(
         inputStream: java.io.InputStream, 
         host: String, 
         port: Int
-    ) = withContext(Dispatchers.IO) {
-        val socket = manager.connect(host, port) ?: throw java.io.IOException("Could not connect to $host:$port")
-        
-        try {
-            // 1. Send Blob Announcement Frame
-            manager.sendFrame(socket, message.toBytes())
+    ) {
+        withContext(Dispatchers.IO) {
+            val socket = manager.connect(host, port) ?: throw java.io.IOException("Could not connect to $host:$port")
             
-            // 2. Send Data in Chunks
-            val buffer = ByteArray(64 * 1024)
-            var offset = 0L
-            while (isActive) {
-                val read = inputStream.read(buffer)
-                if (read == -1) break
+            try {
+                // 1. Send Blob Announcement Frame
+                manager.sendFrame(socket, message.toBytes())
                 
-                val chunk = ChunkMessage(offset, buffer.copyOf(read), message.id)
-                manager.sendFrame(socket, chunk.toBytes())
+                // 2. Send Data in Chunks
+                val buffer = ByteArray(64 * 1024)
+                var offset = 0L
+                while (isActive) {
+                    val read = inputStream.read(buffer)
+                    if (read == -1) break
+                    
+                    val chunk = ChunkMessage(offset, buffer.copyOf(read), message.id)
+                    manager.sendFrame(socket, chunk.toBytes())
+                    
+                    offset += read
+                }
                 
-                offset += read
+                Log.i(TAG, "Blob send finished: $offset bytes for ${message.name}")
+            } catch (e: Exception) {
+                Log.e(TAG, "sendBlob failed: ${e.message}")
+                throw java.io.IOException("TCP Stream error: ${e.message}", e)
+            } finally {
+                try { socket.close() } catch (_: Exception) {}
             }
-            
-            Log.i(TAG, "Blob send finished: $offset bytes for ${message.name}")
-        } catch (e: Exception) {
-            Log.e(TAG, "sendBlob failed: ${e.message}")
-            throw java.io.IOException("TCP Stream error: ${e.message}", e)
-        } finally {
-            try { socket.close() } catch (_: Exception) {}
         }
     }
 

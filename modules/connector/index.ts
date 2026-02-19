@@ -45,24 +45,34 @@ const initialState: ConnectorState = {
   items: new Map(),
 };
 
+const mapPorters = (items: Porter[]): Map<string, Porter> => {
+  const map = new Map<string, Porter>();
+  items.forEach((p) => {
+    try {
+      map.set(p.id, Value.Parse(Porter, p));
+    } catch (err: any) {
+      error(`Failed to parse Porter (ID: ${p?.id}):`, err.message);
+    }
+  });
+  return map;
+};
+
 export const useConnector = create<InternalConnectorStore>()(
   subscribeWithSelector((set, get) => {
     // Event Handlers
-    
+
     // Total history refresh (triggered on add/remove/status change)
-    const onHistoryChanged: ConnectorModuleEvents["onHistoryChanged"] = ({ items }) => {
+    const onHistoryChanged: ConnectorModuleEvents["onHistoryChanged"] = ({
+      items,
+    }) => {
       log(`Native event: history changed. Total items: ${items.length}`);
-      set(() => {
-        const newItems = new Map<string, Porter>();
-        items.forEach(p => {
-          if (Value.Check(Porter, p)) newItems.set(p.id, p);
-        });
-        return { items: newItems };
-      });
+      set({ items: mapPorters(items) });
     };
 
     // Hot delta update (progress/size/speed)
-    const onPorterUpdated: ConnectorModuleEvents["onPorterUpdated"] = (payload) => {
+    const onPorterUpdated: ConnectorModuleEvents["onPorterUpdated"] = (
+      payload,
+    ) => {
       set((state) => {
         const porter = state.items.get(payload.id);
         if (!porter) return state; // Ignore updates for items not in current list
@@ -114,14 +124,7 @@ export const useConnector = create<InternalConnectorStore>()(
         try {
           const history = await ConnectorModule.getHistory();
           log(`Loaded ${history.length} items from history.`);
-
-          set(() => {
-            const newItems = new Map<string, Porter>();
-            history.forEach(p => {
-              if (Value.Check(Porter, p)) newItems.set(p.id, p);
-            });
-            return { items: newItems };
-          });
+          set({ items: mapPorters(history) });
         } catch (err: any) {
           error("Failed to load history:", err.message);
         }
@@ -148,9 +151,10 @@ export const useConnector = create<InternalConnectorStore>()(
         // Sync initial state from native
         try {
           const nativeState = ConnectorModule.getBrokerState();
-          set({ 
+          set({
             state: nativeState,
-            isReady: nativeState.encryption.current === EncryptionState.KEYS_READY
+            isReady:
+              nativeState.encryption.current === EncryptionState.KEYS_READY,
           });
           log("Initial native BrokerState synced.");
         } catch {

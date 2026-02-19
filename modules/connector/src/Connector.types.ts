@@ -59,8 +59,8 @@ export const Porter = Type.Object({
   totalSize: Type.Number(),
   currentSize: Type.Number(),
   progress: Type.Number(),
-  data: Type.Union([Type.String(), Type.Null()]),
-  error: Type.Union([Type.String(), Type.Null()]),
+  data: Type.Optional(Type.String()),
+  error: Type.Optional(Type.String()),
   isTruncated: Type.Boolean(),
 });
 export type Porter = Static<typeof Porter>;

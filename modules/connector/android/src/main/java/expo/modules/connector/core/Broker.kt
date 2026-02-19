@@ -402,7 +402,7 @@ class Broker(
             data = msg.value
         )
         history.add(porter)
-        scope.launch { updateSystemClipboard(msg.value) }
+        scope.launch { updateSystemClipboard(porter) }
     }
 
     private fun handleBlobAnnouncement(msg: BlobMessage) {
@@ -463,7 +463,6 @@ class Broker(
     }
 
     private suspend fun executeFileWorker(msg: BlobMessage, channel: Channel<ChunkMessage>) {
-        blobStorageManager.prepare(msg)
         val session = blobStorageManager.openSession(msg) ?: run {
             finishPorter(msg.id, false, error = "Failed to open storage session")
             return
@@ -526,8 +525,10 @@ class Broker(
         incomingChannels.remove(id)?.close()
         
         notificationService.showFinished(id, active.name, success)
-        if (success && finalPorter.type == BridgerType.TEXT && data != null) {
-            updateSystemClipboard(data)
+        
+        // Fix: Update clipboard for ALL incoming types (Text, File, Image)
+        if (success && !finalPorter.isOutgoing && data != null) {
+            updateSystemClipboard(finalPorter)
         }
         
         if (state.value.tcp.current == TcpState.TRANSFERRING) {
@@ -549,12 +550,18 @@ class Broker(
         }
     }
 
-    private suspend fun updateSystemClipboard(text: String) {
+    private suspend fun updateSystemClipboard(porter: Porter) {
+        val content = porter.data ?: return
         withContext(Dispatchers.Main) {
             try {
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                clipboard.setPrimaryClip(ClipData.newPlainText("McBridger Data", text))
-                Log.d(TAG, "updateSystemClipboard: Clipboard updated on Main thread.")
+                val clip = if (porter.type == BridgerType.TEXT) {
+                    ClipData.newPlainText("McBridger Text", content)
+                } else {
+                    ClipData.newUri(context.contentResolver, porter.name, android.net.Uri.parse(content))
+                }
+                clipboard.setPrimaryClip(clip)
+                Log.d(TAG, "updateSystemClipboard: Clipboard updated for type ${porter.type}")
             } catch (e: Exception) {
                 Log.e(TAG, "updateSystemClipboard: Failed: ${e.message}")
             }
