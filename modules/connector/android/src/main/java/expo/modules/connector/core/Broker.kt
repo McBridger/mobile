@@ -21,6 +21,7 @@ import kotlin.time.Duration.Companion.milliseconds
 class Broker(
     context: Context,
     private val encryptionService: IEncryptionService,
+    private val systemObserver: ISystemObserver,
     private val scanner: IBleScanner,
     private val history: History,
     private val wakeManager: IWakeManager,
@@ -36,9 +37,6 @@ class Broker(
 
     private val _state = MutableStateFlow(BrokerState())
     val state = _state.asStateFlow()
-
-    private val _isForeground = MutableStateFlow(true)
-    val isForeground = _isForeground.asStateFlow()
 
     private val _porterUpdates = MutableSharedFlow<Bundle>(
         replay = 0,
@@ -73,10 +71,6 @@ class Broker(
         startDiscoveryLoop()
     }
 
-    fun setForeground(isForeground: Boolean) {
-        Log.i(TAG, "Lifecycle: App focus changed. isForeground=$isForeground")
-        _isForeground.value = isForeground
-    }
 
     private fun setupTransport() {
         Log.d(TAG, "setupTransport: Initializing transport component.")
@@ -99,8 +93,13 @@ class Broker(
     private fun startDiscoveryLoop() {
         discoveryJob?.cancel()
         discoveryJob = scope.launch {
-            combine(state, isForeground) { currentState, isFg ->
-                val shouldScan = currentState.encryption.current == EncryptionState.KEYS_READY && 
+            combine(
+                state, 
+                systemObserver.isForeground,
+                systemObserver.isBluetoothEnabled
+            ) { currentState, isFg, isBtEnabled ->
+                val shouldScan = isBtEnabled &&
+                                currentState.encryption.current == EncryptionState.KEYS_READY && 
                                 currentState.ble.current != IBleTransport.State.CONNECTED &&
                                 currentState.ble.current != IBleTransport.State.CONNECTING
                 
@@ -325,9 +324,6 @@ class Broker(
                 Log.d(TAG, "sendBlob: Sending announcement")
                 bleTransport?.send(announcement) ?: throw IllegalStateException("BLE transport not initialized")
                 
-                // TCP announcement is optional if already in session, but protocol requires it here
-                try { tcpTransport?.send(announcement) } catch (_: Exception) {}
-
                 withContext(Dispatchers.IO) {
                     val tcp = tcpTransport ?: throw IllegalStateException("No TCP transport")
                     val (host, port) = partnerTcpTarget ?: throw IllegalStateException("No partner target")

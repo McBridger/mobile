@@ -3,6 +3,7 @@ package expo.modules.connector.di
 import android.util.Log
 import expo.modules.connector.core.Broker
 import expo.modules.connector.core.History
+import expo.modules.connector.core.SystemObserver
 import expo.modules.connector.core.WakeManager
 import expo.modules.connector.crypto.EncryptionService
 import expo.modules.connector.interfaces.*
@@ -24,6 +25,7 @@ import org.koin.dsl.module
 
 val connectorModule = module {
   // 1. Core Services
+  singleOf(::SystemObserver) { bind<ISystemObserver>() }
   singleOf(::BleScanner) { bind<IBleScanner>() }
   singleOf(::EncryptionService) { bind<IEncryptionService>() }
   singleOf(::AndroidFileStreamProvider) { bind<IFileStreamProvider>() }
@@ -47,6 +49,7 @@ val connectorModule = module {
     Broker(
       context = get(),
       encryptionService = get(),
+      systemObserver = get(),
       scanner = get(),
       history = get(),
       wakeManager = get(),
@@ -60,7 +63,7 @@ val connectorModule = module {
 
   // 5. Managers and Transports (Factories)
   factoryOf(::BleManager) { bind<IBleManager>() }
-  factory<ITcpTransport> { TcpTransport(get(), 49152) } 
+  factory<ITcpTransport> { TcpTransport(get(), get(), 49152) } 
 
   factory<IBleTransport> {
     BleTransport(

@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Build
 import android.util.Log
 import expo.modules.connector.core.Broker
+import expo.modules.connector.interfaces.ISystemObserver
 import expo.modules.connector.services.ForegroundService
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.modules.Module
@@ -21,6 +22,7 @@ import expo.modules.connector.models.*
 class ConnectorModule : Module(), KoinComponent {
   private val scope = CoroutineScope(Dispatchers.Main)
   private val broker: Broker by lazy { get<Broker>() }
+  private val systemObserver: ISystemObserver by lazy { get<ISystemObserver>() }
 
   companion object {
     private const val TAG = "ConnectorModule"
@@ -59,11 +61,11 @@ class ConnectorModule : Module(), KoinComponent {
     }
 
     OnActivityEntersForeground {
-      broker.setForeground(true)
+      systemObserver.setForeground(true)
     }
 
     OnActivityEntersBackground {
-      broker.setForeground(false)
+      systemObserver.setForeground(false)
     }
 
     OnDestroy {
