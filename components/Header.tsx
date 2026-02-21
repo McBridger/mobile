@@ -32,6 +32,7 @@ const Header = () => {
       return theme.colors.statusError;
     }
     if (tcp === TcpState.TRANSFERRING) return theme.colors.connected;
+    if (tcp === TcpState.CONNECTED) return theme.colors.connected;
     if (ble === BleState.CONNECTED) return theme.colors.connected;
     return theme.colors.connecting;
   }, [ble, tcp, encryption, theme]);
@@ -40,6 +41,8 @@ const Header = () => {
     if (encryption === EncryptionState.ERROR) return "Security Error";
     if (ble === BleState.ERROR) return "Link Error";
     if (tcp === TcpState.TRANSFERRING) return "Turbo Active";
+    if (tcp === TcpState.CONNECTED) return "Direct Link";
+    if (tcp === TcpState.PINGING) return "Turbo Probe...";
     if (ble === BleState.CONNECTED) return "Secure Link";
     if (ble === BleState.SCANNING) return "Searching...";
     if (encryption === EncryptionState.ENCRYPTING) return "Securing...";

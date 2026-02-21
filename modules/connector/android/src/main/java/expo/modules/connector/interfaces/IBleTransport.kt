@@ -5,7 +5,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 
 interface IBleTransport {
-    val connectionState: StateFlow<ConnectionState>
+    val state: StateFlow<State>
     val incomingMessages: Flow<Message>
 
     fun connect(address: String)
@@ -14,12 +14,13 @@ interface IBleTransport {
     suspend fun send(message: Message)
     fun stop()
 
-    enum class ConnectionState {
-        DISCONNECTED,
+    enum class State {
+        IDLE,
+        SCANNING,
         CONNECTING,
         CONNECTED,
         POWERED_OFF,
         UNSUPPORTED,
-        READY
+        ERROR
     }
 }

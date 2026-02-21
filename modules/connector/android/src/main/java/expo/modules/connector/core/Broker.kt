@@ -61,6 +61,7 @@ class Broker(
 
     init {
         Log.i(TAG, "Initializing Broker instance.")
+        
         if (encryptionService.load()) {
             Log.i(TAG, "Credentials loaded automatically.")
             setState(EncryptionState.KEYS_READY)
@@ -90,7 +91,7 @@ class Broker(
             Log.i(TAG, "setupTransport: Transports registered.")
         } catch (e: Exception) {
             Log.e(TAG, "setupTransport: Failed to setup transport: ${e.message}", e)
-            setState(BleState.ERROR, e.message)
+            setState(EncryptionState.ERROR, e.message)
         }
     }
 
@@ -100,16 +101,10 @@ class Broker(
         discoveryJob = scope.launch {
             combine(state, isForeground) { currentState, isFg ->
                 val shouldScan = currentState.encryption.current == EncryptionState.KEYS_READY && 
-                                currentState.ble.current != BleState.CONNECTED &&
-                                currentState.ble.current != BleState.CONNECTING
+                                currentState.ble.current != IBleTransport.State.CONNECTED &&
+                                currentState.ble.current != IBleTransport.State.CONNECTING
                 
-                if (!shouldScan) {
-                    if (currentState.ble.current == BleState.SCANNING) {
-                        Log.i(TAG, "Discovery: Stopped (Scan condition no longer met)")
-                        setState(BleState.IDLE)
-                    }
-                    return@combine null
-                }
+                if (!shouldScan) return@combine null
                 if (isFg) ScanConfig.Aggressive else ScanConfig.Passive
             }
             .debounce(500L)
@@ -126,7 +121,6 @@ class Broker(
                 
                 val modeLabel = if (config is ScanConfig.Aggressive) "Aggressive" else "Passive"
                 Log.i(TAG, "Discovery: Starting $modeLabel session for $advertiseUuid")
-                setState(BleState.SCANNING)
                 scanWithWatchdog(advertiseUuid, config)
             }
             .collect { device ->
@@ -141,7 +135,6 @@ class Broker(
         return scanner.scan(uuid, config)
             .onStart { 
                 Log.v(TAG, "Watchdog: Internal session started (${config.javaClass.simpleName})")
-                setState(BleState.SCANNING)
             }
             .filter { it.rssi > -85 }
             .let { flow ->
@@ -150,7 +143,6 @@ class Broker(
                     .retry { e ->
                         if (e is TimeoutCancellationException) return@retry true
                         Log.e(TAG, "Watchdog: Fatal error: ${e.message}")
-                        setState(BleState.ERROR, e.message)
                         false
                     }
             }
@@ -211,7 +203,42 @@ class Broker(
         this.bleTransport = transport
         scope.launch {
             launch { transport.incomingMessages.collect { onIncomingMessage(it) } }
-            launch { transport.connectionState.collect { onBleStateChange(it) } }
+            launch { 
+                transport.state.collect { newState ->
+                    setState(newState)
+                    handleBleStateSideEffects(newState)
+                } 
+            }
+        }
+    }
+
+    private fun handleBleStateSideEffects(state: IBleTransport.State) {
+        when (state) {
+            IBleTransport.State.CONNECTED -> {
+                Log.i(TAG, "BLE is CONNECTED. Sending business card.")
+                wakeManager.release()
+                val localIp = NetworkUtils.getLocalIpAddress() ?: "0.0.0.0"
+                scope.launch {
+                    try {
+                        bleTransport?.send(IntroMessage(
+                            id = UUID.randomUUID().toString(),
+                            timestamp = System.currentTimeMillis() / 1000.0,
+                            name = Build.MODEL,
+                            ip = localIp,
+                            port = 49152,
+                            address = null
+                        ))
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to send Intro: ${e.message}")
+                    }
+                }
+            }
+            IBleTransport.State.IDLE, 
+            IBleTransport.State.POWERED_OFF, 
+            IBleTransport.State.ERROR -> {
+                wakeManager.release()
+            }
+            else -> {}
         }
     }
 
@@ -221,19 +248,19 @@ class Broker(
         this.tcpTransport = transport
         scope.launch {
             launch { transport.incomingMessages.collect { onIncomingMessage(it) } }
+            launch { transport.state.collect { setState(it) } }
         }
     }
 
     fun connect(address: String) {
-        if (state.value.ble.current == BleState.CONNECTED) return
-        if (state.value.ble.current == BleState.CONNECTING) return
+        if (state.value.ble.current == IBleTransport.State.CONNECTED) return
+        if (state.value.ble.current == IBleTransport.State.CONNECTING) return
         val ble = bleTransport ?: run {
             Log.e(TAG, "connect: No transport available.")
             return
         }
         
         Log.i(TAG, "connect: Requesting connection to $address")
-        setState(BleState.CONNECTING)
         wakeManager.acquire(15000L)
         ble.connect(address)
     }
@@ -327,54 +354,16 @@ class Broker(
 
     // --- State Update Helpers ---
 
-    private fun setState(current: BleState, error: String? = null) {
+    private fun setState(current: IBleTransport.State, error: String? = null) {
         _state.update { it.copy(ble = Status(current, error)) }
     }
 
-    private fun setState(current: TcpState, error: String? = null) {
+    private fun setState(current: ITcpTransport.State, error: String? = null) {
         _state.update { it.copy(tcp = Status(current, error)) }
     }
 
     private fun setState(current: EncryptionState, error: String? = null) {
         _state.update { it.copy(encryption = Status(current, error)) }
-    }
-
-    private fun onBleStateChange(state: IBleTransport.ConnectionState) {
-        Log.d(TAG, "onBleStateChange: BLE state changed to $state")
-        when (state) {
-            IBleTransport.ConnectionState.READY -> {
-                Log.i(TAG, "onBleStateChange: BLE is READY. Sending business card.")
-                setState(BleState.CONNECTED)
-                wakeManager.release()
-                val localIp = NetworkUtils.getLocalIpAddress() ?: "0.0.0.0"
-                scope.launch { 
-                    try {
-                        bleTransport?.send(IntroMessage(
-                            id = UUID.randomUUID().toString(),
-                            timestamp = System.currentTimeMillis() / 1000.0,
-                            name = Build.MODEL,
-                            ip = localIp,
-                            port = 49152,
-                            address = null
-                        ))
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to send Intro: ${e.message}")
-                        // TODO: Handle this case
-                    }
-                }
-            }
-            IBleTransport.ConnectionState.DISCONNECTED -> {
-                Log.i(TAG, "onBleStateChange: BLE Disconnected")
-                setState(BleState.IDLE)
-                wakeManager.release()
-            }
-            IBleTransport.ConnectionState.POWERED_OFF -> {
-                Log.e(TAG, "onBleStateChange: Bluetooth Powered Off")
-                setState(BleState.ERROR, "Bluetooth Powered Off")
-                wakeManager.release()
-            }
-            else -> {}
-        }
     }
 
     private suspend fun onIncomingMessage(message: Message) {
@@ -384,6 +373,7 @@ class Broker(
             is BlobMessage -> handleBlobAnnouncement(message)
             is ChunkMessage -> handleChunk(message)
             is IntroMessage -> handleIntro(message)
+            else -> {}
         }
     }
 
@@ -431,16 +421,13 @@ class Broker(
     }
 
     private fun handleChunk(chunk: ChunkMessage) {
-        if (state.value.tcp.current != TcpState.TRANSFERRING) {
-            setState(TcpState.TRANSFERRING)
-        }
         incomingChannels[chunk.id]?.trySend(chunk)
     }
 
     private fun handleIntro(msg: IntroMessage) {
         Log.i(TAG, "Partner Intro: ${msg.name} at ${msg.ip}:${msg.port}")
         partnerTcpTarget = msg.ip to msg.port
-        setState(TcpState.PINGING)
+        tcpTransport?.connect(msg.ip, msg.port)
     }
 
     // --- Workers ---
@@ -529,10 +516,6 @@ class Broker(
         // Fix: Update clipboard for ALL incoming types (Text, File, Image)
         if (success && !finalPorter.isOutgoing && data != null) {
             updateSystemClipboard(finalPorter)
-        }
-        
-        if (state.value.tcp.current == TcpState.TRANSFERRING) {
-            setState(TcpState.IDLE)
         }
     }
 

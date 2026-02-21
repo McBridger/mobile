@@ -20,8 +20,13 @@ class TcpTransport(
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 ) : ITcpTransport {
 
-    private val _connectionState = MutableStateFlow(ITcpTransport.ConnectionState.DISCONNECTED)
-    override val connectionState: StateFlow<ITcpTransport.ConnectionState> = _connectionState.asStateFlow()
+    private val TAG = "TcpTransport"
+    private var controlSocket: Socket? = null
+    private var maintenanceJob: Job? = null
+    private val activityPulse = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    private val _state = MutableStateFlow(ITcpTransport.State.IDLE)
+    override val state: StateFlow<ITcpTransport.State> = _state.asStateFlow()
 
     private val _incomingMessages = MutableSharedFlow<Message>()
     override val incomingMessages = _incomingMessages
@@ -34,13 +39,77 @@ class TcpTransport(
 
     init {
         manager.start()
-        _connectionState.value = ITcpTransport.ConnectionState.READY
+        _state.value = ITcpTransport.State.READY
+
+        scope.launch {
+            activityPulse.collectLatest {
+                delay(5000L)
+                if (_state.value == ITcpTransport.State.CONNECTED || _state.value == ITcpTransport.State.TRANSFERRING) {
+                    Log.w(TAG, "Watchdog: Peer silence detected. Reverting to PINGING.")
+                    _state.value = ITcpTransport.State.PINGING
+                }
+            }
+        }
+    }
+
+    override fun connect(host: String, port: Int) {
+        Log.i(TAG, "connect: Initiating persistent connection to $host:$port")
+        
+        maintenanceJob?.cancel()
+        maintenanceJob = scope.launch {
+            _state.value = ITcpTransport.State.PINGING
+            
+            while (isActive) {
+                try {
+                    val socket = controlSocket ?: manager.connect(host, port)?.also {
+                        it.setKeepAlive(true)
+                        it.tcpNoDelay = true
+                        controlSocket = it
+                        _state.value = ITcpTransport.State.CONNECTED
+                        activityPulse.emit(Unit)
+                        Log.i(TAG, "Maintenance: Control socket established.")
+                    }
+
+                    if (socket != null) {
+                        Log.v(TAG, "Maintenance: Sending heartbeat...")
+                        manager.sendFrame(socket, PingMessage().toBytes())
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Maintenance: Connection lost or failed: ${e.message}")
+                    disconnectInternal()
+                    // Stay in PINGING while we retry
+                }
+                delay(3000L)
+            }
+        }
+    }
+
+    private fun disconnectInternal() {
+        Log.i(TAG, "Internal disconnect triggered.")
+        try { controlSocket?.close() } catch (_: Exception) {}
+        controlSocket = null
+        if (_state.value != ITcpTransport.State.IDLE) {
+            _state.value = ITcpTransport.State.PINGING
+        }
     }
 
     private suspend fun handleIncomingFrame(payload: ByteArray, address: String) {
+        activityPulse.emit(Unit)
         try {
             // In a future step, payload will be decrypted here
             val message = Message.fromBytes(payload) ?: return
+            
+            if (message is PingMessage) {
+                Log.v(TAG, "Heartbeat: Ping received from $address")
+                // Incoming ping confirms we are CONNECTED (if not currently transferring)
+                if (_state.value != ITcpTransport.State.TRANSFERRING) {
+                    _state.value = ITcpTransport.State.CONNECTED
+                }
+                return
+            }
+            
+            // Any other message means traffic is flowing
+            _state.value = ITcpTransport.State.TRANSFERRING
             _incomingMessages.emit(message.withAddress(address))
         } catch (e: Exception) {
             Log.e(TAG, "Failed to process frame: ${e.message}")
@@ -48,7 +117,15 @@ class TcpTransport(
     }
 
     override suspend fun send(message: Message) {
-        throw UnsupportedOperationException("General send not implemented in on-demand TCP model")
+        withContext(Dispatchers.IO) {
+            val socket = controlSocket ?: throw java.io.IOException("No active control socket")
+            try {
+                manager.sendFrame(socket, message.toBytes())
+            } catch (e: Exception) {
+                disconnectInternal()
+                throw e
+            }
+        }
     }
 
     override suspend fun sendBlob(
@@ -58,7 +135,10 @@ class TcpTransport(
         port: Int
     ) {
         withContext(Dispatchers.IO) {
-            val socket = manager.connect(host, port) ?: throw java.io.IOException("Could not connect to $host:$port")
+            val socket = controlSocket ?: throw java.io.IOException("TCP control channel not ready. Call connect() first.")
+            
+            val previousState = _state.value
+            _state.value = ITcpTransport.State.TRANSFERRING
             
             try {
                 // 1. Send Blob Announcement Frame
@@ -72,6 +152,7 @@ class TcpTransport(
                     if (read == -1) break
                     
                     val chunk = ChunkMessage(offset, buffer.copyOf(read), message.id)
+                    chunk.address = socket.inetAddress.hostAddress
                     manager.sendFrame(socket, chunk.toBytes())
                     
                     offset += read
@@ -80,15 +161,23 @@ class TcpTransport(
                 Log.i(TAG, "Blob send finished: $offset bytes for ${message.name}")
             } catch (e: Exception) {
                 Log.e(TAG, "sendBlob failed: ${e.message}")
+                disconnectInternal()
                 throw java.io.IOException("TCP Stream error: ${e.message}", e)
             } finally {
-                try { socket.close() } catch (_: Exception) {}
+                if (_state.value == ITcpTransport.State.TRANSFERRING) {
+                    _state.value = previousState
+                }
             }
         }
     }
 
     override fun stop() {
         manager.stop()
+        maintenanceJob?.cancel()
+        maintenanceJob = null
+        try { controlSocket?.close() } catch (_: Exception) {}
+        controlSocket = null
+        _state.value = ITcpTransport.State.IDLE
         scope.cancel()
     }
 

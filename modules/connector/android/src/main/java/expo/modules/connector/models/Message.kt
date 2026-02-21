@@ -13,7 +13,7 @@ import java.util.UUID
 
 @Serializable
 enum class MessageType(val id: Int) {
-    TINY(0), INTRO(1), BLOB(2), CHUNK(3);
+    TINY(0), INTRO(1), BLOB(2), CHUNK(3), PING(4);
     companion object {
         fun fromInt(id: Int) = values().find { it.id == id } ?: TINY
     }
@@ -24,6 +24,7 @@ val messageModule = SerializersModule {
         subclass(TinyMessage::class)
         subclass(IntroMessage::class)
         subclass(BlobMessage::class)
+        subclass(PingMessage::class)
     }
 }
 
@@ -75,6 +76,7 @@ sealed class Message {
                 MessageType.INTRO -> IntroMessage(id, ts, b.readStr(), b.readStr(), b.readInt())
                 MessageType.BLOB -> BlobMessage(id, ts, b.readStr(), b.readLong(), BridgerType.valueOf(b.readStr()))
                 MessageType.CHUNK -> ChunkMessage(b.readLong(), b.readByteArray(), id)
+                MessageType.PING -> PingMessage(id, ts)
             }
         }
 
@@ -157,4 +159,14 @@ class ChunkMessage(
         putString("id", id)
         putString("type", "CHUNK")
     }
+}
+
+@Serializable
+class PingMessage(
+    override val id: String = java.util.UUID.randomUUID().toString(),
+    override val timestamp: Double = System.currentTimeMillis() / 1000.0,
+    override var address: String? = null
+) : Message() {
+    override fun getType() = MessageType.PING
+    override fun writePayload(sink: BufferedSink) { /* No payload */ }
 }
