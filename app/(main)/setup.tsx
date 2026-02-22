@@ -36,16 +36,9 @@ export default function Setup() {
   );
 
   const [mnemonic, setMnemonic] = useState<string | null>(null);
-  const [wasReadyOnMount] = useState(isReady);
   const [words, setWords] = useState<string[]>(
     Array(extra.MNEMONIC_LENGTH).fill(""),
   );
-
-  useEffect(() => {
-    console.log({ isReady, wasReadyOnMount });
-    // Auto-navigate to connection ONLY if we transitioned from setup process to READY
-    if (isReady && !wasReadyOnMount) router.replace("/connection");
-  }, [isReady, wasReadyOnMount, router]);
 
   useEffect(() => {
     if (isReady) setMnemonic(ConnectorModule.getMnemonic());

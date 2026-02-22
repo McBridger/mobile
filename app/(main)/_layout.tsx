@@ -1,32 +1,18 @@
-import { useBluetoothPermissions } from "@/hooks/useBluetoothPermissions";
-import { useAppConfig } from "@/hooks/useConfig";
 import ConnectorModule, { useConnector } from "@/modules/connector";
-import { Stack, useRouter } from "expo-router";
+import { Stack } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { AppState, AppStateStatus, View } from "react-native";
 import { useShallow } from "zustand/shallow";
 import Header from "../../components/Header";
 
 export default function MainLayout() {
-  const { extra } = useAppConfig();
-  const router = useRouter();
-  const { allPermissionsGranted, isLoading: isPermissionsLoading } =
-    useBluetoothPermissions();
-
   const [subscribe, unsubscribe] = useConnector(
     useShallow((state) => [state.subscribe, state.unsubscribe]),
   );
 
   const [init, setInit] = useState(false);
 
-  // 1. Permissions Guard
-  useEffect(() => {
-    if (!isPermissionsLoading && !allPermissionsGranted) {
-      router.replace("/permissions");
-    }
-  }, [allPermissionsGranted, isPermissionsLoading, router]);
-
-  // 2. Subscription Management (Native Events)
+  // 1. Subscription Management (Native Events)
   useEffect(() => {
     if (AppState.currentState === "active") subscribe();
 
@@ -45,21 +31,14 @@ export default function MainLayout() {
   }, [subscribe, unsubscribe]);
 
   const initialize = useCallback(async () => {
-    const { isReady, setup } = useConnector.getState();
-    // 1. Perform auto-setup for dev/test mode if mnemonic is provided in env
-    if (!isReady && extra.MNEMONIC_LOCAL && extra.ENCRYPTION_SALT) {
-      console.log("Found test mnemonic in env, performing auto-setup.");
-      await setup(extra.MNEMONIC_LOCAL, extra.ENCRYPTION_SALT);
-    }
-
-    // 2. Start the foreground service
+    // Start the foreground service
     try {
       await ConnectorModule.start();
       console.log("ConnectorModule started.");
     } catch (e) {
       console.error("Failed to start ConnectorModule:", e);
     }
-  }, [extra.ENCRYPTION_SALT, extra.MNEMONIC_LOCAL]);
+  }, []);
 
   useEffect(() => {
     initialize().then(() => setInit(true));

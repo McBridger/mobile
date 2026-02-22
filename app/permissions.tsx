@@ -2,7 +2,7 @@ import Header from "@/components/Header";
 import { useBluetoothPermissions } from "@/hooks/useBluetoothPermissions";
 import { AppTheme } from "@/theme/CustomTheme";
 import { Ionicons } from "@expo/vector-icons";
-import { router, Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import React, { useEffect, useMemo } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { Avatar, Button, Card, List, Text, useTheme } from "react-native-paper";
@@ -10,6 +10,7 @@ import { PERMISSIONS, RESULTS } from "react-native-permissions";
 
 export default function PermissionsScreen() {
   const theme = useTheme() as AppTheme;
+  const router = useRouter();
   const { status, isLoading, request, showPermissionRationale } =
     useBluetoothPermissions();
 
@@ -39,7 +40,7 @@ export default function PermissionsScreen() {
       const timer = setTimeout(() => router.replace("/"), 500);
       return () => clearTimeout(timer);
     }
-  }, [isLoading, permissionsState.isMandatoryGranted]);
+  }, [isLoading, permissionsState.isMandatoryGranted, router]);
 
   if (isLoading) {
     return (
@@ -90,7 +91,9 @@ export default function PermissionsScreen() {
         >
           <Card.Content>
             <List.Section style={styles.listSection}>
-              <List.Subheader style={styles.listSubheader}>Core Connectivity (Mandatory)</List.Subheader>
+              <List.Subheader style={styles.listSubheader}>
+                Core Connectivity (Mandatory)
+              </List.Subheader>
 
               <List.Item
                 title="Bluetooth & Discovery"
