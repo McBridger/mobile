@@ -13,6 +13,8 @@ import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import expo.modules.connector.R
 import expo.modules.connector.core.Broker
+import expo.modules.connector.interfaces.IBleTransport
+import expo.modules.connector.interfaces.ITcpTransport
 import expo.modules.connector.models.*
 import kotlinx.coroutines.*
 import org.koin.android.ext.android.inject
@@ -82,19 +84,19 @@ class ForegroundService : Service() {
                 title = "Bridger Error (Security)"
                 text = state.encryption.error ?: "Check mnemonic or salt."
             }
-            state.ble.current == BleState.ERROR -> {
+            state.ble.current == IBleTransport.State.ERROR -> {
                 title = "Bridger Error (Bluetooth)"
                 text = state.ble.error ?: "Check Bluetooth permissions."
             }
-            state.tcp.current == TcpState.TRANSFERRING -> {
+            state.tcp.current == ITcpTransport.State.TRANSFERRING -> {
                 title = "Bridger Connected (Turbo)"
                 text = "Transferring data..."
             }
-            state.ble.current == BleState.CONNECTED -> {
+            state.ble.current == IBleTransport.State.CONNECTED -> {
                 title = "Bridger Connected"
                 text = "Secure link active."
             }
-            state.ble.current == BleState.SCANNING -> {
+            state.ble.current == IBleTransport.State.SCANNING -> {
                 title = "Bridger Scanning"
                 text = "Searching for nearby devices..."
             }

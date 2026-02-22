@@ -1,9 +1,9 @@
 package expo.modules.connector.models
 
 import android.os.Bundle
+import expo.modules.connector.interfaces.IBleTransport
+import expo.modules.connector.interfaces.ITcpTransport
 
-enum class BleState { IDLE, SCANNING, CONNECTING, CONNECTED, ERROR }
-enum class TcpState { IDLE, PINGING, TRANSFERRING, ERROR }
 enum class EncryptionState { IDLE, ENCRYPTING, KEYS_READY, ERROR }
 
 data class Status<T : Enum<*>>(val current: T, val error: String? = null) {
@@ -18,8 +18,8 @@ data class Status<T : Enum<*>>(val current: T, val error: String? = null) {
  * Structured hierarchically for better JS consumption.
  */
 data class BrokerState(
-    val ble: Status<BleState> = Status(BleState.IDLE),
-    val tcp: Status<TcpState> = Status(TcpState.IDLE),
+    val ble: Status<IBleTransport.State> = Status(IBleTransport.State.IDLE),
+    val tcp: Status<ITcpTransport.State> = Status(ITcpTransport.State.IDLE),
     val encryption: Status<EncryptionState> = Status(EncryptionState.IDLE),
     val items: List<Bundle> = emptyList()
 ) {

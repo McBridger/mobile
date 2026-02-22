@@ -34,6 +34,7 @@ const Header = () => {
       return theme.colors.statusError;
     }
     if (tcp === TcpState.TRANSFERRING) return theme.colors.connected;
+    if (tcp === TcpState.CONNECTED) return theme.colors.connected;
     if (ble === BleState.CONNECTED) return theme.colors.connected;
     return theme.colors.connecting;
   }, [ble, tcp, encryption, theme]);
@@ -44,15 +45,13 @@ const Header = () => {
     if (tcp === TcpState.TRANSFERRING) return "Turbo Active";
     if (ble === BleState.CONNECTED) return "Connected";
     if (ble === BleState.CONNECTING) return "Connecting";
+    if (tcp === TcpState.PINGING) return "Turbo Probe...";
+    if (ble === BleState.CONNECTED) return "Secure Link";
     if (ble === BleState.SCANNING) return "Searching...";
     if (encryption === EncryptionState.ENCRYPTING) return "Securing...";
 
     return "Idle";
   }, [encryption, ble, tcp]);
-
-  // useEffect(() => {
-  //   console.log("TLT ble", ble);
-  // }, [ble]);
 
   const getTitle = useMemo(() => {
     switch (currentRouteName) {
@@ -78,8 +77,6 @@ const Header = () => {
       router.replace("/connection");
     }
   }, [router]);
-
-  // console.log("TLT currentRouteName", currentRouteName);
 
   // Показываем кнопку назад только если мы в настройках и уже всё сконфигурировано
   const showBackButton = currentRouteName === "setup" && isReady;

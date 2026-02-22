@@ -27,8 +27,8 @@ class BleTransport(
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO)
 ) : IBleTransport {
 
-    private val _connectionState = MutableStateFlow(IBleTransport.ConnectionState.DISCONNECTED)
-    override val connectionState: StateFlow<IBleTransport.ConnectionState> = _connectionState.asStateFlow()
+    private val _state = MutableStateFlow(IBleTransport.State.IDLE)
+    override val state: StateFlow<IBleTransport.State> = _state.asStateFlow()
 
     private val _incomingMessages = MutableSharedFlow<Message>()
     override val incomingMessages = _incomingMessages
@@ -75,27 +75,27 @@ class BleTransport(
         bleManager.observer = object : ConnectionObserver {
             override fun onDeviceConnecting(device: BluetoothDevice) {
                 Log.d(TAG, "onDeviceConnecting: ${device.address}")
-                _connectionState.value = IBleTransport.ConnectionState.CONNECTING
+                _state.value = IBleTransport.State.CONNECTING
             }
 
             override fun onDeviceConnected(device: BluetoothDevice) {
                 Log.i(TAG, "onDeviceConnected: ${device.address}")
-                _connectionState.value = IBleTransport.ConnectionState.CONNECTED
+                _state.value = IBleTransport.State.CONNECTING
             }
 
             override fun onDeviceFailedToConnect(device: BluetoothDevice, reason: Int) {
                 Log.e(TAG, "onDeviceFailedToConnect: ${device.address}, reason: $reason")
-                _connectionState.value = IBleTransport.ConnectionState.DISCONNECTED
+                _state.value = IBleTransport.State.IDLE
             }
 
             override fun onDeviceReady(device: BluetoothDevice) {
                 Log.i(TAG, "onDeviceReady: ${device.address} - Device is ready for communication.")
-                _connectionState.value = IBleTransport.ConnectionState.READY
+                _state.value = IBleTransport.State.CONNECTED
             }
 
             override fun onDeviceDisconnected(device: BluetoothDevice, reason: Int) {
                 Log.i(TAG, "onDeviceDisconnected: ${device.address}, reason: $reason")
-                _connectionState.value = IBleTransport.ConnectionState.DISCONNECTED
+                _state.value = IBleTransport.State.IDLE
             }
             
             override fun onDeviceDisconnecting(device: BluetoothDevice) {
@@ -111,7 +111,7 @@ class BleTransport(
             Log.d(TAG, "connect: Connection request initiated for $address.")
         } catch (e: Exception) {
             Log.e(TAG, "connect: Exception during connection attempt: ${e.message}")
-            _connectionState.value = IBleTransport.ConnectionState.DISCONNECTED
+            _state.value = IBleTransport.State.IDLE
         }
     }
 
@@ -122,8 +122,8 @@ class BleTransport(
 
     override suspend fun send(message: Message) {
         Log.d(TAG, "send: Attempting to send message ID: ${message.id}")
-        if (_connectionState.value != IBleTransport.ConnectionState.READY) {
-            val error = "BLE transport not ready (State: ${_connectionState.value})"
+        if (_state.value != IBleTransport.State.CONNECTED) {
+            val error = "BLE transport not ready (State: ${_state.value})"
             Log.e(TAG, "send: $error")
             throw IllegalStateException(error)
         }
