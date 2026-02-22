@@ -14,11 +14,12 @@ import { Appbar, Text, useTheme } from "react-native-paper";
 import { useShallow } from "zustand/shallow";
 
 const Header = () => {
-  const [ble, tcp, encryption] = useConnector(
+  const [ble, tcp, encryption, isReady] = useConnector(
     useShallow((curr) => [
       curr.state.ble.current,
       curr.state.tcp.current,
       curr.state.encryption.current,
+      curr.isReady,
     ]),
   );
   const theme = useTheme() as AppTheme;
@@ -26,6 +27,7 @@ const Header = () => {
   const router = useRouter();
   const segments = useSegments();
   const currentRouteName = segments[segments.length - 1];
+  const isConnectionRoute = currentRouteName === "connection";
 
   const getBackgroundColor = useCallback(() => {
     if (ble === BleState.ERROR || encryption === EncryptionState.ERROR) {
@@ -40,12 +42,17 @@ const Header = () => {
     if (encryption === EncryptionState.ERROR) return "Security Error";
     if (ble === BleState.ERROR) return "Link Error";
     if (tcp === TcpState.TRANSFERRING) return "Turbo Active";
-    if (ble === BleState.CONNECTED) return "Secure Link";
+    if (ble === BleState.CONNECTED) return "Connected";
+    if (ble === BleState.CONNECTING) return "Connecting";
     if (ble === BleState.SCANNING) return "Searching...";
     if (encryption === EncryptionState.ENCRYPTING) return "Securing...";
 
     return "Idle";
   }, [encryption, ble, tcp]);
+
+  // useEffect(() => {
+  //   console.log("TLT ble", ble);
+  // }, [ble]);
 
   const getTitle = useMemo(() => {
     switch (currentRouteName) {
@@ -61,14 +68,21 @@ const Header = () => {
   }, [currentRouteName]);
 
   const handleLeftButtonPress = useCallback(() => {
-    if (currentRouteName === "connection") router.push("/setup");
-  }, [currentRouteName, router]);
+    if (isConnectionRoute) router.push("/setup");
+  }, [isConnectionRoute, router]);
 
   const handleBackButtonPress = useCallback(() => {
-    if (currentRouteName === "setup") router.back();
-  }, [currentRouteName, router]);
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace("/connection");
+    }
+  }, [router]);
 
-  const showBackButton = currentRouteName !== "connection";
+  // console.log("TLT currentRouteName", currentRouteName);
+
+  // Показываем кнопку назад только если мы в настройках и уже всё сконфигурировано
+  const showBackButton = currentRouteName === "setup" && isReady;
   const isIdle = encryption === EncryptionState.IDLE && ble === BleState.IDLE;
 
   return (
@@ -93,7 +107,7 @@ const Header = () => {
         />
       )}
 
-      {!isIdle && !showBackButton && (
+      {!isIdle && !showBackButton && isConnectionRoute && (
         <Appbar.Action
           testID="settings-outline"
           accessibilityLabel="Settings"
