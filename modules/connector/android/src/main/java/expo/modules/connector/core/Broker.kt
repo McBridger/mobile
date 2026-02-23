@@ -69,6 +69,37 @@ class Broker(
             setState(EncryptionState.IDLE)
         }
         startDiscoveryLoop()
+
+        // --- Fast Kill & Re-Verification Synergy ---
+        scope.launch {
+            // 1. Foreground Re-Verification (Reactive)
+            launch {
+                systemObserver.isForeground.collect { isFg ->
+                    if (!isFg) return@collect
+
+                    Log.d(TAG, "App entered foreground. Verification triggered.")
+                    tcpTransport?.forcePing()
+                }
+            }
+
+            // 2. Network Signaling via BLE (Reactive SSOT)
+            launch {
+                systemObserver.localIpAddress.collect { currentIp ->
+                    if (state.value.ble.current != IBleTransport.State.CONNECTED) return@collect
+
+                    Log.i(TAG, "Local network changed: $currentIp. Notifying partner via BLE.")
+                    try {
+                        bleTransport?.send(IntroMessage(
+                            name = Build.MODEL,
+                            ip = currentIp,
+                            port = if (currentIp != null) 49152 else null
+                        ))
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to push network update: ${e.message}")
+                    }
+                }
+            }
+        }
     }
 
 
@@ -236,6 +267,8 @@ class Broker(
             IBleTransport.State.POWERED_OFF, 
             IBleTransport.State.ERROR -> {
                 wakeManager.release()
+                Log.i(TAG, "BLE lost. Fast Kill TCP.")
+                tcpTransport?.stop()
             }
             else -> {}
         }
@@ -421,9 +454,15 @@ class Broker(
     }
 
     private fun handleIntro(msg: IntroMessage) {
-        Log.i(TAG, "Partner Intro: ${msg.name} at ${msg.ip}:${msg.port}")
-        partnerTcpTarget = msg.ip to msg.port
-        tcpTransport?.connect(msg.ip, msg.port)
+        Log.i(TAG, "Partner Intro: ${msg.name} status updated (IP: ${msg.ip})")
+        if (msg.ip != null && msg.port != null) {
+            partnerTcpTarget = msg.ip to msg.port
+            tcpTransport?.connect(msg.ip, msg.port)
+        } else {
+            Log.i(TAG, "Partner has no TCP address. Stopping TCP.")
+            partnerTcpTarget = null
+            tcpTransport?.stop()
+        }
     }
 
     // --- Workers ---

@@ -73,7 +73,18 @@ sealed class Message {
             
             return when (MessageType.fromInt(typeId)) {
                 MessageType.TINY -> TinyMessage(id, ts, b.readStr())
-                MessageType.INTRO -> IntroMessage(id, ts, b.readStr(), b.readStr(), b.readInt())
+                MessageType.INTRO -> {
+                    val name = b.readStr()
+                    val ipStr = b.readStr()
+                    val portVal = b.readInt()
+                    IntroMessage(
+                        id = id,
+                        timestamp = ts,
+                        name = name,
+                        ip = if (ipStr.isEmpty()) null else ipStr,
+                        port = if (portVal == -1) null else portVal
+                    )
+                }
                 MessageType.BLOB -> BlobMessage(id, ts, b.readStr(), b.readLong(), BridgerType.valueOf(b.readStr()))
                 MessageType.CHUNK -> ChunkMessage(b.readLong(), b.readByteArray(), id)
                 MessageType.PING -> PingMessage(id, ts)
@@ -111,16 +122,20 @@ class IntroMessage(
     override val id: String = UUID.randomUUID().toString(),
     override val timestamp: Double = System.currentTimeMillis() / 1000.0,
     val name: String,
-    val ip: String,
-    val port: Int,
+    val ip: String? = null,
+    val port: Int? = null,
     override var address: String? = null
 ) : Message() {
     override fun getType() = MessageType.INTRO
     override fun writePayload(sink: BufferedSink) {
-        writeS(sink, name); writeS(sink, ip); sink.writeInt(port)
+        writeS(sink, name)
+        writeS(sink, ip ?: "")
+        sink.writeInt(port ?: -1)
     }
     override fun toBundle() = super.toBundle().apply {
-        putString("name", name); putString("ip", ip); putInt("port", port)
+        putString("name", name)
+        putString("ip", ip)
+        putInt("port", port)
     }
 }
 

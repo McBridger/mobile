@@ -34,6 +34,9 @@ class TcpTransport(
     // Outbound queue with backpressure support (Capacity 64)
     private val outboundQueue = Channel<Message>(capacity = 64)
 
+    // Tracks the last ping ID we sent to avoid infinite echo loops
+    @Volatile private var lastSentPingId: String? = null
+
     private val manager = TcpServerManager(port, ::handleIncomingFrame, scope)
 
     init {
@@ -79,6 +82,28 @@ class TcpTransport(
         }
     }
 
+    override fun forcePing() {
+        if (_state.value != ITcpTransport.State.CONNECTED) return
+        
+        scope.launch {
+            val ping = PingMessage()
+            lastSentPingId = ping.id
+            Log.d(TAG, "forcePing: Sent Ping(${ping.id}), waiting for any pulse...")
+
+            try {
+                outboundQueue.send(ping)
+                withTimeout(2000L) {
+                    // Success if we receive ANY PingMessage within 2s
+                    incomingMessages.first { it is PingMessage }
+                }
+                Log.i(TAG, "forcePing: Success! Pipe is alive.")
+            } catch (e: Exception) {
+                Log.w(TAG, "forcePing: FAILED! No response within 2s. Scuttling.")
+                stop()
+            }
+        }
+    }
+
     /**
      * Single Writer Loop: The only coroutine allowed to write to the socket.
      */
@@ -94,8 +119,14 @@ class TcpTransport(
             val message = Message.fromBytes(payload) ?: return
 
             if (message is PingMessage) {
-                // Echo Pattern: send ping back immediately
-                outboundQueue.send(PingMessage(id = message.id))
+                // Emit so forcePing and other observers can see it
+                _incomingMessages.emit(message.withAddress(address))
+                
+                // Echo Pattern: only echo if it's NOT our own last ping returning to us
+                if (message.id != lastSentPingId) {
+                    Log.v(TAG, "Echoing incoming Ping(${message.id})")
+                    outboundQueue.send(PingMessage(id = message.id))
+                }
                 return
             }
             

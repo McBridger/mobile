@@ -12,6 +12,7 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.util.Log
 import expo.modules.connector.interfaces.ISystemObserver
+import expo.modules.connector.utils.NetworkUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -33,21 +34,25 @@ class SystemObserver(private val context: Context) : ISystemObserver {
     private val _isBluetoothEnabled = MutableStateFlow(false)
     override val isBluetoothEnabled = _isBluetoothEnabled.asStateFlow()
 
+    private val _localIpAddress = MutableStateFlow<String?>(null)
+    override val localIpAddress = _localIpAddress.asStateFlow()
+
     private val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
     private val bluetoothAdapter: BluetoothAdapter? = bluetoothManager.adapter
 
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
-            checkNetworkCapabilities()
+            updateNetworkState(network)
         }
 
         override fun onLost(network: Network) {
-            _isNetworkHighSpeed.value = false
+            // Force reset when network is explicitly lost
+            updateNetworkState(null)
         }
 
         override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
-            checkNetworkCapabilities()
+            updateNetworkState(network)
         }
     }
 
@@ -62,8 +67,9 @@ class SystemObserver(private val context: Context) : ISystemObserver {
     }
 
     init {
-        // Initial Network Check
-        checkNetworkCapabilities()
+        // Initial state sync using the currently active network
+        updateNetworkState(connectivityManager.activeNetwork)
+        
         val networkRequest = NetworkRequest.Builder()
             .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             .build()
@@ -73,20 +79,28 @@ class SystemObserver(private val context: Context) : ISystemObserver {
         _isBluetoothEnabled.value = bluetoothAdapter?.isEnabled == true
         context.registerReceiver(bluetoothReceiver, IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED))
         
-        Log.i(TAG, "SystemObserver initialized. Net: ${_isNetworkHighSpeed.value}, BT: ${_isBluetoothEnabled.value}")
+        Log.i(TAG, "SystemObserver initialized. Net: ${_isNetworkHighSpeed.value}, IP: ${_localIpAddress.value}, BT: ${_isBluetoothEnabled.value}")
     }
 
-    private fun checkNetworkCapabilities() {
-        val activeNetwork = connectivityManager.activeNetwork
-        val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork)
+    private fun updateNetworkState(network: Network?) {
+        val capabilities = network?.let { connectivityManager.getNetworkCapabilities(it) }
+        
         val isHighSpeed = capabilities?.let {
             it.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) || 
             it.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
         } ?: false
+
+        // If network is null, IP is definitely null. Otherwise, fetch it.
+        val currentIp = if (network != null) NetworkUtils.getLocalIpAddress() else null
         
         if (_isNetworkHighSpeed.value != isHighSpeed) {
             _isNetworkHighSpeed.value = isHighSpeed
             Log.d(TAG, "High-speed network status: $isHighSpeed")
+        }
+
+        if (_localIpAddress.value != currentIp) {
+            _localIpAddress.value = currentIp
+            Log.d(TAG, "Local IP address changed: $currentIp")
         }
     }
 

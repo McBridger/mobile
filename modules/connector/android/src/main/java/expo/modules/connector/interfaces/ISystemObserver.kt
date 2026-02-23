@@ -10,6 +10,7 @@ interface ISystemObserver {
     val isForeground: StateFlow<Boolean>
     val isNetworkHighSpeed: StateFlow<Boolean> // Wi-Fi or Ethernet
     val isBluetoothEnabled: StateFlow<Boolean>
+    val localIpAddress: StateFlow<String?>
 
     /**
      * Notify observer about lifecycle changes.
