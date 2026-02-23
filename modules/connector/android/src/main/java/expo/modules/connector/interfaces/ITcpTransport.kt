@@ -17,7 +17,6 @@ interface ITcpTransport {
     enum class State {
         IDLE,         // Keys not ready, transport stopped
         READY,        // Server started, waiting for target info
-        PINGING,      // Target known, attempting to establish connection
         CONNECTED,    // Control socket established, heartbeats flowing
         TRANSFERRING, // Active data stream in progress
         ERROR         // Fatal failure

@@ -33,9 +33,6 @@ class TcpTransport(
 
     // Outbound queue with backpressure support (Capacity 64)
     private val outboundQueue = Channel<Message>(capacity = 64)
-    
-    // Last time we heard from the partner (Ping or Data)
-    @Volatile private var lastPeerActivityAt = 0L
 
     private val manager = TcpServerManager(port, ::handleIncomingFrame, scope)
 
@@ -55,40 +52,29 @@ class TcpTransport(
     }
 
     override fun connect(host: String, port: Int) {
-        Log.i(TAG, "connect: Starting connection management for $host:$port")
+        Log.i(TAG, "connect: Starting connection for $host:$port")
         maintenanceJob?.cancel()
         
         maintenanceJob = scope.launch {
-            var currentRetryDelay = 2000L
+            try {
+                val socket = manager.connect(host, port) ?: throw IOException("Connect returned null")
+                socket.keepAlive = true
+                socket.tcpNoDelay = true
+                socket.sendBufferSize = 65536 // OS-level buffer bloat protection
+                
+                controlSocket = socket
+                _state.value = ITcpTransport.State.CONNECTED
+                Log.i(TAG, "Socket established with $host:$port")
 
-            while (isActive) {
-                _state.value = ITcpTransport.State.PINGING
-
-                try {
-                    val socket = manager.connect(host, port) ?: throw IOException("Connect returned null")
-                    socket.keepAlive = true
-                    socket.tcpNoDelay = true
-                    socket.sendBufferSize = 65536 // OS-level buffer bloat protection
-                    
-                    controlSocket = socket
-                    _state.value = ITcpTransport.State.CONNECTED
-                    lastPeerActivityAt = System.currentTimeMillis()
-                    currentRetryDelay = 2000L // Reset backoff on success
-                    Log.i(TAG, "Socket established with $host:$port")
-
-                    // Run writer and watchdog concurrently for the current socket
-                    coroutineScope {
-                        launch { writeLoop(socket) }
-                        launch { watchdogLoop() }
-                    }
-
-                } catch (e: Exception) {
-                    Log.w(TAG, "Connection failed or lost: ${e.message}. Retrying in ${currentRetryDelay}ms")
-                    delay(currentRetryDelay)
-                    currentRetryDelay = (currentRetryDelay * 2).coerceAtMost(30000L)
-                } finally {
-                    disconnectInternal()
+                // Run writer and reader loops concurrently for the current socket
+                coroutineScope {
+                    launch { writeLoop(socket) }
+                    launch { manager.readIncomingFromClientSocket(socket, host) }
                 }
+            } catch (e: Exception) {
+                Log.w(TAG, "Connection failed or lost: ${e.message}")
+            } finally {
+                disconnectInternal()
             }
         }
     }
@@ -99,40 +85,20 @@ class TcpTransport(
     private suspend fun writeLoop(socket: Socket) {
         for (message in outboundQueue) {
             if (!socket.isConnected || socket.isClosed) throw IOException("Socket closed during write")
-            
             manager.sendFrame(socket, message.toBytes())
         }
     }
 
-    /**
-     * Watchdog Loop: Monitors connection pulse and sends heartbeats.
-     */
-    private suspend fun watchdogLoop() {
-        while (coroutineContext.isActive) {
-            delay(3000L)
-            
-            if (!systemObserver.isForeground.value) continue
-
-            val idleTime = System.currentTimeMillis() - lastPeerActivityAt
-
-            if (idleTime > 12000L) {
-                // 12s of total silence from peer - socket is dead.
-                throw IOException("Heartbeat timeout. Peer is silent for 12s.")
-            } else if (idleTime > 4000L && _state.value != ITcpTransport.State.TRANSFERRING) {
-                // Send ping if peer is idle for 4s and not transferring data
-                outboundQueue.trySend(PingMessage())
-            }
-        }
-    }
-
     private suspend fun handleIncomingFrame(payload: ByteArray, address: String) {
-        // ANY incoming frame is a sign of life. Reset peer activity timer.
-        lastPeerActivityAt = System.currentTimeMillis()
-
         try {
             val message = Message.fromBytes(payload) ?: return
-            if (message is PingMessage) return // Internal ping handled by updating pulse above
 
+            if (message is PingMessage) {
+                // Echo Pattern: send ping back immediately
+                outboundQueue.send(PingMessage(id = message.id))
+                return
+            }
+            
             // Handle data flow with respect to State API
             val prevState = _state.value
             if (prevState != ITcpTransport.State.TRANSFERRING) _state.value = ITcpTransport.State.TRANSFERRING
@@ -153,7 +119,7 @@ class TcpTransport(
     ) {
         withContext(Dispatchers.IO) {
             val prevState = _state.value
-            _state.value = ITcpTransport.State.TRANSFERRING // Watchdog will suppress pings
+            _state.value = ITcpTransport.State.TRANSFERRING
 
             try {
                 outboundQueue.send(message) // Announcement
@@ -167,8 +133,6 @@ class TcpTransport(
                         if (read == -1) break
                         
                         val chunk = ChunkMessage(offset, buffer.copyOf(read), message.id).apply { address = host }
-                        
-                        // Backpressure: suspends if queue (64) is full
                         outboundQueue.send(chunk) 
                         offset += read
                     }
@@ -193,7 +157,7 @@ class TcpTransport(
         while (outboundQueue.tryReceive().isSuccess) { /* drain */ }
         
         if (_state.value != ITcpTransport.State.IDLE) {
-            _state.value = ITcpTransport.State.PINGING
+            _state.value = ITcpTransport.State.READY
         }
     }
 

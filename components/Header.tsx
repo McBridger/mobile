@@ -40,10 +40,9 @@ const Header = () => {
   const getStatusText = useCallback(() => {
     if (encryption === EncryptionState.ERROR) return "Security Error";
     if (ble === BleState.ERROR) return "Link Error";
-    if (tcp === TcpState.TRANSFERRING) return "Turbo Active";
-    if (tcp === TcpState.CONNECTED) return "Direct Link";
-    if (tcp === TcpState.PINGING) return "Turbo Probe...";
-    if (ble === BleState.CONNECTED) return "Secure Link";
+    if (tcp === TcpState.TRANSFERRING) return "Transferring";
+    if (tcp === TcpState.CONNECTED) return "Fast Link";
+    if (ble === BleState.CONNECTED) return "Slow Link";
     if (ble === BleState.SCANNING) return "Searching...";
     if (encryption === EncryptionState.ENCRYPTING) return "Securing...";
 

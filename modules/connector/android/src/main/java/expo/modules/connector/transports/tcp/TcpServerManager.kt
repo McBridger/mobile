@@ -42,26 +42,31 @@ class TcpServerManager(
         Log.d(TAG, "New connection from $address")
         
         try {
-            val input = DataInputStream(socket.getInputStream())
-            while (currentCoroutineContext().isActive) {
-                // 1. Read Length (Framing)
-                val length = try { input.readInt() } catch (e: Exception) { break }
-                if (length <= 0 || length > 100 * 1024 * 1024) {
-                    Log.w(TAG, "Invalid frame length: $length from $address")
-                    break
-                }
-                
-                // 2. Read Payload
-                val payload = ByteArray(length)
-                input.readFully(payload)
-                
-                // 3. Dispatch
-                onMessage(payload, address)
-            }
+            readIncomingFromClientSocket(socket, address)
         } catch (e: Exception) {
             Log.d(TAG, "Client disconnected: $address (${e.message})")
         } finally {
             try { socket.close() } catch (_: Exception) {}
+        }
+    }
+
+    suspend fun readIncomingFromClientSocket(socket: Socket, hostAddress: String? = null) {
+        val address = hostAddress ?: socket.inetAddress.hostAddress ?: "unknown"
+        val input = DataInputStream(socket.getInputStream())
+        while (currentCoroutineContext().isActive) {
+            // 1. Read Length (Framing)
+            val length = try { input.readInt() } catch (e: Exception) { break }
+            if (length <= 0 || length > 100 * 1024 * 1024) {
+                Log.w(TAG, "Invalid frame length: $length from $address")
+                break
+            }
+            
+            // 2. Read Payload
+            val payload = ByteArray(length)
+            input.readFully(payload)
+            
+            // 3. Dispatch
+            onMessage(payload, address)
         }
     }
 
