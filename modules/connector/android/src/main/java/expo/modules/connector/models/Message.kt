@@ -135,7 +135,7 @@ class IntroMessage(
     override fun toBundle() = super.toBundle().apply {
         putString("name", name)
         putString("ip", ip)
-        putInt("port", port)
+        if (port != null) putInt("port", port)
     }
 }
 

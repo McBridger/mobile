@@ -24,6 +24,8 @@ class TcpTransport(
     private val TAG = "TcpTransport"
     private var controlSocket: Socket? = null
     private var maintenanceJob: Job? = null
+    private var currentHost: String? = null
+    private var currentPort: Int? = null
 
     private val _state = MutableStateFlow(ITcpTransport.State.IDLE)
     override val state: StateFlow<ITcpTransport.State> = _state.asStateFlow()
@@ -55,8 +57,15 @@ class TcpTransport(
     }
 
     override fun connect(host: String, port: Int) {
+        if (_state.value == ITcpTransport.State.CONNECTED 
+            && currentHost == host 
+            && currentPort == port
+        ) return
+        
         Log.i(TAG, "connect: Starting connection for $host:$port")
-        maintenanceJob?.cancel()
+        disconnectInternal()
+        currentHost = host
+        currentPort = port
         
         maintenanceJob = scope.launch {
             try {
@@ -82,6 +91,11 @@ class TcpTransport(
         }
     }
 
+    override fun disconnect() {
+        Log.i(TAG, "disconnect: Explicit disconnect requested")
+        disconnectInternal()
+    }
+
     override fun forcePing() {
         if (_state.value != ITcpTransport.State.CONNECTED) return
         
@@ -99,7 +113,7 @@ class TcpTransport(
                 Log.i(TAG, "forcePing: Success! Pipe is alive.")
             } catch (e: Exception) {
                 Log.w(TAG, "forcePing: FAILED! No response within 2s. Scuttling.")
-                stop()
+                disconnect()
             }
         }
     }
@@ -119,7 +133,6 @@ class TcpTransport(
             val message = Message.fromBytes(payload) ?: return
 
             if (message is PingMessage) {
-                // Emit so forcePing and other observers can see it
                 _incomingMessages.emit(message.withAddress(address))
                 
                 // Echo Pattern: only echo if it's NOT our own last ping returning to us
@@ -173,9 +186,7 @@ class TcpTransport(
                 Log.e(TAG, "Blob send failed: ${e.message}")
                 throw IOException("TCP Stream error: ${e.message}", e)
             } finally {
-                if (_state.value == ITcpTransport.State.TRANSFERRING) {
-                    _state.value = prevState
-                }
+                if (_state.value == ITcpTransport.State.TRANSFERRING) _state.value = prevState
             }
         }
     }
@@ -183,6 +194,9 @@ class TcpTransport(
     private fun disconnectInternal() {
         try { controlSocket?.close() } catch (_: Exception) {}
         controlSocket = null
+        currentHost = null
+        currentPort = null
+        maintenanceJob?.cancel()
         
         // Drain the queue to prevent stale frames in new connections
         while (outboundQueue.tryReceive().isSuccess) { /* drain */ }
@@ -194,7 +208,6 @@ class TcpTransport(
 
     override fun stop() {
         manager.stop()
-        maintenanceJob?.cancel()
         disconnectInternal()
         _state.value = ITcpTransport.State.IDLE
         scope.cancel()

@@ -268,7 +268,7 @@ class Broker(
             IBleTransport.State.ERROR -> {
                 wakeManager.release()
                 Log.i(TAG, "BLE lost. Fast Kill TCP.")
-                tcpTransport?.stop()
+                tcpTransport?.disconnect()
             }
             else -> {}
         }
@@ -455,14 +455,16 @@ class Broker(
 
     private fun handleIntro(msg: IntroMessage) {
         Log.i(TAG, "Partner Intro: ${msg.name} status updated (IP: ${msg.ip})")
-        if (msg.ip != null && msg.port != null) {
-            partnerTcpTarget = msg.ip to msg.port
-            tcpTransport?.connect(msg.ip, msg.port)
-        } else {
-            Log.i(TAG, "Partner has no TCP address. Stopping TCP.")
+        
+        if (msg.ip == null || msg.port == null) {
+            Log.i(TAG, "Partner has no TCP address. Resetting session.")
             partnerTcpTarget = null
-            tcpTransport?.stop()
+            tcpTransport?.disconnect()
+            return
         }
+
+        partnerTcpTarget = msg.ip to msg.port
+        tcpTransport?.connect(msg.ip, msg.port)
     }
 
     // --- Workers ---

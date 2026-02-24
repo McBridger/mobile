@@ -11,6 +11,7 @@ interface ITcpTransport {
     val incomingMessages: SharedFlow<Message>
 
     fun connect(host: String, port: Int)
+    fun disconnect()
     fun forcePing()
     suspend fun sendBlob(message: BlobMessage, inputStream: java.io.InputStream, host: String, port: Int)
     fun stop()
