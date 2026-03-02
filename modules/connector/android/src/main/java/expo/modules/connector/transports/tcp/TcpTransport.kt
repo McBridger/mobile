@@ -3,217 +3,247 @@ package expo.modules.connector.transports.tcp
 import android.util.Log
 import expo.modules.connector.interfaces.*
 import expo.modules.connector.models.*
+import io.ktor.network.selector.*
+import io.ktor.network.sockets.*
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
-import java.io.IOException
-import java.net.Socket
-import kotlin.coroutines.coroutineContext
 
-/**
- * SRP: Implementation of ITcpTransport using Unified Binary Framing.
- * Architecture: Single Writer Loop (Actor Pattern) with strict State Machine.
- */
 class TcpTransport(
-    private val encryptionService: IEncryptionService,
-    private val systemObserver: ISystemObserver,
-    private val port: Int = 49152,
-    private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        private val encryptionService: IEncryptionService,
+        private val systemObserver: ISystemObserver,
+        private val port: Int = 49152,
+        private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 ) : ITcpTransport {
 
     private val TAG = "TcpTransport"
-    private var controlSocket: Socket? = null
-    private var maintenanceJob: Job? = null
-    private var currentHost: String? = null
-    private var currentPort: Int? = null
+    private val selectorManager = SelectorManager(Dispatchers.IO)
+    private var serverJob: Job? = null
 
-    private val _state = MutableStateFlow(ITcpTransport.State.IDLE)
-    override val state: StateFlow<ITcpTransport.State> = _state.asStateFlow()
+    private val _isStarted = MutableStateFlow(false)
+    private val _isTransferring = MutableStateFlow(false)
+    private val _activeSessionsFlow = MutableStateFlow<List<SessionContext>>(emptyList())
 
-    private val _incomingMessages = MutableSharedFlow<Message>()
-    override val incomingMessages = _incomingMessages
+    override val state: StateFlow<ITcpTransport.State> =
+            combine(_isStarted, _isTransferring, _activeSessionsFlow) {
+                            isStarted,
+                            isTransferring,
+                            sessions ->
+                        if (!isStarted) ITcpTransport.State.IDLE
+                        else if (isTransferring) ITcpTransport.State.TRANSFERRING
+                        else if (sessions.isNotEmpty()) ITcpTransport.State.CONNECTED
+                        else ITcpTransport.State.READY
+                    }
+                    .stateIn(scope, SharingStarted.Eagerly, ITcpTransport.State.IDLE)
 
-    // Outbound queue with backpressure support (Capacity 64)
-    private val outboundQueue = Channel<Message>(capacity = 64)
+    private val _incomingMessages =
+            MutableSharedFlow<Message>(
+                    extraBufferCapacity = 64,
+                    onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.SUSPEND
+            )
+    override val incomingMessages: SharedFlow<Message> = _incomingMessages.asSharedFlow()
 
-    // Tracks the last ping ID we sent to avoid infinite echo loops
-    @Volatile private var lastSentPingId: String? = null
-
-    private val manager = TcpServerManager(port, ::handleIncomingFrame, scope)
+    private inner class SessionContext(val session: ITcpSession, val supervisor: Job)
+    private val activeSessions = CopyOnWriteArrayList<SessionContext>()
 
     init {
-        manager.start()
-        _state.value = ITcpTransport.State.READY
-
-        // Global Watchdog: disconnect on Wi-Fi loss
+        start()
+        // Watchdog: disconnect on Wi-Fi loss
         scope.launch {
             systemObserver.isNetworkHighSpeed.collect { isHighSpeed ->
-                if (!isHighSpeed && _state.value != ITcpTransport.State.IDLE) {
-                    Log.w(TAG, "Watchdog: Wi-Fi lost. Forcing disconnect.")
-                    disconnectInternal()
+                if (!isHighSpeed && _isStarted.value) {
+                    Log.w(TAG, "Watchdog: Wi-Fi lost. Stopping transport.")
+                    stop()
                 }
             }
         }
+    }
+
+    private fun start() {
+        if (_isStarted.value) return
+        _isStarted.value = true
+
+        serverJob =
+                scope.launch {
+                    try {
+                        val serverSocket =
+                                aSocket(selectorManager).tcp().bind(port = port) {
+                                    reuseAddress = true
+                                }
+                        Log.i(TAG, "Server bound to port $port")
+                        while (isActive) {
+                            val socket = serverSocket.accept()
+                            val host = socket.remoteAddress.toString()
+                            Log.i(TAG, "Accepted connection from $host")
+                            val session =
+                                    TcpSession(
+                                            id = java.util.UUID.randomUUID().toString(),
+                                            host = host,
+                                            port = port,
+                                            socket = socket
+                                    )
+                            setupNewSession(session)
+                        }
+                    } catch (e: Exception) {
+                        if (isActive) Log.e(TAG, "Server error: ${e.message}")
+                    }
+                }
     }
 
     override fun connect(host: String, port: Int) {
-        if (_state.value == ITcpTransport.State.CONNECTED 
-            && currentHost == host 
-            && currentPort == port
-        ) return
-        
-        Log.i(TAG, "connect: Starting connection for $host:$port")
-        disconnectInternal()
-        currentHost = host
-        currentPort = port
-        
-        maintenanceJob = scope.launch {
+        scope.launch {
             try {
-                val socket = manager.connect(host, port) ?: throw IOException("Connect returned null")
-                socket.keepAlive = true
-                socket.tcpNoDelay = true
-                socket.sendBufferSize = 65536 // OS-level buffer bloat protection
-                
-                controlSocket = socket
-                _state.value = ITcpTransport.State.CONNECTED
-                Log.i(TAG, "Socket established with $host:$port")
-
-                // Run writer and reader loops concurrently for the current socket
-                coroutineScope {
-                    launch { writeLoop(socket) }
-                    launch { manager.readIncomingFromClientSocket(socket, host) }
-                }
+                Log.i(TAG, "Connecting to $host:$port")
+                val socket =
+                        aSocket(selectorManager).tcp().connect(host, port) {
+                            keepAlive = true
+                            noDelay = true
+                        }
+                val session =
+                        TcpSession(
+                                id = java.util.UUID.randomUUID().toString(),
+                                host = host,
+                                port = port,
+                                socket = socket
+                        )
+                setupNewSession(session)
+                Log.i(TAG, "Connected to $host:$port")
             } catch (e: Exception) {
-                Log.w(TAG, "Connection failed or lost: ${e.message}")
-            } finally {
-                disconnectInternal()
+                Log.w(TAG, "Connect failed: ${e.message}")
             }
         }
+    }
+
+    private fun setupNewSession(session: ITcpSession) {
+        val supervisor =
+                scope.launch {
+                    try {
+                        coroutineScope {
+                            launch { collectMessages(session) }
+                            launch { collectState(session, this@coroutineScope) }
+                        }
+                    } finally {
+                        handleSessionDeath(session)
+                    }
+                }
+        activeSessions.add(SessionContext(session, supervisor))
+        _activeSessionsFlow.value = activeSessions.toList()
+    }
+
+    private suspend fun collectMessages(session: ITcpSession) {
+        session.incomingMessages.collect { msgBytes ->
+            try {
+                val msg = Message.fromBytes(msgBytes).withAddress(session.host)
+                _incomingMessages.emit(msg)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to parse incoming message: ${e.message}")
+            }
+        }
+    }
+
+    private suspend fun collectState(session: ITcpSession, scopeToCancel: CoroutineScope) {
+        session.state.collect { sessionState ->
+            if (sessionState == SessionState.DISCONNECTED || sessionState == SessionState.ERROR) {
+                scopeToCancel.cancel("Session terminated with state: $sessionState")
+            }
+        }
+    }
+
+    private fun handleSessionDeath(deadSession: ITcpSession) {
+        val ctx = activeSessions.find { it.session === deadSession } ?: return
+        Log.i(TAG, "handleSessionDeath for ${ctx.session.id}")
+        ctx.session.disconnect()
+        ctx.supervisor.cancel()
+        activeSessions.remove(ctx)
+        _activeSessionsFlow.value = activeSessions.toList()
     }
 
     override fun disconnect() {
-        Log.i(TAG, "disconnect: Explicit disconnect requested")
-        disconnectInternal()
+        Log.i(TAG, "Explicit disconnect requested (stopping all sessions)")
+        activeSessions.forEach { it.session.disconnect() }
     }
 
     override fun forcePing() {
-        if (_state.value != ITcpTransport.State.CONNECTED) return
-        
+        if (activeSessions.isEmpty()) return
         scope.launch {
-            val ping = PingMessage()
-            lastSentPingId = ping.id
-            Log.d(TAG, "forcePing: Sent Ping(${ping.id}), waiting for any pulse...")
-
-            try {
-                outboundQueue.send(ping)
-                withTimeout(2000L) {
-                    // Success if we receive ANY PingMessage within 2s
-                    incomingMessages.first { it is PingMessage }
+            activeSessions.forEach { ctx ->
+                launch {
+                    try {
+                        ctx.session.forcePing()
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Ping failed for session ${ctx.session.id}")
+                    }
                 }
-                Log.i(TAG, "forcePing: Success! Pipe is alive.")
-            } catch (e: Exception) {
-                Log.w(TAG, "forcePing: FAILED! No response within 2s. Scuttling.")
-                disconnect()
             }
         }
     }
 
-    /**
-     * Single Writer Loop: The only coroutine allowed to write to the socket.
-     */
-    private suspend fun writeLoop(socket: Socket) {
-        for (message in outboundQueue) {
-            if (!socket.isConnected || socket.isClosed) throw IOException("Socket closed during write")
-            manager.sendFrame(socket, message.toBytes())
-        }
-    }
+    private suspend fun broadcastBytes(
+            data: ByteArray,
+            targets: List<SessionContext> = activeSessions
+    ) {
+        if (data.isEmpty() || targets.isEmpty()) return
 
-    private suspend fun handleIncomingFrame(payload: ByteArray, address: String) {
-        try {
-            val message = Message.fromBytes(payload) ?: return
-
-            if (message is PingMessage) {
-                _incomingMessages.emit(message.withAddress(address))
-                
-                // Echo Pattern: only echo if it's NOT our own last ping returning to us
-                if (message.id != lastSentPingId) {
-                    Log.v(TAG, "Echoing incoming Ping(${message.id})")
-                    outboundQueue.send(PingMessage(id = message.id))
+        coroutineScope {
+            targets.forEach { ctx ->
+                launch {
+                    try {
+                        ctx.session.send(data)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Send failed for session ${ctx.session.id}: ${e.message}")
+                    }
                 }
-                return
             }
-            
-            // Handle data flow with respect to State API
-            val prevState = _state.value
-            if (prevState != ITcpTransport.State.TRANSFERRING) _state.value = ITcpTransport.State.TRANSFERRING
-            
-            _incomingMessages.emit(message.withAddress(address))
-            
-            if (prevState != ITcpTransport.State.TRANSFERRING) _state.value = ITcpTransport.State.CONNECTED
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to process frame: ${e.message}")
         }
     }
 
     override suspend fun sendBlob(
-        message: BlobMessage, 
-        inputStream: java.io.InputStream, 
-        host: String, 
-        port: Int
+            message: BlobMessage,
+            inputStream: java.io.InputStream,
+            host: String,
+            port: Int
     ) {
-        withContext(Dispatchers.IO) {
-            val prevState = _state.value
-            _state.value = ITcpTransport.State.TRANSFERRING
+        val transferTargets = activeSessions.toList()
+        if (transferTargets.isEmpty()) throw java.io.IOException("No active sessions to send blob")
 
-            try {
-                outboundQueue.send(message) // Announcement
+        _isTransferring.value = true
+        try {
+            broadcastBytes(message.toBytes(), transferTargets)
 
-                val buffer = ByteArray(64 * 1024)
-                var offset = 0L
-                
-                inputStream.use { stream ->
-                    while (coroutineContext.isActive) {
-                        val read = stream.read(buffer)
-                        if (read == -1) break
-                        
-                        val chunk = ChunkMessage(offset, buffer.copyOf(read), message.id).apply { address = host }
-                        outboundQueue.send(chunk) 
-                        offset += read
-                    }
+            val buffer = ByteArray(64 * 1024)
+            var offset = 0L
+            inputStream.use { stream ->
+                while (currentCoroutineContext().isActive) {
+                    val read = stream.read(buffer)
+                    if (read == -1) break
+
+                    val chunk = ChunkMessage(offset, buffer.copyOf(read), message.id)
+                    broadcastBytes(chunk.toBytes(), transferTargets)
+                    offset += read
                 }
-                Log.i(TAG, "Blob send finished: $offset bytes")
-            } catch (e: Exception) {
-                Log.e(TAG, "Blob send failed: ${e.message}")
-                throw IOException("TCP Stream error: ${e.message}", e)
-            } finally {
-                if (_state.value == ITcpTransport.State.TRANSFERRING) _state.value = prevState
             }
-        }
-    }
-
-    private fun disconnectInternal() {
-        try { controlSocket?.close() } catch (_: Exception) {}
-        controlSocket = null
-        currentHost = null
-        currentPort = null
-        maintenanceJob?.cancel()
-        
-        // Drain the queue to prevent stale frames in new connections
-        while (outboundQueue.tryReceive().isSuccess) { /* drain */ }
-        
-        if (_state.value != ITcpTransport.State.IDLE) {
-            _state.value = ITcpTransport.State.READY
+            // Send EOF
+            val eof = ChunkMessage(offset, ByteArray(0), message.id)
+            broadcastBytes(eof.toBytes(), transferTargets)
+            Log.i(TAG, "Blob send finished: $offset bytes")
+        } catch (e: Exception) {
+            Log.e(TAG, "Blob send failed: ${e.message}")
+            throw java.io.IOException("TCP Stream error: ${e.message}", e)
+        } finally {
+            _isTransferring.value = false
         }
     }
 
     override fun stop() {
-        manager.stop()
-        disconnectInternal()
-        _state.value = ITcpTransport.State.IDLE
-        scope.cancel()
-    }
-
-    companion object {
-        private const val TAG = "TcpTransport"
+        Log.i(TAG, "Stopping TcpTransport")
+        serverJob?.cancel()
+        activeSessions.forEach { ctx ->
+            ctx.supervisor.cancel()
+            ctx.session.disconnect()
+        }
+        activeSessions.clear()
+        _activeSessionsFlow.value = emptyList()
+        _isStarted.value = false
+        _isTransferring.value = false
     }
 }

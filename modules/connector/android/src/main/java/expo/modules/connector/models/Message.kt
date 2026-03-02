@@ -1,6 +1,7 @@
 package expo.modules.connector.models
 
 import android.os.Bundle
+import java.util.UUID
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.modules.SerializersModule
@@ -9,11 +10,14 @@ import kotlinx.serialization.modules.subclass
 import okio.Buffer
 import okio.BufferedSink
 import okio.BufferedSource
-import java.util.UUID
 
 @Serializable
 enum class MessageType(val id: Int) {
-    TINY(0), INTRO(1), BLOB(2), CHUNK(3), PING(4);
+    TINY(0),
+    INTRO(1),
+    BLOB(2),
+    CHUNK(3),
+    PING(4);
     companion object {
         fun fromInt(id: Int) = values().find { it.id == id } ?: TINY
     }
@@ -43,21 +47,25 @@ sealed class Message {
     abstract fun getType(): MessageType
     abstract fun writePayload(sink: BufferedSink)
 
-    open fun toBundle(): Bundle = Bundle().apply {
-        putString("id", id)
-        putString("type", getType().name)
-        putDouble("timestamp", timestamp)
-        putString("address", address)
-    }
+    open fun toBundle(): Bundle =
+            Bundle().apply {
+                putString("id", id)
+                putString("type", getType().name)
+                putDouble("timestamp", timestamp)
+                putString("address", address)
+            }
 
-    fun toBytes(): ByteArray = Buffer().apply {
-        writeByte(getType().id)
-        val uuid = UUID.fromString(id)
-        writeLong(uuid.mostSignificantBits)
-        writeLong(uuid.leastSignificantBits)
-        writeLong(java.lang.Double.doubleToLongBits(timestamp))
-        writePayload(this)
-    }.readByteArray()
+    fun toBytes(): ByteArray =
+            Buffer()
+                    .apply {
+                        writeByte(getType().id)
+                        val uuid = UUID.fromString(id)
+                        writeLong(uuid.mostSignificantBits)
+                        writeLong(uuid.leastSignificantBits)
+                        writeLong(java.lang.Double.doubleToLongBits(timestamp))
+                        writePayload(this)
+                    }
+                    .readByteArray()
 
     fun withAddress(addr: String): Message {
         this.address = addr
@@ -70,7 +78,7 @@ sealed class Message {
             val typeId = b.readByte().toInt()
             val id = UUID(b.readLong(), b.readLong()).toString()
             val ts = java.lang.Double.longBitsToDouble(b.readLong())
-            
+
             return when (MessageType.fromInt(typeId)) {
                 MessageType.TINY -> TinyMessage(id, ts, b.readStr())
                 MessageType.INTRO -> {
@@ -78,25 +86,43 @@ sealed class Message {
                     val ipStr = b.readStr()
                     val portVal = b.readInt()
                     IntroMessage(
-                        id = id,
-                        timestamp = ts,
-                        name = name,
-                        ip = if (ipStr.isEmpty()) null else ipStr,
-                        port = if (portVal == -1) null else portVal
+                            id = id,
+                            timestamp = ts,
+                            name = name,
+                            ip = if (ipStr.isEmpty()) null else ipStr,
+                            port = if (portVal == -1) null else portVal
                     )
                 }
-                MessageType.BLOB -> BlobMessage(id, ts, b.readStr(), b.readLong(), BridgerType.valueOf(b.readStr()))
-                MessageType.CHUNK -> ChunkMessage(b.readLong(), b.readByteArray(), id)
+                MessageType.BLOB ->
+                        BlobMessage(
+                                id,
+                                ts,
+                                b.readStr(),
+                                b.readLong(),
+                                BridgerType.valueOf(b.readStr().uppercase())
+                        )
+                MessageType.CHUNK -> {
+                    val offset = b.readLong()
+                    ChunkMessage(offset, b.readByteArray(), id)
+                }
                 MessageType.PING -> PingMessage(id, ts)
             }
         }
 
         fun fromJSON(data: String): Message = mJson.decodeFromString(data)
-        fun toJSONList(messages: List<Message>): String = mJson.encodeToString(kotlinx.serialization.builtins.ListSerializer(Message.serializer()), messages)
-        fun fromJSONList(json: String): List<Message> = mJson.decodeFromString(kotlinx.serialization.builtins.ListSerializer(Message.serializer()), json)
+        fun toJSONList(messages: List<Message>): String =
+                mJson.encodeToString(
+                        kotlinx.serialization.builtins.ListSerializer(Message.serializer()),
+                        messages
+                )
+        fun fromJSONList(json: String): List<Message> =
+                mJson.decodeFromString(
+                        kotlinx.serialization.builtins.ListSerializer(Message.serializer()),
+                        json
+                )
 
         private fun BufferedSource.readStr(): String = readUtf8(readInt().toLong())
-        
+
         internal fun writeS(sink: BufferedSink, s: String) {
             val bytes = s.toByteArray()
             sink.writeInt(bytes.size)
@@ -107,24 +133,26 @@ sealed class Message {
 
 @Serializable
 class TinyMessage(
-    override val id: String = UUID.randomUUID().toString(),
-    override val timestamp: Double = System.currentTimeMillis() / 1000.0,
-    val value: String,
-    override var address: String? = null
+        override val id: String = UUID.randomUUID().toString(),
+        override val timestamp: Double = System.currentTimeMillis() / 1000.0,
+        val value: String,
+        override var address: String? = null
 ) : Message() {
     override fun getType() = MessageType.TINY
-    override fun writePayload(sink: BufferedSink) { writeS(sink, value) }
+    override fun writePayload(sink: BufferedSink) {
+        writeS(sink, value)
+    }
     override fun toBundle() = super.toBundle().apply { putString("value", value) }
 }
 
 @Serializable
 class IntroMessage(
-    override val id: String = UUID.randomUUID().toString(),
-    override val timestamp: Double = System.currentTimeMillis() / 1000.0,
-    val name: String,
-    val ip: String? = null,
-    val port: Int? = null,
-    override var address: String? = null
+        override val id: String = UUID.randomUUID().toString(),
+        override val timestamp: Double = System.currentTimeMillis() / 1000.0,
+        val name: String,
+        val ip: String? = null,
+        val port: Int? = null,
+        override var address: String? = null
 ) : Message() {
     override fun getType() = MessageType.INTRO
     override fun writePayload(sink: BufferedSink) {
@@ -132,56 +160,68 @@ class IntroMessage(
         writeS(sink, ip ?: "")
         sink.writeInt(port ?: -1)
     }
-    override fun toBundle() = super.toBundle().apply {
-        putString("name", name)
-        putString("ip", ip)
-        if (port != null) putInt("port", port)
-    }
+    override fun toBundle() =
+            super.toBundle().apply {
+                putString("name", name)
+                putString("ip", ip)
+                if (port != null) putInt("port", port)
+            }
 }
 
 @Serializable
 class BlobMessage(
-    override val id: String = UUID.randomUUID().toString(),
-    override val timestamp: Double = System.currentTimeMillis() / 1000.0,
-    val name: String,
-    val size: Long,
-    val dataType: BridgerType,
-    override var address: String? = null
+        override val id: String = UUID.randomUUID().toString(),
+        override val timestamp: Double = System.currentTimeMillis() / 1000.0,
+        val name: String,
+        val size: Long,
+        val dataType: BridgerType,
+        override var address: String? = null
 ) : Message() {
     override fun getType() = MessageType.BLOB
     override fun writePayload(sink: BufferedSink) {
-        writeS(sink, name); sink.writeLong(size); writeS(sink, dataType.name)
+        writeS(sink, name)
+        sink.writeLong(size)
+        writeS(sink, dataType.name.lowercase())
     }
-    override fun toBundle() = super.toBundle().apply {
-        putString("name", name)
-        putDouble("size", size.toDouble())
-        putString("dataType", dataType.name)
-    }
+    override fun toBundle() =
+            super.toBundle().apply {
+                putString("name", name)
+                putDouble("size", size.toDouble())
+                putString("dataType", dataType.name)
+            }
 }
 
+@Serializable
 class ChunkMessage(
-    val offset: Long,
-    val data: ByteArray,
-    override val id: String, // Blob ID from header
-    override val timestamp: Double = 0.0,
-    override var address: String? = null
+        val offset: Long,
+        val data: ByteArray,
+        override val id: String, // Blob ID from header
+        override val timestamp: Double = 0.0,
+        override var address: String? = null
 ) : Message() {
+    val isEof: Boolean
+        get() = data.isEmpty()
+
     override fun getType() = MessageType.CHUNK
     override fun writePayload(sink: BufferedSink) {
-        sink.writeLong(offset); sink.write(data)
+        sink.writeLong(offset)
+        sink.write(data)
     }
-    override fun toBundle(): Bundle = Bundle().apply {
-        putString("id", id)
-        putString("type", "CHUNK")
-    }
+    override fun toBundle(): Bundle =
+            Bundle().apply {
+                putString("id", id)
+                putString("type", "CHUNK")
+            }
 }
 
 @Serializable
 class PingMessage(
-    override val id: String = java.util.UUID.randomUUID().toString(),
-    override val timestamp: Double = System.currentTimeMillis() / 1000.0,
-    override var address: String? = null
+        override val id: String = java.util.UUID.randomUUID().toString(),
+        override val timestamp: Double = System.currentTimeMillis() / 1000.0,
+        override var address: String? = null
 ) : Message() {
     override fun getType() = MessageType.PING
-    override fun writePayload(sink: BufferedSink) { /* No payload */ }
+    override fun writePayload(sink: BufferedSink) {
+        /* No payload */
+    }
 }
