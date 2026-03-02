@@ -17,8 +17,7 @@ interface ITcpTransport {
     fun stop()
 
     enum class State {
-        IDLE,         // Keys not ready, transport stopped
-        READY,        // Server started, waiting for target info
+        READY,        // Ready to connect to target
         CONNECTED,    // Control socket established, heartbeats flowing
         TRANSFERRING, // Active data stream in progress
         ERROR         // Fatal failure

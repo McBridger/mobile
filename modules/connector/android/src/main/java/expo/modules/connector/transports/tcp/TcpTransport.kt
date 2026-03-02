@@ -18,23 +18,19 @@ class TcpTransport(
 
     private val TAG = "TcpTransport"
     private val selectorManager = SelectorManager(Dispatchers.IO)
-    private var serverJob: Job? = null
 
-    private val _isStarted = MutableStateFlow(false)
     private val _isTransferring = MutableStateFlow(false)
     private val _activeSessionsFlow = MutableStateFlow<List<SessionContext>>(emptyList())
 
     override val state: StateFlow<ITcpTransport.State> =
-            combine(_isStarted, _isTransferring, _activeSessionsFlow) {
-                            isStarted,
+            combine(_isTransferring, _activeSessionsFlow) {
                             isTransferring,
                             sessions ->
-                        if (!isStarted) ITcpTransport.State.IDLE
-                        else if (isTransferring) ITcpTransport.State.TRANSFERRING
+                        if (isTransferring) ITcpTransport.State.TRANSFERRING
                         else if (sessions.isNotEmpty()) ITcpTransport.State.CONNECTED
                         else ITcpTransport.State.READY
                     }
-                    .stateIn(scope, SharingStarted.Eagerly, ITcpTransport.State.IDLE)
+                    .stateIn(scope, SharingStarted.Eagerly, ITcpTransport.State.READY)
 
     private val _incomingMessages =
             MutableSharedFlow<Message>(
@@ -47,47 +43,15 @@ class TcpTransport(
     private val activeSessions = CopyOnWriteArrayList<SessionContext>()
 
     init {
-        start()
         // Watchdog: disconnect on Wi-Fi loss
         scope.launch {
             systemObserver.isNetworkHighSpeed.collect { isHighSpeed ->
-                if (!isHighSpeed && _isStarted.value) {
+                if (!isHighSpeed && activeSessions.isNotEmpty()) {
                     Log.w(TAG, "Watchdog: Wi-Fi lost. Stopping transport.")
                     stop()
                 }
             }
         }
-    }
-
-    private fun start() {
-        if (_isStarted.value) return
-        _isStarted.value = true
-
-        serverJob =
-                scope.launch {
-                    try {
-                        val serverSocket =
-                                aSocket(selectorManager).tcp().bind(port = port) {
-                                    reuseAddress = true
-                                }
-                        Log.i(TAG, "Server bound to port $port")
-                        while (isActive) {
-                            val socket = serverSocket.accept()
-                            val host = socket.remoteAddress.toString()
-                            Log.i(TAG, "Accepted connection from $host")
-                            val session =
-                                    TcpSession(
-                                            id = java.util.UUID.randomUUID().toString(),
-                                            host = host,
-                                            port = port,
-                                            socket = socket
-                                    )
-                            setupNewSession(session)
-                        }
-                    } catch (e: Exception) {
-                        if (isActive) Log.e(TAG, "Server error: ${e.message}")
-                    }
-                }
     }
 
     override fun connect(host: String, port: Int) {
@@ -107,7 +71,6 @@ class TcpTransport(
                                 socket = socket
                         )
                 setupNewSession(session)
-                Log.i(TAG, "Connected to $host:$port")
             } catch (e: Exception) {
                 Log.w(TAG, "Connect failed: ${e.message}")
             }
@@ -115,25 +78,88 @@ class TcpTransport(
     }
 
     private fun setupNewSession(session: ITcpSession) {
-        val supervisor =
-                scope.launch {
-                    try {
-                        coroutineScope {
-                            launch { collectMessages(session) }
-                            launch { collectState(session, this@coroutineScope) }
-                        }
-                    } finally {
-                        handleSessionDeath(session)
+        scope.launch {
+            val supervisorJob = this.coroutineContext.job
+            try {
+                coroutineScope {
+                    launch { collectState(session, this@coroutineScope) }
+
+                    // Client Quarantine Handshake
+                    val handshakeSuccess = performQuarantineHandshake(session)
+                    if (!handshakeSuccess) {
+                        Log.w(TAG, "Handshake failed, disconnecting session ${session.id}")
+                        session.disconnect()
+                        return@coroutineScope
                     }
+
+                    Log.i(TAG, "Handshake SUCCESS for ${session.id}")
+                    activeSessions.add(SessionContext(session, supervisorJob))
+                    _activeSessionsFlow.value = activeSessions.toList()
+
+                    collectMessages(session)
                 }
-        activeSessions.add(SessionContext(session, supervisor))
-        _activeSessionsFlow.value = activeSessions.toList()
+            } finally {
+                handleSessionDeath(session)
+            }
+        }
+    }
+
+    private suspend fun performQuarantineHandshake(session: ITcpSession): Boolean {
+        return try {
+            withTimeout(3000L) {
+                executeClientHandshake(session)
+            }
+        } catch (e: TimeoutCancellationException) {
+            Log.w(TAG, "Quarantine timeout")
+            false
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Quarantine exception: ${e.message}")
+            false
+        }
+    }
+
+    private suspend fun executeClientHandshake(session: ITcpSession): Boolean {
+        return coroutineScope {
+            val responseDeferred = async { session.incomingMessages.first() }
+
+            val clientIntro = IntroMessage(name = "KotlinClient") // Name doesn't matter for transport verification
+            val encryptedMsg = encryptionService.encrypt(clientIntro.toBytes(), ByteArray(0))
+            if (encryptedMsg == null) {
+                responseDeferred.cancel()
+                return@coroutineScope false
+            }
+
+            try {
+                session.send(encryptedMsg)
+            } catch (e: Exception) {
+                responseDeferred.cancel()
+                return@coroutineScope false
+            }
+
+            val firstMsgBytes = responseDeferred.await()
+            val decrypted =
+                    encryptionService.decrypt(firstMsgBytes, ByteArray(0))
+                            ?: return@coroutineScope false
+
+            val msg =
+                    try {
+                        Message.fromBytes(decrypted)
+                    } catch (e: Exception) {
+                        return@coroutineScope false
+                    }
+
+            msg is IntroMessage
+        }
     }
 
     private suspend fun collectMessages(session: ITcpSession) {
         session.incomingMessages.collect { msgBytes ->
             try {
-                val msg = Message.fromBytes(msgBytes).withAddress(session.host)
+                val decryptedBytes =
+                        encryptionService.decrypt(msgBytes, ByteArray(0)) ?: return@collect
+                val msg = Message.fromBytes(decryptedBytes).withAddress(session.host)
                 _incomingMessages.emit(msg)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to parse incoming message: ${e.message}")
@@ -184,17 +210,28 @@ class TcpTransport(
     ) {
         if (data.isEmpty() || targets.isEmpty()) return
 
+        val anySuccess = java.util.concurrent.atomic.AtomicBoolean(false)
         coroutineScope {
             targets.forEach { ctx ->
                 launch {
                     try {
                         ctx.session.send(data)
+                        anySuccess.set(true)
                     } catch (e: Exception) {
                         Log.w(TAG, "Send failed for session ${ctx.session.id}: ${e.message}")
                     }
                 }
             }
         }
+
+        if (!anySuccess.get() && activeSessions.isNotEmpty()) {
+            throw java.io.IOException("All active sessions failed to send")
+        }
+    }
+
+    private suspend fun sendEncryptedData(data: ByteArray, targets: List<SessionContext> = activeSessions) {
+        val encrypted = encryptionService.encrypt(data, ByteArray(0)) ?: return
+        broadcastBytes(encrypted, targets)
     }
 
     override suspend fun sendBlob(
@@ -208,23 +245,32 @@ class TcpTransport(
 
         _isTransferring.value = true
         try {
-            broadcastBytes(message.toBytes(), transferTargets)
+            sendEncryptedData(message.toBytes(), transferTargets)
 
-            val buffer = ByteArray(64 * 1024)
+            val buffer = ByteArray(1024 * 1024)
             var offset = 0L
             inputStream.use { stream ->
                 while (currentCoroutineContext().isActive) {
                     val read = stream.read(buffer)
                     if (read == -1) break
+                    
+                    if (transferTargets.all { ctx -> activeSessions.none { it.session === ctx.session } }) {
+                        Log.w(TAG, "sendBlob aborted: All transfer targets disconnected")
+                        break
+                    }
 
                     val chunk = ChunkMessage(offset, buffer.copyOf(read), message.id)
-                    broadcastBytes(chunk.toBytes(), transferTargets)
+                    sendEncryptedData(chunk.toBytes(), transferTargets)
                     offset += read
                 }
             }
             // Send EOF
             val eof = ChunkMessage(offset, ByteArray(0), message.id)
-            broadcastBytes(eof.toBytes(), transferTargets)
+            try {
+                sendEncryptedData(eof.toBytes(), transferTargets)
+            } catch (e: Exception) {
+                // Ignore final EOF send failure if connections died at the very end
+            }
             Log.i(TAG, "Blob send finished: $offset bytes")
         } catch (e: Exception) {
             Log.e(TAG, "Blob send failed: ${e.message}")
@@ -236,14 +282,12 @@ class TcpTransport(
 
     override fun stop() {
         Log.i(TAG, "Stopping TcpTransport")
-        serverJob?.cancel()
         activeSessions.forEach { ctx ->
             ctx.supervisor.cancel()
             ctx.session.disconnect()
         }
         activeSessions.clear()
         _activeSessionsFlow.value = emptyList()
-        _isStarted.value = false
         _isTransferring.value = false
     }
 }

@@ -19,7 +19,7 @@ data class Status<T : Enum<*>>(val current: T, val error: String? = null) {
  */
 data class BrokerState(
     val ble: Status<IBleTransport.State> = Status(IBleTransport.State.IDLE),
-    val tcp: Status<ITcpTransport.State> = Status(ITcpTransport.State.IDLE),
+    val tcp: Status<ITcpTransport.State> = Status(ITcpTransport.State.READY),
     val encryption: Status<EncryptionState> = Status(EncryptionState.IDLE),
     val items: List<Bundle> = emptyList()
 ) {

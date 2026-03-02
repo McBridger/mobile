@@ -12,7 +12,6 @@ export enum BleState {
 }
 
 export enum TcpState {
-  IDLE = "IDLE",
   READY = "READY",
   CONNECTED = "CONNECTED",
   TRANSFERRING = "TRANSFERRING",
